@@ -1921,6 +1921,23 @@
             return val;
         }
 
+        function messageSpec(key, arg = undefined) {
+            return Object.prototype.hasOwnProperty.call(arguments, 1) ? { key, arg } : { key };
+        }
+
+        function renderMessageSpec(spec, fallback = '') {
+            if (spec && typeof spec === 'object' && spec.key) {
+                return i18n(spec.key, spec.arg);
+            }
+            return String(fallback || spec || '');
+        }
+
+        function refreshLocalizedResultText() {
+            if (state?.resultMessage) {
+                state.resultText = renderMessageSpec(state.resultMessage, state.resultText);
+            }
+        }
+
         function getReadmeHref() {
             if (currentLanguage === 'zh') return './README_zh.html';
             if (currentLanguage === 'en') return './README_en.html';
@@ -1966,6 +1983,7 @@
             elements.resignCancelBtn.textContent = i18n('resignCancel');
             elements.resignConfirmBtn.textContent = i18n('resignConfirm');
             
+            refreshLocalizedResultText();
             render();
         }
 
@@ -2245,6 +2263,7 @@
                 status: 'waiting',
                 winnerId: null,
                 resultText: '',
+                resultMessage: null,
                 drawOfferByPeerId: '',
                 takebackOfferByPeerId: '',
                 connectionPause: null,
@@ -2262,6 +2281,8 @@
                 text,
                 time: nowIsoTime(),
                 ...(options.action ? { action: options.action } : {}),
+                ...(options.messageKey ? { messageKey: options.messageKey } : {}),
+                ...(Object.prototype.hasOwnProperty.call(options, 'messageArg') ? { messageArg: options.messageArg } : {}),
             };
         }
 
@@ -2653,6 +2674,7 @@
             };
             state.winnerId = null;
             state.resultText = '';
+            state.resultMessage = null;
             state.drawOfferByPeerId = '';
             state.takebackOfferByPeerId = '';
             state.connectionPause = null;
@@ -2724,7 +2746,7 @@
                 && nextSeat === 'spectator'
                 && (currentSeat === 'black' || currentSeat === 'white')
             ) {
-                finishGame('', '', i18n('msgAgreedEndLog'));
+                finishGame('', null, messageSpec('msgAgreedEndLog'));
                 return '';
             }
 
@@ -3387,14 +3409,23 @@
             return '';
         }
 
-        function finishGame(winnerId, resultText, logText = '') {
+        function finishGame(winnerId, resultMessage = null, logMessage = null) {
             if (!state) return;
             state.winnerId = winnerId || null;
-            state.resultText = resultText;
+            state.resultMessage = resultMessage && typeof resultMessage === 'object'
+                ? resultMessage
+                : null;
+            state.resultText = renderMessageSpec(state.resultMessage, resultMessage);
             state.drawOfferByPeerId = '';
             state.takebackOfferByPeerId = '';
             state.connectionPause = null;
-            if (logText) addLog('system', logText, { action: 'copy-renjuportal-kifu' });
+            if (logMessage) {
+                const logSpec = logMessage && typeof logMessage === 'object' ? logMessage : null;
+                addLog('system', renderMessageSpec(logSpec, logMessage), {
+                    action: 'copy-renjuportal-kifu',
+                    ...(logSpec ? { messageKey: logSpec.key, messageArg: logSpec.arg } : {}),
+                });
+            }
             resetReadyFlags();
             setPhase('finished');
             resetReviewMoves();
@@ -3562,7 +3593,7 @@
             const opponentPeerId = getOpponentPeerId(peerId);
 
             if (state.drawOfferByPeerId === opponentPeerId) {
-                finishGame('', i18n('msgDraw'), i18n('msgDrawLog'));
+                finishGame('', messageSpec('msgDraw'), messageSpec('msgDrawLog'));
                 return '';
             }
 
@@ -3578,7 +3609,7 @@
             if (peerId !== opponentPeerId) return i18n('errDrawOnlyOpponentRespond');
 
             if (accept) {
-                finishGame('', i18n('msgDraw'), i18n('msgDrawLog'));
+                finishGame('', messageSpec('msgDraw'), messageSpec('msgDrawLog'));
                 return '';
             }
 
@@ -3640,7 +3671,7 @@
                 return i18n('errResignPlayerOnly');
             }
             const opponentPeerId = getOpponentPeerId(peerId);
-            finishGame(opponentPeerId, i18n('msgWin', getPeerName(opponentPeerId)), i18n('msgAgreedEndLog'));
+            finishGame(opponentPeerId, messageSpec('msgWin', getPeerName(opponentPeerId)), messageSpec('msgAgreedEndLog'));
             return '';
         }
 
@@ -3858,6 +3889,7 @@
                 status: state.status,
                 winnerId: state.winnerId,
                 resultText: state.resultText,
+                resultMessage: state.resultMessage || null,
                 drawOfferByPeerId: state.drawOfferByPeerId,
                 takebackOfferByPeerId: state.takebackOfferByPeerId,
                 opening: state.opening,
@@ -3880,6 +3912,7 @@
                 status: state.status,
                 winnerId: state.winnerId,
                 resultText: state.resultText,
+                resultMessage: state.resultMessage || null,
                 drawOfferByPeerId: state.drawOfferByPeerId,
                 takebackOfferByPeerId: state.takebackOfferByPeerId,
                 opening: state.opening,
@@ -3976,7 +4009,8 @@
             state.phase = event.phase;
             state.status = event.status;
             state.winnerId = event.winnerId;
-            state.resultText = event.resultText;
+            state.resultMessage = event.resultMessage || null;
+            state.resultText = renderMessageSpec(state.resultMessage, event.resultText);
             state.drawOfferByPeerId = event.drawOfferByPeerId;
             state.takebackOfferByPeerId = event.takebackOfferByPeerId || '';
             state.opening = event.opening;
@@ -4011,7 +4045,8 @@
             state.phase = event.phase;
             state.status = event.status;
             state.winnerId = event.winnerId;
-            state.resultText = event.resultText;
+            state.resultMessage = event.resultMessage || null;
+            state.resultText = renderMessageSpec(state.resultMessage, event.resultText);
             state.drawOfferByPeerId = event.drawOfferByPeerId || '';
             state.takebackOfferByPeerId = event.takebackOfferByPeerId || '';
             state.opening = event.opening;
@@ -4442,6 +4477,7 @@
                         return;
                     }
                     state = message.state;
+                    refreshLocalizedResultText();
                     persistRoomStateSnapshot();
                     clearPendingMove();
                     if (shouldHighlightIncomingMove) {
@@ -5107,7 +5143,7 @@
                 body.className = 'log-body';
                 const bodyText = entry.kind === 'comment'
                     ? String(entry.text || '').split('\n').slice(1).join('\n')
-                    : entry.text;
+                    : (entry.messageKey ? i18n(entry.messageKey, entry.messageArg) : entry.text);
                 body.textContent = bodyText;
                 if (entry.kind === 'system' && entry.action === 'copy-renjuportal-kifu') {
                     const action = document.createElement('button');
@@ -5159,7 +5195,7 @@
                     .find((participant) => isParticipantDisconnected(participant) && getDisconnectedRemainingSeconds(participant) <= 0);
                 if (expired) {
                     const winnerId = getOpponentPeerId(expired.id);
-                    finishGame(winnerId, i18n('msgDisconnectTimeout', expired.name), i18n('msgAgreedEndLog'));
+                    finishGame(winnerId, messageSpec('msgDisconnectTimeout', expired.name), messageSpec('msgAgreedEndLog'));
                     broadcastState();
                     render();
                     return;
@@ -5185,7 +5221,7 @@
                     applyElapsedTime();
                     const loserId = state.clocks.activePeerId;
                     const winnerId = getOpponentPeerId(loserId);
-                    finishGame(winnerId, i18n('msgTimeout', getPeerName(loserId)), i18n('msgTimeoutLog'));
+                    finishGame(winnerId, messageSpec('msgTimeout', getPeerName(loserId)), messageSpec('msgTimeoutLog'));
                     broadcastState();
                 } else {
                     const bucket = Math.floor(remaining / 1000);
