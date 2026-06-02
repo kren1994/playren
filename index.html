@@ -4137,6 +4137,7 @@
                     if (event.pointerType === 'mouse' && event.button !== 0) return;
                     if (event.isPrimary === false) return;
                     event.preventDefault();
+                    if (localMode === 'host' && state.status !== 'playing') applyHostTimeSettings();
                     sendAction({ kind: 'ready', ready: !isReady });
                 });
                 container.appendChild(readyButton);
