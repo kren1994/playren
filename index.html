@@ -2283,6 +2283,7 @@
                 ...(options.action ? { action: options.action } : {}),
                 ...(options.messageKey ? { messageKey: options.messageKey } : {}),
                 ...(Object.prototype.hasOwnProperty.call(options, 'messageArg') ? { messageArg: options.messageArg } : {}),
+                ...(options.moves ? { moves: options.moves } : {}),
             };
         }
 
@@ -3423,6 +3424,7 @@
                 const logSpec = logMessage && typeof logMessage === 'object' ? logMessage : null;
                 addLog('system', renderMessageSpec(logSpec, logMessage), {
                     action: 'copy-renjuportal-kifu',
+                    moves: (state.moves || []).slice(),
                     ...(logSpec ? { messageKey: logSpec.key, messageArg: logSpec.arg } : {}),
                 });
             }
@@ -5152,7 +5154,8 @@
                     action.className = 'log-action-button';
                     action.type = 'button';
                     action.textContent = i18n('logKifuCopy');
-                    action.addEventListener('click', copyRenjuPortalKifu);
+                    const entryMoves = entry.moves;
+                    action.addEventListener('click', () => copyRenjuPortalKifu(entryMoves));
                     body.append(action);
                 }
 
@@ -5288,11 +5291,12 @@
             sendAction({ kind: 'takeback' });
         }
 
-        async function copyRenjuPortalKifu() {
+        async function copyRenjuPortalKifu(moves) {
             if (!state || state.status !== 'finished') return;
 
             try {
-                await copyTextToClipboard(buildRenjuPortalKifuUrl(state.moves || []));
+                const targetMoves = Array.isArray(moves) ? moves : (state.moves || []);
+                await copyTextToClipboard(buildRenjuPortalKifuUrl(targetMoves));
                 showToast(i18n('msgRenjuPortalCopied'));
             } catch (_error) {
                 showToast(i18n('errCopyFailed'));
