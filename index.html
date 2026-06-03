@@ -4450,8 +4450,9 @@
                     const participant = getParticipantById(connection.peer);
                     if (participant) {
                         const wasSeated = participant.seat === 'black' || participant.seat === 'white';
+                        const isPlaying = state && state.status === 'playing' && (state.moves || []).length > 0;
                         if (!preserveDisconnectedParticipant(connection.peer)) {
-                            if (wasSeated) {
+                            if (wasSeated && isPlaying) {
                                 addLog('presence', i18n('msgDisconnected', participant.name));
                             }
                             removeParticipant(connection.peer, i18n('msgLeft', participant.name));
@@ -4544,8 +4545,9 @@
                     const participant = getParticipantById(connection.peer);
                     if (participant) {
                         const wasSeated = participant.seat === 'black' || participant.seat === 'white';
+                        const isPlaying = state && state.status === 'playing' && (state.moves || []).length > 0;
                         if (!preserveDisconnectedParticipant(connection.peer)) {
-                            if (wasSeated) {
+                            if (wasSeated && isPlaying) {
                                 addLog('presence', i18n('msgDisconnected', participant.name));
                             }
                             removeParticipant(connection.peer, i18n('msgLeft', participant.name));
