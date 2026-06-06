@@ -4767,19 +4767,14 @@
                 const x = padding + pendingMove.x * cell;
                 const y = topPadding + pendingMove.y * cell;
                 ctx.save();
-                ctx.globalAlpha = 0.58;
+                ctx.globalAlpha = 0.7;
                 ctx.beginPath();
                 ctx.arc(x, y, cell * 0.45, 0, Math.PI * 2);
                 ctx.fillStyle = pendingMove.color === 'black' ? '#000' : '#fff';
                 ctx.fill();
-                ctx.lineWidth = 2;
-                ctx.setLineDash([4, 4]);
-                ctx.strokeStyle = pendingMove.color === 'black' ? 'rgba(255,255,255,0.9)' : 'rgba(0,0,0,0.45)';
-                ctx.stroke();
                 if (showMoveNumbers) {
                     const moveText = String(pendingMove.number);
                     const moveTextY = y + Math.max(1, Math.round(cell * 0.03));
-                    ctx.setLineDash([]);
                     ctx.fillStyle = pendingMove.color === 'black' ? '#eee' : '#333';
                     const textLen = moveText.length;
                     const baseRatio = textLen >= 3 ? 0.3 : (textLen === 2 ? 0.38 : 0.45);
