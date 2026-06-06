@@ -1369,6 +1369,9 @@
         let boardThemeIndex = 0;
         let currentLanguage = 'ja';
         let displayMoveCount = -1;
+        let localReviewCursor = null;
+        let reviewSyncThrottleTimer = 0;
+        let reviewSyncDebounceTimer = 0;
         let pendingMove = null;
         let lastMoveHighlight = null;
         let lastMoveHighlightTimer = 0;
@@ -2310,7 +2313,7 @@
 
         function getRenderedMoves() {
             if (state?.status === 'finished') {
-                return (state.reviewMoves || []).slice(0, state.reviewCursor ?? (state.reviewMoves?.length || 0));
+                return (state.reviewMoves || []).slice(0, getReviewCursor());
             }
             return state?.moves || [];
         }
@@ -3773,6 +3776,7 @@
             }
             if (['review-move', 'review-cursor', 'review-undo', 'review-reset'].includes(action.kind)) {
                 displayMoveCount = -1;
+                if (action.kind === 'review-move' && peerId === localPeerId) localReviewCursor = null;
             }
 
             if (peerId === localPeerId && action.kind === 'draw' && state.drawOfferByPeerId === peerId) {
@@ -4022,6 +4026,7 @@
             if (event.status === 'finished') {
                 state.reviewMoves = event.reviewMoves || [];
                 state.reviewCursor = event.reviewCursor ?? state.reviewMoves.length;
+                localReviewCursor = null;
             }
             if (isPendingMoveConfirmed(event)) clearPendingMove();
             displayMoveCount = -1;
@@ -4906,6 +4911,7 @@
             }
             if (canUseReviewBoard()) {
                 playStoneSound(true);
+                localReviewCursor = null;
                 sendAction({ kind: 'review-move', x: point.x, y: point.y });
                 return;
             }
@@ -4940,7 +4946,10 @@
             }
             if (!canUseReviewBoard()) return;
             if (!boardPointFromEvent(event)) return;
-            sendAction({ kind: 'review-undo' });
+            const undoCurrent = Math.max(0, getReviewCursor() - 1);
+            localReviewCursor = undoCurrent;
+            renderBoard();
+            scheduleReviewCursorSync(undoCurrent);
         }
 
         function renderRoomSummary() {
@@ -5346,9 +5355,35 @@
             renderBoard();
         }
 
+        function getReviewCursor() {
+            if (!state) return 0;
+            const max = (state.reviewMoves || []).length;
+            if (localReviewCursor !== null) return Math.min(localReviewCursor, max);
+            return state.reviewCursor ?? max;
+        }
+
+        function scheduleReviewCursorSync(cursor) {
+            const THROTTLE_MS = 120;
+            const DEBOUNCE_MS = 200;
+            window.clearTimeout(reviewSyncDebounceTimer);
+            reviewSyncDebounceTimer = window.setTimeout(() => {
+                reviewSyncThrottleTimer = 0;
+                sendAction({ kind: 'review-cursor', cursor });
+            }, DEBOUNCE_MS);
+            if (!reviewSyncThrottleTimer) {
+                reviewSyncThrottleTimer = window.setTimeout(() => {
+                    reviewSyncThrottleTimer = 0;
+                }, THROTTLE_MS);
+                sendAction({ kind: 'review-cursor', cursor });
+                window.clearTimeout(reviewSyncDebounceTimer);
+                reviewSyncDebounceTimer = 0;
+            }
+        }
+
         function resetMovesView() {
             if (!state) return;
             if (state.status === 'finished') {
+                localReviewCursor = null;
                 sendAction({ kind: 'review-reset' });
             } else {
                 displayMoveCount = -1;
@@ -5360,11 +5395,13 @@
             if (!state) return;
             if (state.status === 'finished') {
                 const max = (state.reviewMoves || []).length;
-                let current = state.reviewCursor ?? max;
+                let current = getReviewCursor();
                 current += delta;
                 if (current < 0) current = 0;
                 if (current > max) current = max;
-                sendAction({ kind: 'review-cursor', cursor: current });
+                localReviewCursor = current;
+                renderBoard();
+                scheduleReviewCursorSync(current);
             } else {
                 const max = getRenderedMoves().length;
                 let current = displayMoveCount === -1 ? max : displayMoveCount;
