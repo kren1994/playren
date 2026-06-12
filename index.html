@@ -3420,6 +3420,7 @@
             state.drawOfferByPeerId = '';
             state.takebackOfferByPeerId = '';
             state.connectionPause = null;
+            if (state.opening) state.opening.offeredMoves = [];
             if (logMessage) {
                 const logSpec = logMessage && typeof logMessage === 'object' ? logMessage : null;
                 addLog('system', renderMessageSpec(logSpec, logMessage), {
