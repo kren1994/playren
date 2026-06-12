@@ -28,9 +28,6 @@ export class RoomRelay {
   constructor(state, env) {
     this.state = state;
     this.env = env;
-    this.sockets = new Map(); // ws -> { peerId, roomId }
-    this.peers = new Map(); // peerId -> ws
-    this.connections = new Map(); // connectionId -> { aPeerId, bPeerId }
   }
 
   async fetch(request) {
@@ -41,25 +38,27 @@ export class RoomRelay {
     const pair = new WebSocketPair();
     const client = pair[0];
     const server = pair[1];
-    server.accept();
 
-    this.sockets.set(server, { peerId: '', roomId: '' });
-
-    server.addEventListener('message', (event) => {
-      this.handleMessage(server, event.data);
-    });
-
-    const onSocketClose = () => {
-      this.handleClose(server);
-    };
-
-    server.addEventListener('close', onSocketClose);
-    server.addEventListener('error', onSocketClose);
+    server.serializeAttachment(this.createSocketMeta());
+    this.state.acceptWebSocket(server);
 
     return new Response(null, {
       status: 101,
       webSocket: client,
     });
+  }
+
+  async webSocketMessage(socket, rawData) {
+    this.handleMessage(socket, rawData);
+  }
+
+  async webSocketClose(socket, code, reason) {
+    this.handleClose(socket, String(reason || ''));
+    socket.close(code, reason);
+  }
+
+  async webSocketError(socket) {
+    this.handleClose(socket);
   }
 
   handleMessage(socket, rawData) {
@@ -76,8 +75,8 @@ export class RoomRelay {
       return;
     }
 
-    const meta = this.sockets.get(socket);
-    if (!meta || !meta.peerId) {
+    const meta = this.getSocketMeta(socket);
+    if (!meta.peerId) {
       this.send(socket, {
         type: 'peer-error',
         errorType: 'not-opened',
@@ -92,18 +91,18 @@ export class RoomRelay {
     }
 
     if (message.type === 'connection-data') {
-      this.forwardConnectionData(meta.peerId, message);
+      this.forwardConnectionData(socket, message);
       return;
     }
 
     if (message.type === 'connection-close') {
-      this.closeConnection(meta.peerId, String(message.connectionId || ''), true, String(message.closeReason || ''));
+      this.closeConnection(socket, String(message.connectionId || ''), true, String(message.closeReason || ''));
     }
   }
 
   handlePeerOpen(socket, message) {
-    const existing = this.sockets.get(socket);
-    if (!existing || existing.peerId) return;
+    const meta = this.getSocketMeta(socket);
+    if (meta.peerId) return;
 
     const requested = String(message.requestedPeerId || '').trim();
     let peerId = requested;
@@ -111,7 +110,7 @@ export class RoomRelay {
       peerId = this.generatePeerId();
     }
 
-    if (this.peers.has(peerId)) {
+    if (this.findPeerSocket(peerId)) {
       this.send(socket, {
         type: 'peer-error',
         errorType: 'unavailable-id',
@@ -120,9 +119,9 @@ export class RoomRelay {
       return;
     }
 
-    existing.peerId = peerId;
-    existing.roomId = String(message.roomId || '');
-    this.peers.set(peerId, socket);
+    meta.peerId = peerId;
+    meta.roomId = String(message.roomId || '');
+    this.setSocketMeta(socket, meta);
 
     this.send(socket, {
       type: 'peer-opened',
@@ -131,8 +130,8 @@ export class RoomRelay {
   }
 
   handleConnectRequest(socket, message) {
-    const sourceMeta = this.sockets.get(socket);
-    if (!sourceMeta || !sourceMeta.peerId) return;
+    const sourceMeta = this.getSocketMeta(socket);
+    if (!sourceMeta.peerId) return;
 
     const sourcePeerId = sourceMeta.peerId;
     const targetPeerId = String(message.targetPeerId || '').trim();
@@ -148,7 +147,7 @@ export class RoomRelay {
       return;
     }
 
-    const targetSocket = this.peers.get(targetPeerId);
+    const targetSocket = this.findPeerSocket(targetPeerId);
     if (!targetSocket) {
       this.send(socket, {
         type: 'connect-rejected',
@@ -159,10 +158,11 @@ export class RoomRelay {
       return;
     }
 
-    this.connections.set(connectionId, {
-      aPeerId: sourcePeerId,
-      bPeerId: targetPeerId,
-    });
+    const targetMeta = this.getSocketMeta(targetSocket);
+    sourceMeta.connections[connectionId] = targetPeerId;
+    targetMeta.connections[connectionId] = sourcePeerId;
+    this.setSocketMeta(socket, sourceMeta);
+    this.setSocketMeta(targetSocket, targetMeta);
 
     this.send(targetSocket, {
       type: 'incoming-connection',
@@ -178,18 +178,17 @@ export class RoomRelay {
     });
   }
 
-  forwardConnectionData(fromPeerId, message) {
+  forwardConnectionData(socket, message) {
+    const meta = this.getSocketMeta(socket);
     const connectionId = String(message.connectionId || '').trim();
     if (!connectionId) return;
-    const link = this.connections.get(connectionId);
-    if (!link) return;
 
-    const targetPeerId = link.aPeerId === fromPeerId ? link.bPeerId : link.bPeerId === fromPeerId ? link.aPeerId : '';
+    const targetPeerId = meta.connections[connectionId] || '';
     if (!targetPeerId) return;
 
-    const targetSocket = this.peers.get(targetPeerId);
+    const targetSocket = this.findPeerSocket(targetPeerId);
     if (!targetSocket) {
-      this.closeConnection(fromPeerId, connectionId, true);
+      this.closeConnection(socket, connectionId, true);
       return;
     }
 
@@ -200,21 +199,23 @@ export class RoomRelay {
     });
   }
 
-  closeConnection(fromPeerId, connectionId, notifyPeer, closeReason = '') {
+  closeConnection(socket, connectionId, notifyPeer, closeReason = '') {
     if (!connectionId) return;
-    const link = this.connections.get(connectionId);
-    if (!link) return;
-
-    this.connections.delete(connectionId);
-
-    if (!notifyPeer) return;
-
-    const targetPeerId = link.aPeerId === fromPeerId ? link.bPeerId : link.bPeerId === fromPeerId ? link.aPeerId : '';
+    const meta = this.getSocketMeta(socket);
+    const targetPeerId = meta.connections[connectionId] || '';
     if (!targetPeerId) return;
 
-    const targetSocket = this.peers.get(targetPeerId);
+    delete meta.connections[connectionId];
+    this.setSocketMeta(socket, meta);
+
+    const targetSocket = this.findPeerSocket(targetPeerId);
     if (!targetSocket) return;
 
+    const targetMeta = this.getSocketMeta(targetSocket);
+    delete targetMeta.connections[connectionId];
+    this.setSocketMeta(targetSocket, targetMeta);
+
+    if (!notifyPeer) return;
     this.send(targetSocket, {
       type: 'connection-close',
       connectionId,
@@ -223,32 +224,23 @@ export class RoomRelay {
   }
 
   handleClose(socket) {
-    const meta = this.sockets.get(socket);
-    if (!meta) return;
-
-    this.sockets.delete(socket);
-
+    const meta = this.getSocketMeta(socket);
     if (!meta.peerId) return;
 
-    this.peers.delete(meta.peerId);
-
-    const toRemove = [];
-    for (const [connectionId, link] of this.connections.entries()) {
-      if (link.aPeerId !== meta.peerId && link.bPeerId !== meta.peerId) continue;
-      toRemove.push({ connectionId, link });
-    }
-
-    toRemove.forEach(({ connectionId, link }) => {
-      this.connections.delete(connectionId);
-      const otherPeerId = link.aPeerId === meta.peerId ? link.bPeerId : link.aPeerId;
-      const otherSocket = this.peers.get(otherPeerId);
+    for (const [connectionId, otherPeerId] of Object.entries(meta.connections)) {
+      const otherSocket = this.findPeerSocket(otherPeerId);
       if (otherSocket) {
+        const otherMeta = this.getSocketMeta(otherSocket);
+        delete otherMeta.connections[connectionId];
+        this.setSocketMeta(otherSocket, otherMeta);
         this.send(otherSocket, {
           type: 'connection-close',
           connectionId,
         });
       }
-    });
+    }
+
+    this.setSocketMeta(socket, this.createSocketMeta());
   }
 
   send(socket, payload) {
@@ -261,5 +253,52 @@ export class RoomRelay {
 
   generatePeerId() {
     return 'p-' + crypto.randomUUID().slice(0, 12);
+  }
+
+  createSocketMeta() {
+    return {
+      peerId: '',
+      roomId: '',
+      connections: {},
+    };
+  }
+
+  getSocketMeta(socket) {
+    const meta = socket.deserializeAttachment();
+    if (!meta || typeof meta !== 'object') return this.createSocketMeta();
+    return {
+      peerId: String(meta.peerId || ''),
+      roomId: String(meta.roomId || ''),
+      connections: this.normalizeConnections(meta.connections),
+    };
+  }
+
+  setSocketMeta(socket, meta) {
+    socket.serializeAttachment({
+      peerId: String(meta.peerId || ''),
+      roomId: String(meta.roomId || ''),
+      connections: this.normalizeConnections(meta.connections),
+    });
+  }
+
+  normalizeConnections(connections) {
+    if (!connections || typeof connections !== 'object') return {};
+    return Object.fromEntries(
+      Object.entries(connections)
+        .map(([connectionId, peerId]) => [String(connectionId || '').trim(), String(peerId || '').trim()])
+        .filter(([connectionId, peerId]) => connectionId && peerId)
+    );
+  }
+
+  findPeerSocket(peerId) {
+    const normalizedPeerId = String(peerId || '').trim();
+    if (!normalizedPeerId) return null;
+
+    for (const socket of this.state.getWebSockets()) {
+      const meta = this.getSocketMeta(socket);
+      if (meta.peerId === normalizedPeerId) return socket;
+    }
+
+    return null;
   }
 }
