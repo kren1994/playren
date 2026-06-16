@@ -1,6 +1,8 @@
 (function () {
     'use strict';
 
+    const HEARTBEAT_INTERVAL_MS = 45 * 1000;
+
     function createEmitter() {
         const listeners = new Map();
         return {
@@ -99,6 +101,8 @@
             this._emitter = createEmitter();
             this._connections = new Map();
             this._ready = false;
+            this._heartbeatEnabled = false;
+            this._heartbeatTimer = 0;
 
             if (!this._roomId) {
                 queueMicrotask(() => {
@@ -129,6 +133,7 @@
                     roomId: this._roomId,
                     requestedPeerId: this._requestedId || '',
                 });
+                if (this._heartbeatEnabled) this._startHeartbeat();
             });
 
             this._socket.addEventListener('message', (event) => {
@@ -136,6 +141,7 @@
             });
 
             this._socket.addEventListener('close', () => {
+                this._stopHeartbeat();
                 this.disconnected = true;
                 this._closeAllConnections();
                 this._emitter.emit('close');
@@ -174,10 +180,22 @@
             return connection;
         }
 
+        setHeartbeatEnabled(enabled) {
+            this._heartbeatEnabled = Boolean(enabled);
+            if (!this._heartbeatEnabled) {
+                this._stopHeartbeat();
+                return;
+            }
+            if (this._socket && this._socket.readyState === 1) {
+                this._startHeartbeat();
+            }
+        }
+
         destroy() {
             if (this.destroyed) return;
             this.destroyed = true;
             this.disconnected = true;
+            this._stopHeartbeat();
             this._closeAllConnections();
             if (this._socket && this._socket.readyState <= 1) {
                 try {
@@ -190,6 +208,19 @@
 
         _createConnectionId() {
             return 'c-' + Date.now() + '-' + Math.random().toString(36).slice(2, 10);
+        }
+
+        _startHeartbeat() {
+            this._stopHeartbeat();
+            this._heartbeatTimer = window.setInterval(() => {
+                this._send({ type: 'ping', timestamp: Date.now() });
+            }, HEARTBEAT_INTERVAL_MS);
+        }
+
+        _stopHeartbeat() {
+            if (!this._heartbeatTimer) return;
+            window.clearInterval(this._heartbeatTimer);
+            this._heartbeatTimer = 0;
         }
 
         _send(payload) {
@@ -220,6 +251,10 @@
                 return;
             }
             if (!message || typeof message !== 'object') return;
+
+            if (message.type === 'pong') {
+                return;
+            }
 
             if (message.type === 'peer-opened') {
                 this.id = message.peerId;

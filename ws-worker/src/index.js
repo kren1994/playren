@@ -70,6 +70,14 @@ export class RoomRelay {
     }
     if (!message || typeof message !== 'object') return;
 
+    if (message.type === 'ping') {
+      this.send(socket, {
+        type: 'pong',
+        timestamp: message.timestamp || null,
+      });
+      return;
+    }
+
     if (message.type === 'peer-open') {
       this.handlePeerOpen(socket, message);
       return;
