@@ -1137,6 +1137,7 @@
                                     </span>
                                 </button>
                                 <div id="actionMenu" class="control-menu-popup" hidden>
+                                    <button id="menuMoveConfirmBtn" class="control-menu-item" type="button">着手確認</button>
                                     <button id="menuResignBtn" class="control-menu-item" type="button">終局</button>
                                     <button id="menuDrawBtn" class="control-menu-item" type="button">満局提案</button>
                                     <button id="menuTakebackBtn" class="control-menu-item" type="button">待った</button>
@@ -1334,6 +1335,7 @@
             menuDrawBtn: document.getElementById('menuDrawBtn'),
             menuResignBtn: document.getElementById('menuResignBtn'),
             menuTakebackBtn: document.getElementById('menuTakebackBtn'),
+            menuMoveConfirmBtn: document.getElementById('menuMoveConfirmBtn'),
             toast: document.getElementById('toast'),
             
             uiLobbyTitle: document.getElementById('uiLobbyTitle'),
@@ -1366,10 +1368,12 @@
 
         let showCoords = true;
         let showMoveNumbers = true;
+        let moveConfirmEnabled = false;
         let boardThemeIndex = 0;
         let currentLanguage = 'ja';
         let displayMoveCount = -1;
         let pendingMove = null;
+        let confirmMovePoint = null;
         let lastMoveHighlight = null;
         let lastMoveHighlightTimer = 0;
         let boardAlertHighlight = null;
@@ -1590,6 +1594,7 @@
                 menuCoords: '座標',
                 menuTheme: '盤面色',
                 menuMoveNum: '手数',
+                menuMoveConfirm: '着手確認',
                 actionDialogChoice2: '10 題',
                 actionDialogSwap: 'Swap',
                 actionDialogRegular: 'そのまま',
@@ -1706,6 +1711,7 @@
                 menuCoords: '坐标',
                 menuTheme: '棋盘色',
                 menuMoveNum: '手数',
+                menuMoveConfirm: '落子确认',
                 actionDialogChoice2: '10 题',
                 actionDialogSwap: 'Swap',
                 actionDialogRegular: '不交换',
@@ -1822,6 +1828,7 @@
                 menuCoords: 'Coords',
                 menuTheme: 'Board Color',
                 menuMoveNum: 'Move Nos.',
+                menuMoveConfirm: 'Move Confirm',
                 actionDialogChoice2: '10 moves',
                 actionDialogSwap: 'Swap',
                 actionDialogRegular: 'Keep',
@@ -1968,6 +1975,7 @@
             elements.menuDrawBtn.textContent = i18n('menuDraw');
             elements.menuResignBtn.textContent = i18n('menuResign');
             elements.menuTakebackBtn.textContent = i18n('menuTakeback');
+            elements.menuMoveConfirmBtn.textContent = i18n('menuMoveConfirm');
             document.querySelector('#langBtn .control-menu-label').textContent = i18n('menuLang');
             document.getElementById('soundBtn').childNodes[0].nodeValue = i18n('menuSound');
             document.getElementById('coordsBtn').textContent = i18n('menuCoords');
@@ -2078,6 +2086,7 @@
                 soundEnabled: true,
                 showCoords: true,
                 showMoveNumbers: true,
+                moveConfirmEnabled: false,
                 boardThemeIndex: 0,
                 language: 'ja',
             };
@@ -2095,6 +2104,7 @@
             next.soundEnabled = next.soundEnabled !== false;
             next.showCoords = next.showCoords !== false;
             next.showMoveNumbers = next.showMoveNumbers !== false;
+            next.moveConfirmEnabled = next.moveConfirmEnabled === true;
             next.boardThemeIndex = clamp(Number(next.boardThemeIndex) || 0, 0, boardThemes.length - 1);
             next.language = ['ja', 'zh', 'en'].includes(next.language) ? next.language : 'ja';
             return next;
@@ -2149,6 +2159,7 @@
             document.getElementById('soundBtn').classList.toggle('active', soundEnabled);
             document.getElementById('coordsBtn').classList.toggle('active', showCoords);
             document.getElementById('moveNumBtn').classList.toggle('active', showMoveNumbers);
+            elements.menuMoveConfirmBtn.classList.toggle('active', moveConfirmEnabled);
             const label = boardThemes[boardThemeIndex].label[currentLanguage] || boardThemes[boardThemeIndex].label['ja'];
             document.getElementById('themeBtn').dataset.value = label;
         }
@@ -2162,6 +2173,7 @@
             soundEnabled = settings.soundEnabled;
             showCoords = settings.showCoords;
             showMoveNumbers = settings.showMoveNumbers;
+            moveConfirmEnabled = settings.moveConfirmEnabled;
             boardThemeIndex = settings.boardThemeIndex;
             currentLanguage = settings.language;
             syncViewSettingsControls();
@@ -2323,6 +2335,38 @@
             pendingMove = null;
         }
 
+        function clearConfirmMovePoint() {
+            confirmMovePoint = null;
+        }
+
+        function isConfirmMovePoint(actionKind, point) {
+            return Boolean(
+                confirmMovePoint &&
+                confirmMovePoint.actionKind === actionKind &&
+                confirmMovePoint.x === point.x &&
+                confirmMovePoint.y === point.y
+            );
+        }
+
+        function setConfirmMovePoint(actionKind, point) {
+            confirmMovePoint = { actionKind, x: point.x, y: point.y };
+            renderBoard();
+        }
+
+        function shouldConfirmBoardAction(actionKind) {
+            return moveConfirmEnabled && ['move', 'offer', 'select-offer', 'review-move'].includes(actionKind);
+        }
+
+        function confirmOrSendBoardAction(actionKind, point) {
+            if (shouldConfirmBoardAction(actionKind) && !isConfirmMovePoint(actionKind, point)) {
+                setConfirmMovePoint(actionKind, point);
+                return;
+            }
+            clearConfirmMovePoint();
+            playStoneSound(true);
+            sendAction({ kind: actionKind, x: point.x, y: point.y });
+        }
+
         function clearLastMoveHighlight() {
             lastMoveHighlight = null;
             if (lastMoveHighlightTimer) {
@@ -2384,6 +2428,7 @@
 
         function clearLocalOptimisticRequests() {
             if (!state || !localPeerId) return;
+            clearConfirmMovePoint();
             if (state.drawOfferByPeerId === localPeerId) state.drawOfferByPeerId = '';
             if (state.takebackOfferByPeerId === localPeerId) state.takebackOfferByPeerId = '';
         }
@@ -3771,9 +3816,11 @@
 
             if (['move', 'swap', 'choice2', 'offer', 'select-offer', 'takeback-response'].includes(action.kind)) {
                 displayMoveCount = -1;
+                clearConfirmMovePoint();
             }
             if (['review-move', 'review-cursor', 'review-undo', 'review-reset'].includes(action.kind)) {
                 displayMoveCount = -1;
+                clearConfirmMovePoint();
             }
 
             if (peerId === localPeerId && action.kind === 'draw' && state.drawOfferByPeerId === peerId) {
@@ -4025,6 +4072,7 @@
                 state.reviewCursor = event.reviewCursor ?? state.reviewMoves.length;
             }
             if (isPendingMoveConfirmed(event)) clearPendingMove();
+            clearConfirmMovePoint();
             displayMoveCount = -1;
             persistRoomStateSnapshot();
             render();
@@ -4057,6 +4105,7 @@
             state.readyByPeerId = event.readyByPeerId;
             state.version = nextVersion || currentVersion;
             clearPendingMove();
+            clearConfirmMovePoint();
             displayMoveCount = -1;
 
             if (event.updateKind === 'requested' && shouldNotifyRemoteAction(event.actorPeerId, 'takeback')) {
@@ -4235,6 +4284,7 @@
 
         function destroyNetworkState() {
             clearHostReconnectTimer();
+            clearConfirmMovePoint();
             clearLastMoveHighlight();
             clearBoardAlertHighlight();
             guestConnections.forEach((connection) => {
@@ -4261,6 +4311,7 @@
 
         function closeLocalSessionWithoutSnapshot() {
             clearHostReconnectTimer();
+            clearConfirmMovePoint();
             const previousHostConnection = hostConnection;
             const previousPeer = peer;
             const previousGuestConnections = Array.from(guestConnections.values());
@@ -4484,6 +4535,7 @@
                     refreshLocalizedResultText();
                     persistRoomStateSnapshot();
                     clearPendingMove();
+                    clearConfirmMovePoint();
                     if (shouldHighlightIncomingMove) {
                         startLastMoveHighlight(incomingMoves[incomingMoves.length - 1]);
                     }
@@ -4787,6 +4839,21 @@
                 }
                 ctx.restore();
             }
+
+            const canShowConfirmMove = confirmMovePoint
+                && displayMoveCount === -1
+                && !moves.some((move) => move.x === confirmMovePoint.x && move.y === confirmMovePoint.y);
+            if (canShowConfirmMove) {
+                const x = padding + confirmMovePoint.x * cell;
+                const y = topPadding + confirmMovePoint.y * cell;
+                ctx.save();
+                ctx.beginPath();
+                ctx.arc(x, y, cell * 0.45, 0, Math.PI * 2);
+                ctx.lineWidth = Math.max(1.5, cell * 0.045);
+                ctx.strokeStyle = 'rgba(42, 42, 42, 0.78)';
+                ctx.stroke();
+                ctx.restore();
+            }
             ctx.restore();
         }
 
@@ -4895,40 +4962,52 @@
             
             if (displayMoveCount !== -1 && displayMoveCount !== getRenderedMoves().length) {
                 displayMoveCount = -1;
+                clearConfirmMovePoint();
                 renderBoard();
                 return;
             }
 
             const point = boardPointFromEvent(event);
-            if (!point) return;
+            if (!point) {
+                clearConfirmMovePoint();
+                renderBoard();
+                return;
+            }
             if (hasDisconnectedSeatedPlayer() && !canUseReviewBoard()) {
+                clearConfirmMovePoint();
                 showToast(i18n('errMatchPausedForDisconnect'));
                 return;
             }
             if (canUseReviewBoard()) {
-                playStoneSound(true);
-                sendAction({ kind: 'review-move', x: point.x, y: point.y });
+                confirmOrSendBoardAction('review-move', point);
                 return;
             }
             const descriptor = phaseDescriptor();
-            if (!descriptor.allowBoardAction) return;
+            if (!descriptor.allowBoardAction) {
+                clearConfirmMovePoint();
+                renderBoard();
+                return;
+            }
             if (descriptor.actorPeerId !== localPeerId) {
+                clearConfirmMovePoint();
+                renderBoard();
                 showToast(i18n('errNotYourTurnBoard'));
                 return;
             }
 
             if (descriptor.boardActionKind === 'move') {
-                if (pendingMove) return;
-                playStoneSound(true);
-                sendAction({ kind: 'move', x: point.x, y: point.y });
+                if (pendingMove) {
+                    clearConfirmMovePoint();
+                    renderBoard();
+                    return;
+                }
+                confirmOrSendBoardAction('move', point);
             }
             if (descriptor.boardActionKind === 'offer') {
-                playStoneSound(true);
-                sendAction({ kind: 'offer', x: point.x, y: point.y });
+                confirmOrSendBoardAction('offer', point);
             }
             if (descriptor.boardActionKind === 'select-offer') {
-                playStoneSound(true);
-                sendAction({ kind: 'select-offer', x: point.x, y: point.y });
+                confirmOrSendBoardAction('select-offer', point);
             }
         }
 
@@ -4936,6 +5015,7 @@
             event.preventDefault();
             if (displayMoveCount !== -1 && displayMoveCount !== getRenderedMoves().length) {
                 displayMoveCount = -1;
+                clearConfirmMovePoint();
                 renderBoard();
                 return;
             }
@@ -5058,8 +5138,14 @@
 
         function renderControls() {
             const localParticipant = getParticipantById(localPeerId);
+            const isPlaying = Boolean(state && state.status === 'playing');
             const canManageResult = Boolean(state && state.status === 'playing' && !hasDisconnectedSeatedPlayer() && localParticipant && (localParticipant.seat === 'black' || localParticipant.seat === 'white'));
             
+            elements.menuMoveConfirmBtn.hidden = isPlaying;
+            elements.menuResignBtn.hidden = !isPlaying;
+            elements.menuDrawBtn.hidden = !isPlaying;
+            elements.menuTakebackBtn.hidden = !isPlaying;
+            elements.menuMoveConfirmBtn.classList.toggle('active', moveConfirmEnabled);
             elements.menuDrawBtn.disabled = !canManageResult || Boolean(state?.drawOfferByPeerId);
             elements.menuResignBtn.disabled = !canManageResult;
             elements.menuTakebackBtn.disabled = !canManageResult || Boolean(state?.takebackOfferByPeerId);
@@ -5310,6 +5396,15 @@
             openResignConfirm();
         }
 
+        function toggleMoveConfirm() {
+            closeControlMenus();
+            moveConfirmEnabled = !moveConfirmEnabled;
+            elements.menuMoveConfirmBtn.classList.toggle('active', moveConfirmEnabled);
+            persistUserSettings({ moveConfirmEnabled });
+            clearConfirmMovePoint();
+            renderBoard();
+        }
+
         function cycleLanguage() {
             closeControlMenus();
             currentLanguage = currentLanguage === 'ja' ? 'zh' : currentLanguage === 'zh' ? 'en' : 'ja';
@@ -5355,6 +5450,7 @@
 
         function resetMovesView() {
             if (!state) return;
+            clearConfirmMovePoint();
             if (state.status === 'finished') {
                 sendAction({ kind: 'review-reset' });
             } else {
@@ -5365,6 +5461,7 @@
 
         function goMoves(delta) {
             if (!state) return;
+            clearConfirmMovePoint();
             if (state.status === 'finished') {
                 const max = (state.reviewMoves || []).length;
                 let current = state.reviewCursor ?? max;
@@ -5431,6 +5528,7 @@
         bindPointerPress(elements.menuResignBtn, resignFromMenu);
         bindPointerPress(elements.menuDrawBtn, offerDrawFromMenu);
         bindPointerPress(elements.menuTakebackBtn, requestTakebackFromMenu);
+        bindPointerPress(elements.menuMoveConfirmBtn, toggleMoveConfirm);
         bindPointerPress(document.getElementById('langBtn'), cycleLanguage);
         bindPointerPress(document.getElementById('soundBtn'), toggleSound);
         bindPointerPress(document.getElementById('coordsBtn'), toggleCoords);
