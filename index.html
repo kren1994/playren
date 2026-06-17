@@ -290,6 +290,24 @@
             background: rgba(234, 247, 242, 0.92);
         }
 
+        .player-card.seat-action,
+        .spectator-card.seat-action {
+            cursor: pointer;
+            touch-action: manipulation;
+            transition: background-color 0.15s ease, border-color 0.15s ease, transform 0.15s ease;
+        }
+
+        .player-card.seat-action:hover,
+        .spectator-card.seat-action:hover {
+            border-color: rgba(23, 89, 74, 0.28);
+            background: rgba(239, 248, 244, 0.92);
+        }
+
+        .player-card.seat-action:active,
+        .spectator-card.seat-action:active {
+            transform: translateY(1px);
+        }
+
         .player-card.black::before,
         .player-card.white::before {
             content: "";
@@ -318,27 +336,6 @@
             gap: 12px;
             padding-left: 24px;
             width: 100%;
-        }
-
-        .seat-symbol {
-            width: 30px;
-            height: 30px;
-            border-radius: 999px;
-            border: 1px solid rgba(74, 54, 34, 0.16);
-            background: rgba(255, 255, 255, 0.92);
-            color: var(--text);
-            font-size: 20px;
-            line-height: 1;
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            padding: 0;
-            cursor: pointer;
-        }
-
-        .seat-symbol:disabled {
-            opacity: 0.32;
-            cursor: not-allowed;
         }
 
         .player-main {
@@ -379,12 +376,6 @@
             white-space: nowrap;
         }
 
-        .player-actions {
-            display: inline-flex;
-            align-items: center;
-            gap: 8px;
-        }
-
         .player-timer {
             font-size: clamp(16px, 2.8vw, 22px);
             font-weight: 800;
@@ -395,17 +386,26 @@
         .player-ready {
             display: inline-flex;
             align-items: center;
+            justify-content: center;
+            align-self: center;
+            flex: 0 0 18px;
+            width: 18px;
+            height: 18px;
         }
 
         .ready-mark {
-            width: 28px;
-            height: 28px;
-            border-radius: 999px;
+            flex: 0 0 18px;
+            width: 18px;
+            height: 18px;
+            aspect-ratio: 1;
+            box-sizing: border-box;
+            border-radius: 50%;
             border: 1px solid rgba(74, 54, 34, 0.16);
             display: inline-flex;
             align-items: center;
             justify-content: center;
-            font-size: 14px;
+            font-size: 10px;
+            line-height: 1;
             font-weight: 800;
             color: rgba(47, 36, 24, 0.32);
             background: rgba(255, 255, 255, 0.72);
@@ -416,31 +416,6 @@
         }
 
         .ready-mark.active {
-            color: #f8fbf8;
-            background: linear-gradient(135deg, var(--accent), var(--accent-strong));
-            border-color: rgba(23, 89, 74, 0.42);
-        }
-
-        .ready-button {
-            width: 28px;
-            height: 28px;
-            padding: 0;
-            border-radius: 999px;
-            border: 1px solid rgba(74, 54, 34, 0.16);
-            background: rgba(255, 255, 255, 0.92);
-            color: rgba(47, 36, 24, 0.42);
-            font-size: 14px;
-            font-weight: 800;
-            line-height: 1;
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            cursor: pointer;
-            touch-action: manipulation;
-            user-select: none;
-        }
-
-        .ready-button.active {
             color: #f8fbf8;
             background: linear-gradient(135deg, var(--accent), var(--accent-strong));
             border-color: rgba(23, 89, 74, 0.42);
@@ -994,16 +969,13 @@
                 font-size: 11px;
                 min-height: 1.1em;
             }
-            .player-main,
-            .player-actions {
+            .player-main {
                 gap: 5px;
             }
             .player-timer {
                 font-size: 15px;
             }
-            .seat-symbol,
-            .ready-mark,
-            .ready-button {
+            .ready-mark {
                 width: 22px;
                 height: 22px;
                 font-size: 12px;
@@ -1064,16 +1036,13 @@
                 font-size: 11px;
                 min-height: 1.1em;
             }
-            .player-main,
-            .player-actions {
+            .player-main {
                 gap: 5px;
             }
             .player-timer {
                 font-size: 15px;
             }
-            .seat-symbol,
-            .ready-mark,
-            .ready-button {
+            .ready-mark {
                 width: 22px;
                 height: 22px;
                 font-size: 12px;
@@ -1162,25 +1131,22 @@
                 font-size: var(--mobile-player-name-size, 12px);
             }
 
-            .player-actions {
-                gap: 3px;
-            }
-
             .player-timer {
                 font-size: clamp(11px, 3.2vw, 14px);
                 line-height: 1;
             }
-            
-            .seat-symbol {
-                width: 22px;
-                height: 22px;
-                font-size: 15px;
+
+            .player-ready {
+                flex-basis: 16px;
+                width: 16px;
+                height: 16px;
             }
             
-            .ready-mark, .ready-button {
-                width: 22px;
-                height: 22px;
-                font-size: 11px;
+            .ready-mark {
+                flex-basis: 16px;
+                width: 16px;
+                height: 16px;
+                font-size: 9px;
             }
 
             .game-topbar {
@@ -1255,11 +1221,8 @@
                                         <div id="blackPlayerName" class="player-name"></div>
                                         <div id="blackPlayerStatus" class="player-status" hidden></div>
                                     </div>
-                                    <div id="blackPlayerTimer" class="player-timer">05:00</div>
-                                </div>
-                                <div class="player-actions">
                                     <div id="blackReadyWrap" class="player-ready"></div>
-                                    <button id="blackSeatBtn" class="seat-symbol" type="button">＋</button>
+                                    <div id="blackPlayerTimer" class="player-timer">05:00</div>
                                 </div>
                             </div>
                         </article>
@@ -1270,11 +1233,8 @@
                                         <div id="whitePlayerName" class="player-name"></div>
                                         <div id="whitePlayerStatus" class="player-status" hidden></div>
                                     </div>
-                                    <div id="whitePlayerTimer" class="player-timer">05:00</div>
-                                </div>
-                                <div class="player-actions">
                                     <div id="whiteReadyWrap" class="player-ready"></div>
-                                    <button id="whiteSeatBtn" class="seat-symbol" type="button">＋</button>
+                                    <div id="whitePlayerTimer" class="player-timer">05:00</div>
                                 </div>
                             </div>
                         </article>
@@ -1356,7 +1316,7 @@
                         </div>
                     </section>
 
-                    <section class="card">
+                    <section id="spectatorCard" class="card spectator-card">
                         <h2 id="uiSpectatorTitle">観戦席</h2>
                         <ul id="spectatorList" class="spectator-list"></ul>
                     </section>
@@ -1506,13 +1466,12 @@
             whitePlayerStatus: document.getElementById('whitePlayerStatus'),
             blackPlayerTimer: document.getElementById('blackPlayerTimer'),
             whitePlayerTimer: document.getElementById('whitePlayerTimer'),
-            blackSeatBtn: document.getElementById('blackSeatBtn'),
-            whiteSeatBtn: document.getElementById('whiteSeatBtn'),
             blackReadyWrap: document.getElementById('blackReadyWrap'),
             whiteReadyWrap: document.getElementById('whiteReadyWrap'),
             boardCanvas: document.getElementById('boardCanvas'),
             boardControls: document.querySelector('.board-controls'),
             spectatorList: document.getElementById('spectatorList'),
+            spectatorCard: document.getElementById('spectatorCard'),
             roomSummary: document.getElementById('roomSummary'),
             logList: document.getElementById('logList'),
             logCommentInput: document.getElementById('logCommentInput'),
@@ -1822,6 +1781,8 @@
                 playerNotJoined: ' ',
                 readyAriaTitle: '準備 OK',
                 readyAriaCancel: '準備 OK を解除',
+                seatLeftAria: '左上席に着席',
+                seatRightAria: '右上席に着席',
                 
                 errNeedRoomCode: '合言葉を入力してください。',
                 errReviewOnlyAfter: '対局終了後のみ局後検討できます。',
@@ -1939,6 +1900,8 @@
                 playerNotJoined: ' ',
                 readyAriaTitle: '准备完毕',
                 readyAriaCancel: '取消准备',
+                seatLeftAria: '坐到左上席',
+                seatRightAria: '坐到右上席',
                 
                 errNeedRoomCode: '请输入口令。',
                 errReviewOnlyAfter: '对局结束后才可进行复盘。',
@@ -2056,6 +2019,8 @@
                 playerNotJoined: ' ',
                 readyAriaTitle: 'Ready',
                 readyAriaCancel: 'Cancel ready',
+                seatLeftAria: 'Take the upper-left seat',
+                seatRightAria: 'Take the upper-right seat',
 
                 errNeedRoomCode: 'Enter a room code.',
                 errReviewOnlyAfter: 'Review is available only after the game ends.',
@@ -3121,6 +3086,7 @@
             if (!state || !peerId) return false;
             const participant = getParticipantById(peerId);
             if (!participant) return false;
+            if (state.status === 'playing') return false;
             if (nextSeat === 'spectator') return true;
             if (nextSeat !== 'black' && nextSeat !== 'white') return false;
             const occupant = state.seats[nextSeat];
@@ -3135,6 +3101,10 @@
 
             const currentSeat = participant.seat || 'spectator';
             if (currentSeat === nextSeat) return '';
+            if (nextSeat === 'black' || nextSeat === 'white') {
+                const occupantPeerId = state.seats[nextSeat];
+                if (occupantPeerId && occupantPeerId !== targetPeerId) return i18n('errSeatOccupied');
+            }
 
             const beforeSeatedIds = [state.seats.black, state.seats.white].filter(Boolean);
             if (currentSeat === 'black') state.seats.black = null;
@@ -3142,11 +3112,6 @@
             state.readyByPeerId[targetPeerId] = false;
 
             if (nextSeat === 'black' || nextSeat === 'white') {
-                const displacedPeerId = state.seats[nextSeat];
-                if (displacedPeerId && displacedPeerId !== targetPeerId && state.participantsById[displacedPeerId]) {
-                    state.participantsById[displacedPeerId].seat = 'spectator';
-                    state.readyByPeerId[displacedPeerId] = false;
-                }
                 state.seats[nextSeat] = targetPeerId;
             }
 
@@ -4171,9 +4136,8 @@
             if (!error && action.kind === 'select-offer') error = selectOfferedMove(peerId, action.x, action.y);
             if (!error && action.kind === 'ready') error = setReadyState(peerId, Boolean(action.ready));
             if (!error && action.kind === 'seat-change') {
-                const isHostOperator = peerId === state.hostPeerId;
                 const isSelfSeatChange = action.targetPeerId === peerId && canSelfChangeSeat(peerId, action.seat);
-                if (!isHostOperator && !isSelfSeatChange) {
+                if (!isSelfSeatChange) {
                     error = i18n('errOnlyEmptySeat');
                 } else {
                     error = assignSeat(action.targetPeerId, action.seat);
@@ -4621,58 +4585,39 @@
             return peerId ? getParticipantById(peerId) : null;
         }
 
-        function handleSeatButtonClick(seat) {
+        function handlePlayerCardClick(seat) {
+            if (!state || state.status === 'playing') return;
             const occupant = getSeatOccupant(seat);
             if (!occupant) {
-                if (!canSelfChangeSeat(localPeerId, seat)) {
-                    showToast(i18n('errSeatOccupied'));
-                    return;
-                }
+                if (!canSelfChangeSeat(localPeerId, seat)) return;
                 sendAction({ kind: 'seat-change', targetPeerId: localPeerId, seat });
                 return;
             }
-            if (occupant.id === localPeerId || localMode === 'host') {
-                sendAction({ kind: 'seat-change', targetPeerId: occupant.id, seat: 'spectator' });
-            }
+            if (occupant.id !== localPeerId) return;
+            const isReady = Boolean(state.readyByPeerId?.[localPeerId]);
+            sendAction({ kind: 'ready', ready: !isReady });
         }
 
-        function renderReadyButton(container, participant) {
+        function handleSpectatorCardClick() {
+            if (!state || state.status === 'playing') return;
+            const participant = getParticipantById(localPeerId);
+            if (!participant || participant.seat === 'spectator') return;
+            sendAction({ kind: 'seat-change', targetPeerId: localPeerId, seat: 'spectator' });
+        }
+
+        function renderReadyMark(container, participant) {
             container.innerHTML = '';
 
             if (!participant) {
-                const placeholder = document.createElement('span');
-                placeholder.className = 'ready-mark passive';
-                placeholder.textContent = '✓';
-                placeholder.setAttribute('aria-hidden', 'true');
-                container.appendChild(placeholder);
                 return;
             }
 
             const isReady = Boolean(state.readyByPeerId?.[participant.id]);
-            const isLocalSeat = participant.id === localPeerId;
-            const canToggle = isLocalSeat && state.status !== 'playing';
-
-            if (canToggle) {
-                const readyButton = document.createElement('button');
-                readyButton.type = 'button';
-                readyButton.className = `ready-button${isReady ? ' active' : ''}`;
-                readyButton.textContent = '✓';
-                readyButton.title = isReady ? i18n('readyAriaCancel') : i18n('readyAriaTitle');
-                readyButton.setAttribute('aria-label', readyButton.title);
-                readyButton.addEventListener('pointerdown', (event) => {
-                    if (event.pointerType === 'mouse' && event.button !== 0) return;
-                    if (event.isPrimary === false) return;
-                    event.preventDefault();
-                    sendAction({ kind: 'ready', ready: !isReady });
-                });
-                container.appendChild(readyButton);
-                return;
-            }
-
+            if (!isReady) return;
             const readyMark = document.createElement('span');
-            readyMark.className = `ready-mark passive${isReady ? ' active' : ''}`;
+            readyMark.className = 'ready-mark passive active';
             readyMark.textContent = '✓';
-            readyMark.setAttribute('aria-label', isReady ? i18n('readyAriaTitle') : i18n('readyAriaCancel'));
+            readyMark.setAttribute('aria-label', i18n('readyAriaTitle'));
             container.appendChild(readyMark);
         }
 
@@ -5512,22 +5457,19 @@
                 elements.whitePlayerStatus.hidden = true;
                 elements.blackPlayerTimer.textContent = '';
                 elements.whitePlayerTimer.textContent = '';
-                elements.blackSeatBtn.textContent = '＋';
-                elements.whiteSeatBtn.textContent = '＋';
-                elements.blackSeatBtn.disabled = true;
-                elements.whiteSeatBtn.disabled = true;
-                elements.blackSeatBtn.hidden = false;
-                elements.whiteSeatBtn.hidden = false;
                 [elements.blackReadyWrap, elements.whiteReadyWrap].forEach((wrap) => {
                     wrap.innerHTML = '';
-                    const placeholder = document.createElement('span');
-                    placeholder.className = 'ready-mark passive';
-                    placeholder.textContent = '✓';
-                    placeholder.setAttribute('aria-hidden', 'true');
-                    wrap.appendChild(placeholder);
                 });
                 elements.blackPlayerCard.classList.remove('active');
                 elements.whitePlayerCard.classList.remove('active');
+                elements.blackPlayerCard.classList.remove('seat-action');
+                elements.whitePlayerCard.classList.remove('seat-action');
+                elements.spectatorCard.classList.remove('seat-action');
+                [elements.blackPlayerCard, elements.whitePlayerCard, elements.spectatorCard].forEach((element) => {
+                    element.removeAttribute('role');
+                    element.removeAttribute('tabindex');
+                    element.removeAttribute('aria-label');
+                });
                 scheduleMobilePlayerNameSize();
                 return;
             }
@@ -5551,14 +5493,6 @@
             renderParticipant(elements.whitePlayerName, elements.whitePlayerStatus, whiteParticipant);
             elements.blackPlayerTimer.textContent = blackPeerId ? formatTime(getDisplayRemainingMs(blackPeerId)) : '';
             elements.whitePlayerTimer.textContent = whitePeerId ? formatTime(getDisplayRemainingMs(whitePeerId)) : '';
-            elements.blackSeatBtn.textContent = blackParticipant ? '－' : '＋';
-            elements.whiteSeatBtn.textContent = whiteParticipant ? '－' : '＋';
-            const canBlackSeatAction = blackParticipant ? (blackParticipant.id === localPeerId || localMode === 'host') : canSelfChangeSeat(localPeerId, 'black');
-            const canWhiteSeatAction = whiteParticipant ? (whiteParticipant.id === localPeerId || localMode === 'host') : canSelfChangeSeat(localPeerId, 'white');
-            elements.blackSeatBtn.disabled = !canBlackSeatAction;
-            elements.whiteSeatBtn.disabled = !canWhiteSeatAction;
-            elements.blackSeatBtn.hidden = false;
-            elements.whiteSeatBtn.hidden = false;
 
             ensureSeatColors();
             const blackCardColor = state.seatColors.black;
@@ -5569,8 +5503,43 @@
             elements.whitePlayerCard.classList.toggle('white', whiteCardColor === 'white');
             elements.blackPlayerCard.classList.toggle('active', activePeerId === blackPeerId && state.status === 'playing');
             elements.whitePlayerCard.classList.toggle('active', activePeerId === whitePeerId && state.status === 'playing');
-            renderReadyButton(elements.blackReadyWrap, blackParticipant);
-            renderReadyButton(elements.whiteReadyWrap, whiteParticipant);
+            renderReadyMark(elements.blackReadyWrap, blackParticipant);
+            renderReadyMark(elements.whiteReadyWrap, whiteParticipant);
+
+            const localParticipant = getParticipantById(localPeerId);
+            const canUseBlackCard = state.status !== 'playing' && (!blackParticipant || blackPeerId === localPeerId);
+            const canUseWhiteCard = state.status !== 'playing' && (!whiteParticipant || whitePeerId === localPeerId);
+            const canUseSpectatorCard = state.status !== 'playing'
+                && localParticipant
+                && localParticipant.seat !== 'spectator';
+            [
+                [
+                    elements.blackPlayerCard,
+                    canUseBlackCard,
+                    blackParticipant
+                        ? i18n(state.readyByPeerId?.[localPeerId] ? 'readyAriaCancel' : 'readyAriaTitle')
+                        : i18n('seatLeftAria'),
+                ],
+                [
+                    elements.whitePlayerCard,
+                    canUseWhiteCard,
+                    whiteParticipant
+                        ? i18n(state.readyByPeerId?.[localPeerId] ? 'readyAriaCancel' : 'readyAriaTitle')
+                        : i18n('seatRightAria'),
+                ],
+                [elements.spectatorCard, canUseSpectatorCard, i18n('spectatorTitle')],
+            ].forEach(([element, enabled, label]) => {
+                element.classList.toggle('seat-action', Boolean(enabled));
+                if (enabled) {
+                    element.setAttribute('role', 'button');
+                    element.setAttribute('tabindex', '0');
+                    if (label) element.setAttribute('aria-label', label);
+                } else {
+                    element.removeAttribute('role');
+                    element.removeAttribute('tabindex');
+                    element.removeAttribute('aria-label');
+                }
+            });
             scheduleMobilePlayerNameSize();
         }
 
@@ -5989,8 +5958,18 @@
         });
         
         elements.leaveRoomBtn.addEventListener('click', leaveRoom);
-        bindPointerPress(elements.blackSeatBtn, () => handleSeatButtonClick('black'));
-        bindPointerPress(elements.whiteSeatBtn, () => handleSeatButtonClick('white'));
+        function bindSeatSurface(element, handler) {
+            element.addEventListener('click', handler);
+            element.addEventListener('keydown', (event) => {
+                if (event.key !== 'Enter' && event.key !== ' ') return;
+                event.preventDefault();
+                handler();
+            });
+        }
+
+        bindSeatSurface(elements.blackPlayerCard, () => handlePlayerCardClick('black'));
+        bindSeatSurface(elements.whitePlayerCard, () => handlePlayerCardClick('white'));
+        bindSeatSurface(elements.spectatorCard, handleSpectatorCardClick);
         elements.timeHandicapInput.addEventListener('change', syncTimeSettingsDialogMode);
         elements.timeLeftBaseInput.addEventListener('input', syncTimeSettingsDialogMode);
         elements.timeLeftIncrementInput.addEventListener('input', syncTimeSettingsDialogMode);
