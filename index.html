@@ -1138,6 +1138,7 @@
                                 </button>
                                 <div id="actionMenu" class="control-menu-popup" hidden>
                                     <button id="menuMoveConfirmBtn" class="control-menu-item" type="button">着手確認</button>
+                                    <button id="menuSwapSeatColorsBtn" class="control-menu-item" type="button">色を交換</button>
                                     <button id="menuResignBtn" class="control-menu-item" type="button">終局</button>
                                     <button id="menuDrawBtn" class="control-menu-item" type="button">満局提案</button>
                                     <button id="menuTakebackBtn" class="control-menu-item" type="button">待った</button>
@@ -1336,6 +1337,7 @@
             menuResignBtn: document.getElementById('menuResignBtn'),
             menuTakebackBtn: document.getElementById('menuTakebackBtn'),
             menuMoveConfirmBtn: document.getElementById('menuMoveConfirmBtn'),
+            menuSwapSeatColorsBtn: document.getElementById('menuSwapSeatColorsBtn'),
             toast: document.getElementById('toast'),
             
             uiLobbyTitle: document.getElementById('uiLobbyTitle'),
@@ -1921,6 +1923,10 @@
             }
         };
 
+        translations.ja.menuSwapSeatColors = '色を交換';
+        translations.zh.menuSwapSeatColors = '交换颜色';
+        translations.en.menuSwapSeatColors = 'Swap Colors';
+
         function i18n(key, arg) {
             const lang = translations[currentLanguage] || translations['ja'];
             const val = lang[key] || translations['ja'][key] || key;
@@ -1976,6 +1982,7 @@
             elements.menuResignBtn.textContent = i18n('menuResign');
             elements.menuTakebackBtn.textContent = i18n('menuTakeback');
             elements.menuMoveConfirmBtn.textContent = i18n('menuMoveConfirm');
+            elements.menuSwapSeatColorsBtn.textContent = i18n('menuSwapSeatColors');
             document.querySelector('#langBtn .control-menu-label').textContent = i18n('menuLang');
             document.getElementById('soundBtn').childNodes[0].nodeValue = i18n('menuSound');
             document.getElementById('coordsBtn').textContent = i18n('menuCoords');
@@ -2259,6 +2266,10 @@
                 },
                 readyByPeerId: {
                     [hostId]: false,
+                },
+                seatColors: {
+                    black: 'black',
+                    white: 'white',
                 },
                 colorsByPeerId: { [hostId]: 'black' },
                 moves: [],
@@ -2763,21 +2774,40 @@
 
         function rebuildColors() {
             if (!state) return;
-            const previousColors = state.colorsByPeerId || {};
+            ensureSeatColors();
             const nextColors = {};
-            const seatedIds = [state.seats.black, state.seats.white].filter(Boolean);
-            seatedIds.forEach((peerId) => {
-                const previousColor = previousColors[peerId];
-                if ((previousColor === 'black' || previousColor === 'white') && !Object.values(nextColors).includes(previousColor)) {
-                    nextColors[peerId] = previousColor;
+            ['black', 'white'].forEach((seat) => {
+                const peerId = state.seats?.[seat];
+                const color = state.seatColors?.[seat];
+                if (peerId && (color === 'black' || color === 'white')) {
+                    nextColors[peerId] = color;
                 }
             });
-            seatedIds.forEach((peerId) => {
-                if (nextColors[peerId]) return;
-                const fallback = !Object.values(nextColors).includes('black') ? 'black' : 'white';
-                nextColors[peerId] = fallback;
-            });
             state.colorsByPeerId = nextColors;
+        }
+
+        function ensureSeatColors() {
+            if (!state) return;
+            if (!state.seatColors || typeof state.seatColors !== 'object') {
+                const blackSeatPeerId = state.seats?.black || '';
+                const whiteSeatPeerId = state.seats?.white || '';
+                state.seatColors = {
+                    black: state.colorsByPeerId?.[blackSeatPeerId] || 'black',
+                    white: state.colorsByPeerId?.[whiteSeatPeerId] || 'white',
+                };
+            }
+            const blackColor = state.seatColors.black === 'white' ? 'white' : 'black';
+            state.seatColors.black = blackColor;
+            state.seatColors.white = blackColor === 'black' ? 'white' : 'black';
+        }
+
+        function swapSeatColors() {
+            if (!state) return;
+            ensureSeatColors();
+            const previousBlack = state.seatColors.black;
+            state.seatColors.black = state.seatColors.white;
+            state.seatColors.white = previousBlack;
+            rebuildColors();
         }
 
         function ensureClockEntry(peerId) {
@@ -2812,7 +2842,6 @@
             const beforeSeatedIds = [state.seats.black, state.seats.white].filter(Boolean);
             if (currentSeat === 'black') state.seats.black = null;
             if (currentSeat === 'white') state.seats.white = null;
-            if (nextSeat === 'spectator') delete state.colorsByPeerId[targetPeerId];
             state.readyByPeerId[targetPeerId] = false;
 
             if (nextSeat === 'black' || nextSeat === 'white') {
@@ -2820,7 +2849,6 @@
                 if (displacedPeerId && displacedPeerId !== targetPeerId && state.participantsById[displacedPeerId]) {
                     state.participantsById[displacedPeerId].seat = 'spectator';
                     state.readyByPeerId[displacedPeerId] = false;
-                    delete state.colorsByPeerId[displacedPeerId];
                 }
                 state.seats[nextSeat] = targetPeerId;
             }
@@ -3280,11 +3308,7 @@
         }
 
         function swapColors() {
-            const blackPeerId = getBlackPeerId();
-            const whitePeerId = getWhitePeerId();
-            if (!blackPeerId || !whitePeerId) return;
-            state.colorsByPeerId[blackPeerId] = 'white';
-            state.colorsByPeerId[whitePeerId] = 'black';
+            swapSeatColors();
         }
 
         function getImplicitMovePhase(phase) {
@@ -3821,6 +3845,16 @@
             if (!error && action.kind === 'review-undo') error = setReviewCursor(peerId, (state.reviewCursor ?? (state.reviewMoves || []).length) - 1);
             if (!error && action.kind === 'review-reset') error = resetReviewMovesForPeer(peerId);
             if (!error && action.kind === 'review-branch-base') error = returnReviewToBranchBase(peerId);
+            if (!error && action.kind === 'swap-seat-colors') {
+                if (peerId !== state.hostPeerId) {
+                    error = i18n('errUnconnected');
+                } else if (state.status === 'playing') {
+                    error = i18n('errCannotSwap');
+                } else {
+                    swapSeatColors();
+                    resetReadyFlags();
+                }
+            }
             if (!error && action.kind === 'offer') error = offerMove(peerId, action.x, action.y);
             if (!error && action.kind === 'select-offer') error = selectOfferedMove(peerId, action.x, action.y);
             if (!error && action.kind === 'ready') error = setReadyState(peerId, Boolean(action.ready));
@@ -5136,12 +5170,13 @@
             elements.blackSeatBtn.hidden = false;
             elements.whiteSeatBtn.hidden = false;
 
-            const blackCardColor = getColorForPeer(blackPeerId) || 'black';
-            const whiteCardColor = getColorForPeer(whitePeerId) || 'white';
-            elements.blackPlayerCard.classList.toggle('black', Boolean(blackPeerId) && blackCardColor === 'black');
-            elements.blackPlayerCard.classList.toggle('white', Boolean(blackPeerId) && blackCardColor === 'white');
-            elements.whitePlayerCard.classList.toggle('black', Boolean(whitePeerId) && whiteCardColor === 'black');
-            elements.whitePlayerCard.classList.toggle('white', Boolean(whitePeerId) && whiteCardColor === 'white');
+            ensureSeatColors();
+            const blackCardColor = state.seatColors.black;
+            const whiteCardColor = state.seatColors.white;
+            elements.blackPlayerCard.classList.toggle('black', blackCardColor === 'black');
+            elements.blackPlayerCard.classList.toggle('white', blackCardColor === 'white');
+            elements.whitePlayerCard.classList.toggle('black', whiteCardColor === 'black');
+            elements.whitePlayerCard.classList.toggle('white', whiteCardColor === 'white');
             elements.blackPlayerCard.classList.toggle('active', activePeerId === blackPeerId && state.status === 'playing');
             elements.whitePlayerCard.classList.toggle('active', activePeerId === whitePeerId && state.status === 'playing');
             renderReadyButton(elements.blackReadyWrap, blackParticipant);
@@ -5188,9 +5223,11 @@
             const canManageResult = Boolean(state && state.status === 'playing' && !hasDisconnectedSeatedPlayer() && localParticipant && (localParticipant.seat === 'black' || localParticipant.seat === 'white'));
             
             elements.menuMoveConfirmBtn.hidden = isPlaying;
+            elements.menuSwapSeatColorsBtn.hidden = isPlaying;
             elements.menuResignBtn.hidden = !isPlaying;
             elements.menuDrawBtn.hidden = !isPlaying;
             elements.menuTakebackBtn.hidden = !isPlaying;
+            elements.menuSwapSeatColorsBtn.disabled = localMode !== 'host';
             elements.menuMoveConfirmBtn.classList.toggle('active', moveConfirmEnabled);
             elements.menuDrawBtn.disabled = !canManageResult || Boolean(state?.drawOfferByPeerId);
             elements.menuResignBtn.disabled = !canManageResult;
@@ -5305,6 +5342,7 @@
 
         function render() {
             updateNetworkHeartbeat();
+            if (state) rebuildColors();
             setScreen(state || localMode !== 'idle' ? 'game' : 'lobby');
             renderRoomSummary();
             renderPlayers();
@@ -5451,6 +5489,11 @@
             renderBoard();
         }
 
+        function swapSeatColorsFromMenu() {
+            closeControlMenus();
+            sendAction({ kind: 'swap-seat-colors' });
+        }
+
         function cycleLanguage() {
             closeControlMenus();
             currentLanguage = currentLanguage === 'ja' ? 'zh' : currentLanguage === 'zh' ? 'en' : 'ja';
@@ -5575,6 +5618,7 @@
         bindPointerPress(elements.menuDrawBtn, offerDrawFromMenu);
         bindPointerPress(elements.menuTakebackBtn, requestTakebackFromMenu);
         bindPointerPress(elements.menuMoveConfirmBtn, toggleMoveConfirm);
+        bindPointerPress(elements.menuSwapSeatColorsBtn, swapSeatColorsFromMenu);
         bindPointerPress(document.getElementById('langBtn'), cycleLanguage);
         bindPointerPress(document.getElementById('soundBtn'), toggleSound);
         bindPointerPress(document.getElementById('coordsBtn'), toggleCoords);
