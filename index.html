@@ -2322,7 +2322,7 @@
         }
 
         function getRenderedMoves() {
-            if (state?.status === 'finished') {
+            if (canUseReviewBoard()) {
                 return (state.reviewMoves || []).slice(0, state.reviewCursor ?? (state.reviewMoves?.length || 0));
             }
             return state?.moves || [];
@@ -2462,21 +2462,25 @@
         }
 
         function canUseReviewBoard() {
-            return Boolean(state && state.status === 'finished');
+            return Boolean(state && state.status !== 'playing');
+        }
+
+        function getReviewBaseMoves() {
+            return state?.status === 'finished'
+                ? (state.moves || []).map((move) => ({ ...move }))
+                : [];
         }
 
         function resetReviewMoves() {
             if (!state) return;
-            state.reviewMoves = state.status === 'finished'
-                ? (state.moves || []).map((move) => ({ ...move }))
-                : [];
+            state.reviewMoves = getReviewBaseMoves();
             state.reviewCursor = state.reviewMoves.length;
             state.reviewBranchBaseCursor = null;
         }
 
         function resetReviewMovesForPeer(peerId) {
             if (!canUseReviewBoard()) return i18n('errReviewOnlyAfter');
-            state.reviewMoves = (state.moves || []).map(m => ({...m}));
+            state.reviewMoves = getReviewBaseMoves();
             state.reviewCursor = state.reviewMoves.length;
             state.reviewBranchBaseCursor = null;
             return '';
@@ -2489,7 +2493,7 @@
             const hasBranch = state.reviewBranchBaseCursor != null;
             const base = hasBranch ? state.reviewBranchBaseCursor : currentCursor;
             const targetCursor = hasBranch && currentCursor > base ? base : currentCursor;
-            state.reviewMoves = (state.moves || []).map((move) => ({ ...move }));
+            state.reviewMoves = getReviewBaseMoves();
             state.reviewCursor = Math.max(0, Math.min(state.reviewMoves.length, targetCursor));
             state.reviewBranchBaseCursor = null;
             return '';
@@ -3966,9 +3970,9 @@
                 opening: state.opening,
                 clocks: state.clocks,
                 readyByPeerId: state.readyByPeerId,
-                reviewMoves: state.status === 'finished' ? state.reviewMoves : null,
-                reviewCursor: state.status === 'finished' ? state.reviewCursor : null,
-                reviewBranchBaseCursor: state.status === 'finished' ? state.reviewBranchBaseCursor : null,
+                reviewMoves: canUseReviewBoard() ? state.reviewMoves : null,
+                reviewCursor: canUseReviewBoard() ? state.reviewCursor : null,
+                reviewBranchBaseCursor: canUseReviewBoard() ? state.reviewBranchBaseCursor : null,
             };
         }
 
@@ -4949,7 +4953,7 @@
             }
             ctx.restore();
 
-            if (displayMoveCount === -1 || displayMoveCount === getRenderedMoves().length) {
+            if ((displayMoveCount === -1 || displayMoveCount === getRenderedMoves().length) && !canUseReviewBoard()) {
                 drawConstraintHighlight(phaseDescriptor());
                 drawOfferedMoves();
             }
@@ -5474,7 +5478,7 @@
         function resetMovesView() {
             if (!state) return;
             clearConfirmMovePoint();
-            if (state.status === 'finished') {
+            if (canUseReviewBoard()) {
                 sendAction({ kind: 'review-branch-base' });
             } else {
                 displayMoveCount = -1;
@@ -5485,7 +5489,7 @@
         function goMoves(delta) {
             if (!state) return;
             clearConfirmMovePoint();
-            if (state.status === 'finished') {
+            if (canUseReviewBoard()) {
                 const max = (state.reviewMoves || []).length;
                 let current = state.reviewCursor ?? max;
                 current += delta;
