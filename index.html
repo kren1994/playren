@@ -459,12 +459,34 @@
             gap: 10px;
         }
 
+        #timeSettingsDialog {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 12px;
+            overflow: hidden;
+            overscroll-behavior: contain;
+        }
+
+        #timeSettingsDialog[hidden] {
+            display: none;
+        }
+
         .time-settings-card {
             width: min(100%, 390px);
             max-width: min(100%, 390px);
+            max-height: calc(100vh - 24px);
+            max-height: calc(100dvh - 24px);
             padding: 18px;
             background: rgba(255, 252, 246, 0.94);
             backdrop-filter: blur(10px);
+            box-sizing: border-box;
+            overflow-y: auto;
+            overscroll-behavior: contain;
+            position: relative;
+            left: auto;
+            top: auto;
+            transform: none;
         }
 
         .time-settings-form {
