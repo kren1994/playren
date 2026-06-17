@@ -3307,6 +3307,14 @@
             state.clocks.remainingMsByPeerId[peerId] = (state.clocks.remainingMsByPeerId[peerId] ?? 0) + increment;
         }
 
+        function grantIncrementIfTurnPasses(actorPeerId, previousActorPeerId) {
+            if (!state || !actorPeerId || actorPeerId !== previousActorPeerId) return;
+            const nextActorPeerId = phaseDescriptor().actorPeerId;
+            if (nextActorPeerId && nextActorPeerId !== actorPeerId) {
+                grantIncrement(actorPeerId);
+            }
+        }
+
         function swapColors() {
             swapSeatColors();
         }
@@ -3616,6 +3624,7 @@
             if (peerId !== descriptor.actorPeerId) return i18n('errNotSwapTurn');
 
             applyElapsedTime(timestamp);
+            const previousActorPeerId = descriptor.actorPeerId;
             if (shouldSwap) {
                 swapColors();
             }
@@ -3625,6 +3634,7 @@
             if (state.phase === 'swap-after-3') setPhase('opening-move-4', timestamp);
             if (state.phase === 'swap-after-4') setPhase('opening-move-5-choice1', timestamp);
             if (state.phase === 'swap-after-5') setPhase('opening-move-6-choice1', timestamp);
+            grantIncrementIfTurnPasses(peerId, previousActorPeerId);
             return '';
         }
 
@@ -3649,6 +3659,7 @@
             if (error) return error;
 
             applyElapsedTime(timestamp);
+            const previousActorPeerId = descriptor.actorPeerId;
             state.opening.offeredMoves.push({ x, y });
             
             if (state.opening.offeredMoves.length >= 10) {
@@ -3656,6 +3667,7 @@
             } else {
                 setPhase('offering-choice2', timestamp);
             }
+            grantIncrementIfTurnPasses(peerId, previousActorPeerId);
             return '';
         }
 
