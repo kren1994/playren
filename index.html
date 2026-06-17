@@ -2281,6 +2281,7 @@
                 connectionPause: null,
                 reviewMoves: [],
                 reviewCursor: 0,
+                reviewBranchBaseCursor: null,
                 log: [createLogEntry('presence', i18n('msgJoined', hostName))],
                 version: 0,
             };
@@ -2470,12 +2471,27 @@
                 ? (state.moves || []).map((move) => ({ ...move }))
                 : [];
             state.reviewCursor = state.reviewMoves.length;
+            state.reviewBranchBaseCursor = null;
         }
 
         function resetReviewMovesForPeer(peerId) {
             if (!canUseReviewBoard()) return i18n('errReviewOnlyAfter');
             state.reviewMoves = (state.moves || []).map(m => ({...m}));
             state.reviewCursor = state.reviewMoves.length;
+            state.reviewBranchBaseCursor = null;
+            return '';
+        }
+
+        function returnReviewToBranchBase(peerId) {
+            if (!canUseReviewBoard()) return i18n('errReviewOnlyAfter');
+            if (!getParticipantById(peerId)) return i18n('errReviewOnlyParticipant');
+            const currentCursor = state.reviewCursor ?? (state.reviewMoves || []).length;
+            const hasBranch = state.reviewBranchBaseCursor != null;
+            const base = hasBranch ? state.reviewBranchBaseCursor : currentCursor;
+            const targetCursor = hasBranch && currentCursor > base ? base : currentCursor;
+            state.reviewMoves = (state.moves || []).map((move) => ({ ...move }));
+            state.reviewCursor = Math.max(0, Math.min(state.reviewMoves.length, targetCursor));
+            state.reviewBranchBaseCursor = null;
             return '';
         }
 
@@ -2491,6 +2507,9 @@
             }
 
             state.reviewMoves = currentMoves;
+            if (state.reviewBranchBaseCursor == null) {
+                state.reviewBranchBaseCursor = cursor;
+            }
             const nextColor = state.reviewMoves.length % 2 === 0 ? 'black' : 'white';
             state.reviewMoves.push({
                 x,
@@ -2714,6 +2733,7 @@
             state.moves = [];
             state.reviewMoves = [];
             state.reviewCursor = 0;
+            state.reviewBranchBaseCursor = null;
             state.opening = {
                 variant: null,
                 offeredMoves: [],
@@ -3783,6 +3803,7 @@
             if (!error && action.kind === 'review-cursor') error = setReviewCursor(peerId, action.cursor);
             if (!error && action.kind === 'review-undo') error = setReviewCursor(peerId, (state.reviewCursor ?? (state.reviewMoves || []).length) - 1);
             if (!error && action.kind === 'review-reset') error = resetReviewMovesForPeer(peerId);
+            if (!error && action.kind === 'review-branch-base') error = returnReviewToBranchBase(peerId);
             if (!error && action.kind === 'offer') error = offerMove(peerId, action.x, action.y);
             if (!error && action.kind === 'select-offer') error = selectOfferedMove(peerId, action.x, action.y);
             if (!error && action.kind === 'ready') error = setReadyState(peerId, Boolean(action.ready));
@@ -3818,7 +3839,7 @@
                 displayMoveCount = -1;
                 clearConfirmMovePoint();
             }
-            if (['review-move', 'review-cursor', 'review-undo', 'review-reset'].includes(action.kind)) {
+            if (['review-move', 'review-cursor', 'review-undo', 'review-reset', 'review-branch-base'].includes(action.kind)) {
                 displayMoveCount = -1;
                 clearConfirmMovePoint();
             }
@@ -3947,6 +3968,7 @@
                 readyByPeerId: state.readyByPeerId,
                 reviewMoves: state.status === 'finished' ? state.reviewMoves : null,
                 reviewCursor: state.status === 'finished' ? state.reviewCursor : null,
+                reviewBranchBaseCursor: state.status === 'finished' ? state.reviewBranchBaseCursor : null,
             };
         }
 
@@ -4070,6 +4092,7 @@
             if (event.status === 'finished') {
                 state.reviewMoves = event.reviewMoves || [];
                 state.reviewCursor = event.reviewCursor ?? state.reviewMoves.length;
+                state.reviewBranchBaseCursor = event.reviewBranchBaseCursor ?? null;
             }
             if (isPendingMoveConfirmed(event)) clearPendingMove();
             clearConfirmMovePoint();
@@ -5452,7 +5475,7 @@
             if (!state) return;
             clearConfirmMovePoint();
             if (state.status === 'finished') {
-                sendAction({ kind: 'review-reset' });
+                sendAction({ kind: 'review-branch-base' });
             } else {
                 displayMoveCount = -1;
                 renderBoard();
