@@ -2700,11 +2700,17 @@
         }
 
         function getBlackPeerId() {
-            return state?.seats?.black || '';
+            if (!state) return '';
+            return Object.entries(state.colorsByPeerId || {}).find(([, color]) => color === 'black')?.[0] || state.seats?.black || '';
         }
 
         function getWhitePeerId() {
-            return state?.seats?.white || '';
+            if (!state) return '';
+            return Object.entries(state.colorsByPeerId || {}).find(([, color]) => color === 'white')?.[0] || state.seats?.white || '';
+        }
+
+        function getSeatPeerId(seat) {
+            return state?.seats?.[seat] || '';
         }
 
         function getColorForPeer(peerId) {
@@ -2757,9 +2763,21 @@
 
         function rebuildColors() {
             if (!state) return;
-            state.colorsByPeerId = {};
-            if (state.seats.black) state.colorsByPeerId[state.seats.black] = 'black';
-            if (state.seats.white) state.colorsByPeerId[state.seats.white] = 'white';
+            const previousColors = state.colorsByPeerId || {};
+            const nextColors = {};
+            const seatedIds = [state.seats.black, state.seats.white].filter(Boolean);
+            seatedIds.forEach((peerId) => {
+                const previousColor = previousColors[peerId];
+                if ((previousColor === 'black' || previousColor === 'white') && !Object.values(nextColors).includes(previousColor)) {
+                    nextColors[peerId] = previousColor;
+                }
+            });
+            seatedIds.forEach((peerId) => {
+                if (nextColors[peerId]) return;
+                const fallback = !Object.values(nextColors).includes('black') ? 'black' : 'white';
+                nextColors[peerId] = fallback;
+            });
+            state.colorsByPeerId = nextColors;
         }
 
         function ensureClockEntry(peerId) {
@@ -2794,6 +2812,7 @@
             const beforeSeatedIds = [state.seats.black, state.seats.white].filter(Boolean);
             if (currentSeat === 'black') state.seats.black = null;
             if (currentSeat === 'white') state.seats.white = null;
+            if (nextSeat === 'spectator') delete state.colorsByPeerId[targetPeerId];
             state.readyByPeerId[targetPeerId] = false;
 
             if (nextSeat === 'black' || nextSeat === 'white') {
@@ -2801,6 +2820,7 @@
                 if (displacedPeerId && displacedPeerId !== targetPeerId && state.participantsById[displacedPeerId]) {
                     state.participantsById[displacedPeerId].seat = 'spectator';
                     state.readyByPeerId[displacedPeerId] = false;
+                    delete state.colorsByPeerId[displacedPeerId];
                 }
                 state.seats[nextSeat] = targetPeerId;
             }
@@ -3263,15 +3283,8 @@
             const blackPeerId = getBlackPeerId();
             const whitePeerId = getWhitePeerId();
             if (!blackPeerId || !whitePeerId) return;
-            state.seats.black = whitePeerId;
-            state.seats.white = blackPeerId;
-            if (state.participantsById[blackPeerId]) {
-                state.participantsById[blackPeerId].seat = 'white';
-            }
-            if (state.participantsById[whitePeerId]) {
-                state.participantsById[whitePeerId].seat = 'black';
-            }
-            rebuildColors();
+            state.colorsByPeerId[blackPeerId] = 'white';
+            state.colorsByPeerId[whitePeerId] = 'black';
         }
 
         function getImplicitMovePhase(phase) {
@@ -4213,7 +4226,7 @@
         }
 
         function getSeatOccupant(seat) {
-            const peerId = seat === 'black' ? getBlackPeerId() : getWhitePeerId();
+            const peerId = getSeatPeerId(seat);
             return peerId ? getParticipantById(peerId) : null;
         }
 
@@ -5123,6 +5136,12 @@
             elements.blackSeatBtn.hidden = false;
             elements.whiteSeatBtn.hidden = false;
 
+            const blackCardColor = getColorForPeer(blackPeerId) || 'black';
+            const whiteCardColor = getColorForPeer(whitePeerId) || 'white';
+            elements.blackPlayerCard.classList.toggle('black', Boolean(blackPeerId) && blackCardColor === 'black');
+            elements.blackPlayerCard.classList.toggle('white', Boolean(blackPeerId) && blackCardColor === 'white');
+            elements.whitePlayerCard.classList.toggle('black', Boolean(whitePeerId) && whiteCardColor === 'black');
+            elements.whitePlayerCard.classList.toggle('white', Boolean(whitePeerId) && whiteCardColor === 'white');
             elements.blackPlayerCard.classList.toggle('active', activePeerId === blackPeerId && state.status === 'playing');
             elements.whitePlayerCard.classList.toggle('active', activePeerId === whitePeerId && state.status === 'playing');
             renderReadyButton(elements.blackReadyWrap, blackParticipant);
