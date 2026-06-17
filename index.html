@@ -358,6 +358,27 @@
             white-space: nowrap;
         }
 
+        .player-identity {
+            flex: 1;
+            min-width: 0;
+            display: flex;
+            align-items: baseline;
+            gap: 4px;
+            overflow: hidden;
+        }
+
+        .player-status {
+            flex: 0 0 auto;
+            color: var(--muted);
+            font-size: 11px;
+            font-weight: 700;
+            line-height: 1.2;
+            min-width: 0;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
         .player-actions {
             display: inline-flex;
             align-items: center;
@@ -1083,7 +1104,8 @@
             }
 
             .players {
-                grid-template-columns: 1fr;
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+                gap: 6px;
                 margin-bottom: 8px;
                 padding: 0 4px;
             }
@@ -1106,12 +1128,21 @@
             }
 
             .player-card {
+                min-width: 0;
                 padding: 6px 8px; /* 縦幅を小さく */
             }
 
             .player-head {
-                gap: 6px;
+                gap: 4px;
                 padding-left: 20px;
+            }
+
+            .player-main {
+                gap: 4px;
+            }
+
+            .player-identity {
+                gap: 3px;
             }
 
             .player-card.black::before,
@@ -1122,28 +1153,34 @@
             }
 
             .player-name {
-                font-size: 11px; /* 2/3程度に縮小 */
-                min-height: 1.2em;
+                font-size: var(--mobile-player-name-size, 12px);
+                line-height: 1.2;
+                min-height: 0;
+            }
+
+            .player-status {
+                font-size: var(--mobile-player-name-size, 12px);
             }
 
             .player-actions {
-                gap: 5px;
+                gap: 3px;
             }
 
             .player-timer {
-                font-size: clamp(14px, 4vw, 18px);
+                font-size: clamp(11px, 3.2vw, 14px);
+                line-height: 1;
             }
             
             .seat-symbol {
-                width: 24px;
-                height: 24px;
-                font-size: 16px;
+                width: 22px;
+                height: 22px;
+                font-size: 15px;
             }
             
             .ready-mark, .ready-button {
-                width: 24px;
-                height: 24px;
-                font-size: 12px;
+                width: 22px;
+                height: 22px;
+                font-size: 11px;
             }
 
             .game-topbar {
@@ -1214,7 +1251,10 @@
                         <article id="blackPlayerCard" class="player-card black">
                             <div class="player-head">
                                 <div class="player-main">
-                                    <div id="blackPlayerName" class="player-name"></div>
+                                    <div class="player-identity">
+                                        <div id="blackPlayerName" class="player-name"></div>
+                                        <div id="blackPlayerStatus" class="player-status" hidden></div>
+                                    </div>
                                     <div id="blackPlayerTimer" class="player-timer">05:00</div>
                                 </div>
                                 <div class="player-actions">
@@ -1226,7 +1266,10 @@
                         <article id="whitePlayerCard" class="player-card white">
                             <div class="player-head">
                                 <div class="player-main">
-                                    <div id="whitePlayerName" class="player-name"></div>
+                                    <div class="player-identity">
+                                        <div id="whitePlayerName" class="player-name"></div>
+                                        <div id="whitePlayerStatus" class="player-status" hidden></div>
+                                    </div>
                                     <div id="whitePlayerTimer" class="player-timer">05:00</div>
                                 </div>
                                 <div class="player-actions">
@@ -1459,6 +1502,8 @@
             whitePlayerCard: document.getElementById('whitePlayerCard'),
             blackPlayerName: document.getElementById('blackPlayerName'),
             whitePlayerName: document.getElementById('whitePlayerName'),
+            blackPlayerStatus: document.getElementById('blackPlayerStatus'),
+            whitePlayerStatus: document.getElementById('whitePlayerStatus'),
             blackPlayerTimer: document.getElementById('blackPlayerTimer'),
             whitePlayerTimer: document.getElementById('whitePlayerTimer'),
             blackSeatBtn: document.getElementById('blackSeatBtn'),
@@ -2080,7 +2125,7 @@
                 msgDisconnected: (name) => `${name} disconnected. Waiting for reconnect.`,
                 msgReconnected: (name) => `${name} reconnected.`,
                 msgDisconnectTimeout: (name) => `${name} did not reconnect in time.`,
-                playerDisconnected: (seconds) => `Disconnected ${seconds}s`,
+                playerDisconnected: (seconds) => `Offline ${seconds}s`,
                 errMatchPausedForDisconnect: 'Waiting for the opponent to reconnect.',
                 msgWin: (name) => `${name} wins.`,
                 msgDraw: 'Draw agreed.',
@@ -5425,10 +5470,46 @@
             elements.roomSummary.hidden = false;
         }
 
+        let playerNameResizeFrame = 0;
+
+        function updateMobilePlayerNameSize() {
+            const players = elements.blackPlayerCard.parentElement;
+            if (window.innerWidth > 720) {
+                players.style.removeProperty('--mobile-player-name-size');
+                return;
+            }
+
+            const blackIdentity = elements.blackPlayerName.closest('.player-identity');
+            const whiteIdentity = elements.whitePlayerName.closest('.player-identity');
+            const availableWidth = Math.min(
+                blackIdentity.clientWidth,
+                whiteIdentity.clientWidth
+            );
+            if (!availableWidth) return;
+
+            const context = document.createElement('canvas').getContext('2d');
+            const style = getComputedStyle(elements.blackPlayerName);
+            context.font = `700 100px ${style.fontFamily}`;
+            const maxDisconnectSeconds = Math.ceil(DISCONNECT_GRACE_MS / 1000);
+            const fitSample = `漢漢漢漢漢漢 (${i18n('playerDisconnected', maxDisconnectSeconds)})`;
+            const sampleWidth = context.measureText(fitSample).width;
+            const fontSize = Math.max(8, Math.min(13, Math.floor(availableWidth * 100 / sampleWidth)));
+            players.style.setProperty('--mobile-player-name-size', `${fontSize}px`);
+        }
+
+        function scheduleMobilePlayerNameSize() {
+            cancelAnimationFrame(playerNameResizeFrame);
+            playerNameResizeFrame = requestAnimationFrame(updateMobilePlayerNameSize);
+        }
+
         function renderPlayers() {
             if (!state) {
                 elements.blackPlayerName.textContent = i18n('playerNotJoined');
                 elements.whitePlayerName.textContent = i18n('playerNotJoined');
+                elements.blackPlayerStatus.textContent = '';
+                elements.whitePlayerStatus.textContent = '';
+                elements.blackPlayerStatus.hidden = true;
+                elements.whitePlayerStatus.hidden = true;
                 elements.blackPlayerTimer.textContent = '';
                 elements.whitePlayerTimer.textContent = '';
                 elements.blackSeatBtn.textContent = '＋';
@@ -5447,6 +5528,7 @@
                 });
                 elements.blackPlayerCard.classList.remove('active');
                 elements.whitePlayerCard.classList.remove('active');
+                scheduleMobilePlayerNameSize();
                 return;
             }
 
@@ -5456,15 +5538,17 @@
             const whitePeerId = whiteParticipant?.id || '';
             const activePeerId = state.clocks.activePeerId;
 
-            function renderParticipantName(participant) {
-                if (!participant) return i18n('playerNotJoined');
-                const displayName = getDisplayName(participant);
-                if (!isParticipantDisconnected(participant)) return displayName;
-                return `${displayName} (${i18n('playerDisconnected', getDisconnectedRemainingSeconds(participant))})`;
+            function renderParticipant(identityElement, statusElement, participant) {
+                identityElement.textContent = participant ? getDisplayName(participant) : i18n('playerNotJoined');
+                const disconnected = isParticipantDisconnected(participant);
+                statusElement.textContent = disconnected
+                    ? `(${i18n('playerDisconnected', getDisconnectedRemainingSeconds(participant))})`
+                    : '';
+                statusElement.hidden = !disconnected;
             }
 
-            elements.blackPlayerName.textContent = renderParticipantName(blackParticipant);
-            elements.whitePlayerName.textContent = renderParticipantName(whiteParticipant);
+            renderParticipant(elements.blackPlayerName, elements.blackPlayerStatus, blackParticipant);
+            renderParticipant(elements.whitePlayerName, elements.whitePlayerStatus, whiteParticipant);
             elements.blackPlayerTimer.textContent = blackPeerId ? formatTime(getDisplayRemainingMs(blackPeerId)) : '';
             elements.whitePlayerTimer.textContent = whitePeerId ? formatTime(getDisplayRemainingMs(whitePeerId)) : '';
             elements.blackSeatBtn.textContent = blackParticipant ? '－' : '＋';
@@ -5487,6 +5571,7 @@
             elements.whitePlayerCard.classList.toggle('active', activePeerId === whitePeerId && state.status === 'playing');
             renderReadyButton(elements.blackReadyWrap, blackParticipant);
             renderReadyButton(elements.whiteReadyWrap, whiteParticipant);
+            scheduleMobilePlayerNameSize();
         }
 
         function renderSeats() {
@@ -5946,6 +6031,7 @@
         window.addEventListener('resize', () => {
             cancelAnimationFrame(resizeFrame);
             resizeFrame = requestAnimationFrame(resizeBoard);
+            scheduleMobilePlayerNameSize();
         });
 
         window.addEventListener('pagehide', () => {
