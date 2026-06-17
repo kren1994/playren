@@ -459,6 +459,99 @@
             gap: 10px;
         }
 
+        .time-settings-card {
+            width: min(100%, 390px);
+            max-width: min(100%, 390px);
+            padding: 18px;
+            background: rgba(255, 252, 246, 0.94);
+            backdrop-filter: blur(10px);
+        }
+
+        .time-settings-form {
+            display: grid;
+            gap: 12px;
+        }
+
+        .time-handicap-row {
+            min-height: 40px;
+            padding: 8px 10px;
+            border-radius: 12px;
+            background: rgba(255, 255, 255, 0.72);
+            border: 1px solid rgba(74, 54, 34, 0.1);
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-weight: 700;
+            cursor: pointer;
+        }
+
+        .time-handicap-row input {
+            width: 16px;
+            height: 16px;
+            margin: 0;
+            accent-color: var(--accent);
+        }
+
+        .time-seat-grid {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 10px;
+        }
+
+        .time-seat-panel {
+            padding: 12px;
+            border-radius: 14px;
+            border: 1px solid rgba(74, 54, 34, 0.1);
+            background: rgba(255, 255, 255, 0.62);
+            display: grid;
+            gap: 10px;
+            transition: opacity 0.18s ease;
+        }
+
+        .time-seat-title {
+            font-size: 13px;
+            font-weight: 800;
+            color: var(--text);
+        }
+
+        .time-input-row {
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) auto;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .time-input-row label {
+            grid-column: 1 / -1;
+            color: var(--muted);
+            font-size: 12px;
+            font-weight: 700;
+        }
+
+        .time-input-row input {
+            width: 100%;
+            min-height: 38px;
+            padding: 8px 10px;
+            border-radius: 10px;
+            border: 1px solid rgba(74, 54, 34, 0.14);
+            background: rgba(255, 255, 255, 0.9);
+            color: var(--text);
+            box-sizing: border-box;
+            text-align: right;
+            font-weight: 700;
+        }
+
+        .time-unit {
+            color: var(--muted);
+            font-size: 12px;
+            font-weight: 700;
+            min-width: 1.8em;
+        }
+
+        .time-seat-panel:has(input:disabled) {
+            opacity: 0.58;
+        }
+
         /* 盤面コンテナ（歪み防止の核） */
         .board-container {
             width: 100%;
@@ -1250,22 +1343,40 @@
     </div>
 
     <div id="timeSettingsDialog" class="confirm-backdrop" hidden>
-        <div class="confirm-card" role="dialog" aria-modal="true">
-            <div class="compact-time-editor">
-                <label>
+        <div class="confirm-card time-settings-card" role="dialog" aria-modal="true">
+            <div class="time-settings-form">
+                <label class="time-handicap-row">
                     <input id="timeHandicapInput" type="checkbox">
                     <span id="uiTimeHandicapLabel">時間ハンデ</span>
                 </label>
-                <span id="uiTimeLeftLabel">左上</span>
-                <input id="timeLeftBaseInput" type="number" min="1" max="180" value="5">
-                <span id="uiTimeLeftMinute">分</span>
-                <input id="timeLeftIncrementInput" type="number" min="0" max="60" value="5">
-                <span id="uiTimeLeftSecond">秒</span>
-                <span id="uiTimeRightLabel">右上</span>
-                <input id="timeRightBaseInput" type="number" min="1" max="180" value="5">
-                <span id="uiTimeRightMinute">分</span>
-                <input id="timeRightIncrementInput" type="number" min="0" max="60" value="5">
-                <span id="uiTimeRightSecond">秒</span>
+                <div class="time-seat-grid">
+                    <section class="time-seat-panel">
+                        <div id="uiTimeLeftLabel" class="time-seat-title">左上</div>
+                        <div class="time-input-row">
+                            <label id="uiTimeLeftBaseLabel" for="timeLeftBaseInput">持ち時間</label>
+                            <input id="timeLeftBaseInput" type="number" min="1" max="180" value="5">
+                            <span id="uiTimeLeftMinute" class="time-unit">分</span>
+                        </div>
+                        <div class="time-input-row">
+                            <label id="uiTimeLeftIncrementLabel" for="timeLeftIncrementInput">加算</label>
+                            <input id="timeLeftIncrementInput" type="number" min="0" max="60" value="5">
+                            <span id="uiTimeLeftSecond" class="time-unit">秒</span>
+                        </div>
+                    </section>
+                    <section class="time-seat-panel">
+                        <div id="uiTimeRightLabel" class="time-seat-title">右上</div>
+                        <div class="time-input-row">
+                            <label id="uiTimeRightBaseLabel" for="timeRightBaseInput">持ち時間</label>
+                            <input id="timeRightBaseInput" type="number" min="1" max="180" value="5">
+                            <span id="uiTimeRightMinute" class="time-unit">分</span>
+                        </div>
+                        <div class="time-input-row">
+                            <label id="uiTimeRightIncrementLabel" for="timeRightIncrementInput">加算</label>
+                            <input id="timeRightIncrementInput" type="number" min="0" max="60" value="5">
+                            <span id="uiTimeRightSecond" class="time-unit">秒</span>
+                        </div>
+                    </section>
+                </div>
             </div>
             <div class="confirm-actions">
                 <button id="timeSettingsCancelBtn" class="button button-secondary" type="button">キャンセル</button>
@@ -1366,9 +1477,13 @@
             timeSettingsApplyBtn: document.getElementById('timeSettingsApplyBtn'),
             uiTimeHandicapLabel: document.getElementById('uiTimeHandicapLabel'),
             uiTimeLeftLabel: document.getElementById('uiTimeLeftLabel'),
+            uiTimeLeftBaseLabel: document.getElementById('uiTimeLeftBaseLabel'),
+            uiTimeLeftIncrementLabel: document.getElementById('uiTimeLeftIncrementLabel'),
             uiTimeLeftMinute: document.getElementById('uiTimeLeftMinute'),
             uiTimeLeftSecond: document.getElementById('uiTimeLeftSecond'),
             uiTimeRightLabel: document.getElementById('uiTimeRightLabel'),
+            uiTimeRightBaseLabel: document.getElementById('uiTimeRightBaseLabel'),
+            uiTimeRightIncrementLabel: document.getElementById('uiTimeRightIncrementLabel'),
             uiTimeRightMinute: document.getElementById('uiTimeRightMinute'),
             uiTimeRightSecond: document.getElementById('uiTimeRightSecond'),
             toast: document.getElementById('toast'),
@@ -1959,16 +2074,22 @@
         translations.ja.timeHandicap = '時間ハンデ';
         translations.ja.timeLeft = '左上';
         translations.ja.timeRight = '右上';
+        translations.ja.timeBase = '持ち時間';
+        translations.ja.timeIncrement = '加算';
         translations.zh.menuSwapSeatColors = '交换颜色';
         translations.zh.menuTimeSettings = '时间设置';
         translations.zh.timeHandicap = '时间让子';
         translations.zh.timeLeft = '左上';
         translations.zh.timeRight = '右上';
+        translations.zh.timeBase = '用时';
+        translations.zh.timeIncrement = '加秒';
         translations.en.menuSwapSeatColors = 'Swap Colors';
         translations.en.menuTimeSettings = 'Time Settings';
         translations.en.timeHandicap = 'Time Handicap';
         translations.en.timeLeft = 'Upper Left';
         translations.en.timeRight = 'Upper Right';
+        translations.en.timeBase = 'Main Time';
+        translations.en.timeIncrement = 'Increment';
 
         function i18n(key, arg) {
             const lang = translations[currentLanguage] || translations['ja'];
@@ -2027,6 +2148,10 @@
             elements.uiTimeHandicapLabel.textContent = i18n('timeHandicap');
             elements.uiTimeLeftLabel.textContent = i18n('timeLeft');
             elements.uiTimeRightLabel.textContent = i18n('timeRight');
+            elements.uiTimeLeftBaseLabel.textContent = i18n('timeBase');
+            elements.uiTimeRightBaseLabel.textContent = i18n('timeBase');
+            elements.uiTimeLeftIncrementLabel.textContent = i18n('timeIncrement');
+            elements.uiTimeRightIncrementLabel.textContent = i18n('timeIncrement');
             elements.uiTimeLeftMinute.textContent = i18n('minute');
             elements.uiTimeRightMinute.textContent = i18n('minute');
             elements.uiTimeLeftSecond.textContent = i18n('second');
