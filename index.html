@@ -1139,6 +1139,7 @@
                                 <div id="actionMenu" class="control-menu-popup" hidden>
                                     <button id="menuMoveConfirmBtn" class="control-menu-item" type="button">着手確認</button>
                                     <button id="menuSwapSeatColorsBtn" class="control-menu-item" type="button">色を交換</button>
+                                    <button id="menuTimeSettingsBtn" class="control-menu-item" type="button">持ち時間設定</button>
                                     <button id="menuResignBtn" class="control-menu-item" type="button">終局</button>
                                     <button id="menuDrawBtn" class="control-menu-item" type="button">満局提案</button>
                                     <button id="menuTakebackBtn" class="control-menu-item" type="button">待った</button>
@@ -1207,12 +1208,6 @@
                         <div class="info-topline">
                             <p id="roomSummary">5 分 + 5 秒</p>
                         </div>
-                        <div id="timeEditor" class="compact-time-editor" hidden>
-                            <input id="infoBaseMinutesInput" type="number" min="1" max="180" value="5">
-                            <span id="uiMinute">分</span>
-                            <input id="infoIncrementInput" type="number" min="0" max="60" value="5">
-                            <span id="uiSecond">秒</span>
-                        </div>
                     </section>
                 </aside>
             </main>
@@ -1250,6 +1245,31 @@
             <div class="confirm-actions">
                 <button id="resignCancelBtn" class="button button-secondary" type="button">キャンセル</button>
                 <button id="resignConfirmBtn" class="button button-primary" type="button">終局</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="timeSettingsDialog" class="confirm-backdrop" hidden>
+        <div class="confirm-card" role="dialog" aria-modal="true">
+            <div class="compact-time-editor">
+                <label>
+                    <input id="timeHandicapInput" type="checkbox">
+                    <span id="uiTimeHandicapLabel">時間ハンデ</span>
+                </label>
+                <span id="uiTimeLeftLabel">左上</span>
+                <input id="timeLeftBaseInput" type="number" min="1" max="180" value="5">
+                <span id="uiTimeLeftMinute">分</span>
+                <input id="timeLeftIncrementInput" type="number" min="0" max="60" value="5">
+                <span id="uiTimeLeftSecond">秒</span>
+                <span id="uiTimeRightLabel">右上</span>
+                <input id="timeRightBaseInput" type="number" min="1" max="180" value="5">
+                <span id="uiTimeRightMinute">分</span>
+                <input id="timeRightIncrementInput" type="number" min="0" max="60" value="5">
+                <span id="uiTimeRightSecond">秒</span>
+            </div>
+            <div class="confirm-actions">
+                <button id="timeSettingsCancelBtn" class="button button-secondary" type="button">キャンセル</button>
+                <button id="timeSettingsApplyBtn" class="button button-primary" type="button">OK</button>
             </div>
         </div>
     </div>
@@ -1314,9 +1334,6 @@
             whiteReadyWrap: document.getElementById('whiteReadyWrap'),
             boardCanvas: document.getElementById('boardCanvas'),
             boardControls: document.querySelector('.board-controls'),
-            timeEditor: document.getElementById('timeEditor'),
-            infoBaseMinutesInput: document.getElementById('infoBaseMinutesInput'),
-            infoIncrementInput: document.getElementById('infoIncrementInput'),
             spectatorList: document.getElementById('spectatorList'),
             roomSummary: document.getElementById('roomSummary'),
             logList: document.getElementById('logList'),
@@ -1338,6 +1355,22 @@
             menuTakebackBtn: document.getElementById('menuTakebackBtn'),
             menuMoveConfirmBtn: document.getElementById('menuMoveConfirmBtn'),
             menuSwapSeatColorsBtn: document.getElementById('menuSwapSeatColorsBtn'),
+            menuTimeSettingsBtn: document.getElementById('menuTimeSettingsBtn'),
+            timeSettingsDialog: document.getElementById('timeSettingsDialog'),
+            timeHandicapInput: document.getElementById('timeHandicapInput'),
+            timeLeftBaseInput: document.getElementById('timeLeftBaseInput'),
+            timeLeftIncrementInput: document.getElementById('timeLeftIncrementInput'),
+            timeRightBaseInput: document.getElementById('timeRightBaseInput'),
+            timeRightIncrementInput: document.getElementById('timeRightIncrementInput'),
+            timeSettingsCancelBtn: document.getElementById('timeSettingsCancelBtn'),
+            timeSettingsApplyBtn: document.getElementById('timeSettingsApplyBtn'),
+            uiTimeHandicapLabel: document.getElementById('uiTimeHandicapLabel'),
+            uiTimeLeftLabel: document.getElementById('uiTimeLeftLabel'),
+            uiTimeLeftMinute: document.getElementById('uiTimeLeftMinute'),
+            uiTimeLeftSecond: document.getElementById('uiTimeLeftSecond'),
+            uiTimeRightLabel: document.getElementById('uiTimeRightLabel'),
+            uiTimeRightMinute: document.getElementById('uiTimeRightMinute'),
+            uiTimeRightSecond: document.getElementById('uiTimeRightSecond'),
             toast: document.getElementById('toast'),
             
             uiLobbyTitle: document.getElementById('uiLobbyTitle'),
@@ -1348,8 +1381,6 @@
             uiChatTitle: document.getElementById('uiChatTitle'),
             uiSpectatorTitle: document.getElementById('uiSpectatorTitle'),
             uiInfoTitle: document.getElementById('uiInfoTitle'),
-            uiMinute: document.getElementById('uiMinute'),
-            uiSecond: document.getElementById('uiSecond'),
         };
 
         const ctx = elements.boardCanvas.getContext('2d');
@@ -1924,8 +1955,20 @@
         };
 
         translations.ja.menuSwapSeatColors = '色を交換';
+        translations.ja.menuTimeSettings = '持ち時間設定';
+        translations.ja.timeHandicap = '時間ハンデ';
+        translations.ja.timeLeft = '左上';
+        translations.ja.timeRight = '右上';
         translations.zh.menuSwapSeatColors = '交换颜色';
+        translations.zh.menuTimeSettings = '时间设置';
+        translations.zh.timeHandicap = '时间让子';
+        translations.zh.timeLeft = '左上';
+        translations.zh.timeRight = '右上';
         translations.en.menuSwapSeatColors = 'Swap Colors';
+        translations.en.menuTimeSettings = 'Time Settings';
+        translations.en.timeHandicap = 'Time Handicap';
+        translations.en.timeLeft = 'Upper Left';
+        translations.en.timeRight = 'Upper Right';
 
         function i18n(key, arg) {
             const lang = translations[currentLanguage] || translations['ja'];
@@ -1975,14 +2018,20 @@
             elements.uiSpectatorTitle.textContent = i18n('spectatorTitle');
             elements.uiInfoTitle.textContent = i18n('infoTitle');
             
-            elements.uiMinute.textContent = i18n('minute');
-            elements.uiSecond.textContent = i18n('second');
-            
             elements.menuDrawBtn.textContent = i18n('menuDraw');
             elements.menuResignBtn.textContent = i18n('menuResign');
             elements.menuTakebackBtn.textContent = i18n('menuTakeback');
             elements.menuMoveConfirmBtn.textContent = i18n('menuMoveConfirm');
             elements.menuSwapSeatColorsBtn.textContent = i18n('menuSwapSeatColors');
+            elements.menuTimeSettingsBtn.textContent = i18n('menuTimeSettings');
+            elements.uiTimeHandicapLabel.textContent = i18n('timeHandicap');
+            elements.uiTimeLeftLabel.textContent = i18n('timeLeft');
+            elements.uiTimeRightLabel.textContent = i18n('timeRight');
+            elements.uiTimeLeftMinute.textContent = i18n('minute');
+            elements.uiTimeRightMinute.textContent = i18n('minute');
+            elements.uiTimeLeftSecond.textContent = i18n('second');
+            elements.uiTimeRightSecond.textContent = i18n('second');
+            elements.timeSettingsCancelBtn.textContent = i18n('resignCancel');
             document.querySelector('#langBtn .control-menu-label').textContent = i18n('menuLang');
             document.getElementById('soundBtn').childNodes[0].nodeValue = i18n('menuSound');
             document.getElementById('coordsBtn').textContent = i18n('menuCoords');
@@ -2137,8 +2186,9 @@
         }
 
         function readTimeSettingsFromInputs() {
-            const rawBaseMinutes = Number(elements.infoBaseMinutesInput.value);
-            const rawIncrementSeconds = Number(elements.infoIncrementInput.value);
+            const settings = loadUserSettings();
+            const rawBaseMinutes = Number(settings.baseMinutes);
+            const rawIncrementSeconds = Number(settings.incrementSeconds);
             const baseMinutes = clamp(Number.isFinite(rawBaseMinutes) && rawBaseMinutes > 0 ? rawBaseMinutes : DEFAULT_BASE_MINUTES, 1, 180);
             const incrementSeconds = clamp(Number.isFinite(rawIncrementSeconds) ? rawIncrementSeconds : DEFAULT_INCREMENT_SECONDS, 0, 60);
             return { baseMinutes, incrementSeconds };
@@ -2149,10 +2199,6 @@
                 displayName: elements.nameInput.value,
                 roomCode: elements.roomCodeInput.value,
             });
-        }
-
-        function persistTimeSettings() {
-            persistUserSettings(readTimeSettingsFromInputs());
         }
 
         function syncViewSettingsControls() {
@@ -2175,8 +2221,6 @@
             const settings = loadUserSettings();
             elements.nameInput.value = settings.displayName;
             elements.roomCodeInput.value = settings.roomCode;
-            elements.infoBaseMinutesInput.value = String(settings.baseMinutes);
-            elements.infoIncrementInput.value = String(settings.incrementSeconds);
             soundEnabled = settings.soundEnabled;
             showCoords = settings.showCoords;
             showMoveNumbers = settings.showMoveNumbers;
@@ -2255,6 +2299,11 @@
             return {
                 roomId: nextRoomId,
                 config: settings,
+                timeHandicapEnabled: false,
+                seatClockSettings: {
+                    black: { baseSeconds: settings.baseSeconds, incrementSeconds: settings.incrementSeconds },
+                    white: { baseSeconds: settings.baseSeconds, incrementSeconds: settings.incrementSeconds },
+                },
                 hostPeerId: hostId,
                 joinOrder: [hostId],
                 participantsById: {
@@ -2766,9 +2815,8 @@
             state.takebackOfferByPeerId = '';
             state.connectionPause = null;
             state.clocks.remainingMsByPeerId = {};
-            Object.values(state.participantsById || {}).forEach((participant) => {
-                state.clocks.remainingMsByPeerId[participant.id] = state.config.baseSeconds * 1000;
-            });
+            ensureSeatClockSettings();
+            syncSeatClocksToParticipants();
             stopClock();
         }
 
@@ -2801,6 +2849,63 @@
             state.seatColors.white = blackColor === 'black' ? 'white' : 'black';
         }
 
+        function normalizeClockSetting(setting = {}) {
+            const baseSeconds = Number(setting.baseSeconds);
+            const incrementSeconds = Number(setting.incrementSeconds);
+            return {
+                baseSeconds: clamp(Number.isFinite(baseSeconds) && baseSeconds > 0 ? baseSeconds : DEFAULT_BASE_MINUTES * 60, 60, 180 * 60),
+                incrementSeconds: clamp(Number.isFinite(incrementSeconds) ? incrementSeconds : DEFAULT_INCREMENT_SECONDS, 0, 60),
+            };
+        }
+
+        function ensureSeatClockSettings() {
+            if (!state) return;
+            const fallback = normalizeClockSetting({
+                baseSeconds: state.config?.baseSeconds ?? DEFAULT_BASE_MINUTES * 60,
+                incrementSeconds: state.config?.incrementSeconds ?? DEFAULT_INCREMENT_SECONDS,
+            });
+            if (!state.seatClockSettings || typeof state.seatClockSettings !== 'object') {
+                state.seatClockSettings = {
+                    black: { ...fallback },
+                    white: { ...fallback },
+                };
+            }
+            state.seatClockSettings.black = normalizeClockSetting(state.seatClockSettings.black || fallback);
+            state.seatClockSettings.white = normalizeClockSetting(state.seatClockSettings.white || fallback);
+            state.timeHandicapEnabled = Boolean(state.timeHandicapEnabled);
+            if (!state.timeHandicapEnabled) {
+                state.seatClockSettings.white = { ...state.seatClockSettings.black };
+            }
+            state.config.baseSeconds = state.seatClockSettings.black.baseSeconds;
+            state.config.incrementSeconds = state.seatClockSettings.black.incrementSeconds;
+        }
+
+        function getSeatForPeer(peerId) {
+            if (!state || !peerId) return '';
+            if (state.seats.black === peerId) return 'black';
+            if (state.seats.white === peerId) return 'white';
+            return '';
+        }
+
+        function getClockSettingForPeer(peerId) {
+            ensureSeatClockSettings();
+            const seat = getSeatForPeer(peerId);
+            return state?.seatClockSettings?.[seat] || normalizeClockSetting();
+        }
+
+        function syncSeatClockToParticipant(seat) {
+            if (!state || !state.clocks) return;
+            ensureSeatClockSettings();
+            const peerId = state.seats?.[seat];
+            if (!peerId) return;
+            state.clocks.remainingMsByPeerId[peerId] = state.seatClockSettings[seat].baseSeconds * 1000;
+        }
+
+        function syncSeatClocksToParticipants() {
+            syncSeatClockToParticipant('black');
+            syncSeatClockToParticipant('white');
+        }
+
         function swapSeatColors() {
             if (!state) return;
             ensureSeatColors();
@@ -2813,7 +2918,7 @@
         function ensureClockEntry(peerId) {
             if (!state || !peerId) return;
             if (state.clocks.remainingMsByPeerId[peerId] == null) {
-                state.clocks.remainingMsByPeerId[peerId] = state.config.baseSeconds * 1000;
+                state.clocks.remainingMsByPeerId[peerId] = getClockSettingForPeer(peerId).baseSeconds * 1000;
             }
             if (state.readyByPeerId[peerId] == null) {
                 state.readyByPeerId[peerId] = false;
@@ -2855,6 +2960,9 @@
 
             participant.seat = nextSeat;
             rebuildColors();
+            if (nextSeat === 'black' || nextSeat === 'white') {
+                syncSeatClockToParticipant(nextSeat);
+            }
             ensureClockEntry(targetPeerId);
             const afterSeatedIds = [state.seats.black, state.seats.white].filter(Boolean);
             const seatingChanged = beforeSeatedIds.join(':') !== afterSeatedIds.join(':');
@@ -3303,7 +3411,7 @@
 
         function grantIncrement(peerId) {
             if (!state || !peerId) return;
-            const increment = state.config.incrementSeconds * 1000;
+            const increment = getClockSettingForPeer(peerId).incrementSeconds * 1000;
             state.clocks.remainingMsByPeerId[peerId] = (state.clocks.remainingMsByPeerId[peerId] ?? 0) + increment;
         }
 
@@ -4249,24 +4357,69 @@
             connectionState = text;
         }
 
-        function applyHostTimeSettings() {
+        function openTimeSettingsDialog() {
+            closeControlMenus();
             if (!state || localMode !== 'host') return;
             if (state.status === 'playing') {
-                elements.infoBaseMinutesInput.value = String(Math.round(state.config.baseSeconds / 60));
-                elements.infoIncrementInput.value = String(state.config.incrementSeconds);
                 showToast(i18n('errChangeTimePlaying'));
                 return;
             }
+            ensureSeatClockSettings();
+            elements.timeHandicapInput.checked = Boolean(state.timeHandicapEnabled);
+            elements.timeLeftBaseInput.value = String(Math.round(state.seatClockSettings.black.baseSeconds / 60));
+            elements.timeLeftIncrementInput.value = String(state.seatClockSettings.black.incrementSeconds);
+            elements.timeRightBaseInput.value = String(Math.round(state.seatClockSettings.white.baseSeconds / 60));
+            elements.timeRightIncrementInput.value = String(state.seatClockSettings.white.incrementSeconds);
+            syncTimeSettingsDialogMode();
+            elements.timeSettingsDialog.hidden = false;
+        }
 
-            const { baseMinutes, incrementSeconds } = readTimeSettingsFromInputs();
-            elements.infoBaseMinutesInput.value = String(baseMinutes);
-            elements.infoIncrementInput.value = String(incrementSeconds);
-            persistTimeSettings();
-            state.config.baseSeconds = baseMinutes * 60;
-            state.config.incrementSeconds = incrementSeconds;
-            Object.keys(state.clocks.remainingMsByPeerId).forEach((peerId) => {
-                state.clocks.remainingMsByPeerId[peerId] = state.config.baseSeconds * 1000;
+        function closeTimeSettingsDialog() {
+            elements.timeSettingsDialog.hidden = true;
+        }
+
+        function syncTimeSettingsDialogMode() {
+            const hasHandicap = elements.timeHandicapInput.checked;
+            elements.timeRightBaseInput.disabled = !hasHandicap;
+            elements.timeRightIncrementInput.disabled = !hasHandicap;
+            if (!hasHandicap) {
+                elements.timeRightBaseInput.value = elements.timeLeftBaseInput.value;
+                elements.timeRightIncrementInput.value = elements.timeLeftIncrementInput.value;
+            }
+        }
+
+        function readClockSettingInputs(baseInput, incrementInput) {
+            const rawBaseMinutes = Number(baseInput.value);
+            const rawIncrementSeconds = Number(incrementInput.value);
+            const baseMinutes = clamp(Number.isFinite(rawBaseMinutes) && rawBaseMinutes > 0 ? rawBaseMinutes : DEFAULT_BASE_MINUTES, 1, 180);
+            const incrementSeconds = clamp(Number.isFinite(rawIncrementSeconds) ? rawIncrementSeconds : DEFAULT_INCREMENT_SECONDS, 0, 60);
+            baseInput.value = String(baseMinutes);
+            incrementInput.value = String(incrementSeconds);
+            return { baseSeconds: baseMinutes * 60, incrementSeconds };
+        }
+
+        function applyTimeSettingsDialog() {
+            if (!state || localMode !== 'host') return;
+            if (state.status === 'playing') {
+                closeTimeSettingsDialog();
+                showToast(i18n('errChangeTimePlaying'));
+                return;
+            }
+            const hasHandicap = elements.timeHandicapInput.checked;
+            const left = readClockSettingInputs(elements.timeLeftBaseInput, elements.timeLeftIncrementInput);
+            const right = hasHandicap
+                ? readClockSettingInputs(elements.timeRightBaseInput, elements.timeRightIncrementInput)
+                : { ...left };
+            state.timeHandicapEnabled = hasHandicap;
+            state.seatClockSettings = { black: left, white: right };
+            ensureSeatClockSettings();
+            syncSeatClocksToParticipants();
+            resetReadyFlags();
+            persistUserSettings({
+                baseMinutes: Math.round(left.baseSeconds / 60),
+                incrementSeconds: left.incrementSeconds,
             });
+            closeTimeSettingsDialog();
             broadcastState();
             render();
         }
@@ -4318,7 +4471,6 @@
                     if (event.pointerType === 'mouse' && event.button !== 0) return;
                     if (event.isPrimary === false) return;
                     event.preventDefault();
-                    if (localMode === 'host' && state.status !== 'playing') applyHostTimeSettings();
                     sendAction({ kind: 'ready', ready: !isReady });
                 });
                 container.appendChild(readyButton);
@@ -4459,7 +4611,6 @@
             if (peer) resetAppState();
 
             persistLobbySettings();
-            persistTimeSettings();
             const roomCode = elements.roomCodeInput.value.trim();
             if (!roomCode) {
                 showToast(i18n('errNeedRoomCode'));
@@ -5114,21 +5265,17 @@
             if (!state) {
                 const { baseMinutes, incrementSeconds } = readTimeSettingsFromInputs();
                 elements.roomSummary.textContent = `${baseMinutes} ${i18n('minute')} + ${incrementSeconds} ${i18n('second')}`;
-                elements.timeEditor.hidden = true;
                 elements.roomSummary.hidden = false;
                 return;
             }
 
-            const settings = state.config;
-            elements.roomSummary.textContent = `${Math.round(settings.baseSeconds / 60)} ${i18n('minute')} + ${settings.incrementSeconds} ${i18n('second')}`;
-            elements.timeEditor.hidden = localMode !== 'host' || state.status === 'playing';
-            elements.roomSummary.hidden = localMode === 'host' && !elements.timeEditor.hidden;
-            if (localMode === 'host') {
-                elements.infoBaseMinutesInput.value = String(Math.round(settings.baseSeconds / 60));
-                elements.infoIncrementInput.value = String(settings.incrementSeconds);
-                elements.infoBaseMinutesInput.disabled = false;
-                elements.infoIncrementInput.disabled = false;
-            }
+            ensureSeatClockSettings();
+            const left = state.seatClockSettings.black;
+            const right = state.seatClockSettings.white;
+            const leftText = `${Math.round(left.baseSeconds / 60)} ${i18n('minute')} + ${left.incrementSeconds} ${i18n('second')}`;
+            const rightText = `${Math.round(right.baseSeconds / 60)} ${i18n('minute')} + ${right.incrementSeconds} ${i18n('second')}`;
+            elements.roomSummary.textContent = state.timeHandicapEnabled ? `${leftText} / ${rightText}` : leftText;
+            elements.roomSummary.hidden = false;
         }
 
         function renderPlayers() {
@@ -5236,10 +5383,12 @@
             
             elements.menuMoveConfirmBtn.hidden = isPlaying;
             elements.menuSwapSeatColorsBtn.hidden = isPlaying;
+            elements.menuTimeSettingsBtn.hidden = isPlaying;
             elements.menuResignBtn.hidden = !isPlaying;
             elements.menuDrawBtn.hidden = !isPlaying;
             elements.menuTakebackBtn.hidden = !isPlaying;
             elements.menuSwapSeatColorsBtn.disabled = localMode !== 'host';
+            elements.menuTimeSettingsBtn.disabled = localMode !== 'host';
             elements.menuMoveConfirmBtn.classList.toggle('active', moveConfirmEnabled);
             elements.menuDrawBtn.disabled = !canManageResult || Boolean(state?.drawOfferByPeerId);
             elements.menuResignBtn.disabled = !canManageResult;
@@ -5610,10 +5759,11 @@
         elements.leaveRoomBtn.addEventListener('click', leaveRoom);
         bindPointerPress(elements.blackSeatBtn, () => handleSeatButtonClick('black'));
         bindPointerPress(elements.whiteSeatBtn, () => handleSeatButtonClick('white'));
-        elements.infoBaseMinutesInput.addEventListener('change', applyHostTimeSettings);
-        elements.infoIncrementInput.addEventListener('change', applyHostTimeSettings);
-        elements.infoBaseMinutesInput.addEventListener('input', persistTimeSettings);
-        elements.infoIncrementInput.addEventListener('input', persistTimeSettings);
+        elements.timeHandicapInput.addEventListener('change', syncTimeSettingsDialogMode);
+        elements.timeLeftBaseInput.addEventListener('input', syncTimeSettingsDialogMode);
+        elements.timeLeftIncrementInput.addEventListener('input', syncTimeSettingsDialogMode);
+        elements.timeSettingsCancelBtn.addEventListener('click', closeTimeSettingsDialog);
+        elements.timeSettingsApplyBtn.addEventListener('click', applyTimeSettingsDialog);
         bindPointerPress(elements.drawAcceptBtn, () => sendAction({ kind: 'draw-response', accept: true }));
         bindPointerPress(elements.drawDeclineBtn, () => sendAction({ kind: 'draw-response', accept: false }));
         bindPointerPress(elements.takebackAcceptBtn, () => sendAction({ kind: 'takeback-response', accept: true }));
@@ -5631,6 +5781,7 @@
         bindPointerPress(elements.menuTakebackBtn, requestTakebackFromMenu);
         bindPointerPress(elements.menuMoveConfirmBtn, toggleMoveConfirm);
         bindPointerPress(elements.menuSwapSeatColorsBtn, swapSeatColorsFromMenu);
+        bindPointerPress(elements.menuTimeSettingsBtn, openTimeSettingsDialog);
         bindPointerPress(document.getElementById('langBtn'), cycleLanguage);
         bindPointerPress(document.getElementById('soundBtn'), toggleSound);
         bindPointerPress(document.getElementById('coordsBtn'), toggleCoords);
