@@ -365,15 +365,28 @@
         }
 
         .player-status {
-            flex: 0 0 auto;
-            color: var(--muted);
+            position: absolute;
+            left: 50%;
+            top: 50%;
+            z-index: 2;
+            transform: translate(-50%, -50%);
+            padding: 4px 8px;
+            border: 1px solid rgba(74, 54, 34, 0.14);
+            border-radius: 999px;
+            background: rgba(255, 252, 246, 0.94);
+            box-shadow: 0 3px 10px rgba(32, 26, 20, 0.12);
+            color: var(--text);
             font-size: 11px;
             font-weight: 700;
-            line-height: 1.2;
-            min-width: 0;
-            overflow: hidden;
-            text-overflow: ellipsis;
+            line-height: 1;
             white-space: nowrap;
+            pointer-events: none;
+        }
+
+        .player-card.disconnected .player-name,
+        .player-card.disconnected .player-timer,
+        .player-card.disconnected .player-ready {
+            opacity: 0.32;
         }
 
         .player-timer {
@@ -1285,7 +1298,8 @@
             }
 
             .player-status {
-                font-size: var(--mobile-player-name-size, 12px);
+                padding: 4px 7px;
+                font-size: 10px;
             }
 
             .player-timer {
@@ -2027,7 +2041,7 @@
                 msgDisconnected: (name) => `${name} の接続が切れました。復帰を待っています。`,
                 msgReconnected: (name) => `${name} が復帰しました。`,
                 msgDisconnectTimeout: (name) => `${name} が時間内に復帰できませんでした。`,
-                playerDisconnected: (seconds) => `切断中 ${seconds}秒`,
+                playerDisconnected: (time) => `切断 ${time}`,
                 errMatchPausedForDisconnect: '相手の再接続待ちです。',
                 msgWin: (name) => `${name} の勝ちです。`,
                 msgDraw: '引き分けになりました。',
@@ -2148,7 +2162,7 @@
                 msgDisconnected: (name) => `${name} 的连接已断开，正在等待重连。`,
                 msgReconnected: (name) => `${name} 已重新连接。`,
                 msgDisconnectTimeout: (name) => `${name} 未能在限定时间内重连。`,
-                playerDisconnected: (seconds) => `断线中 ${seconds}秒`,
+                playerDisconnected: (time) => `断线 ${time}`,
                 errMatchPausedForDisconnect: '正在等待对手重新连接。',
                 msgWin: (name) => `${name} 获胜。`,
                 msgDraw: '和棋。',
@@ -2269,7 +2283,7 @@
                 msgDisconnected: (name) => `${name} disconnected. Waiting for reconnect.`,
                 msgReconnected: (name) => `${name} reconnected.`,
                 msgDisconnectTimeout: (name) => `${name} did not reconnect in time.`,
-                playerDisconnected: (seconds) => `Offline ${seconds}s`,
+                playerDisconnected: (time) => `OFF ${time}`,
                 errMatchPausedForDisconnect: 'Waiting for the opponent to reconnect.',
                 msgWin: (name) => `${name} wins.`,
                 msgDraw: 'Draw agreed.',
@@ -5703,10 +5717,9 @@
             const context = document.createElement('canvas').getContext('2d');
             const style = getComputedStyle(elements.blackPlayerName);
             context.font = `700 100px ${style.fontFamily}`;
-            const maxDisconnectSeconds = Math.ceil(DISCONNECT_GRACE_MS / 1000);
-            const fitSample = `漢漢漢漢漢漢 (${i18n('playerDisconnected', maxDisconnectSeconds)})`;
+            const fitSample = '漢漢漢漢漢漢';
             const sampleWidth = context.measureText(fitSample).width;
-            const fontSize = Math.max(8, Math.min(13, Math.floor(availableWidth * 100 / sampleWidth)));
+            const fontSize = Math.max(11, Math.min(16, Math.floor(availableWidth * 100 / sampleWidth)));
             players.style.setProperty('--mobile-player-name-size', `${fontSize}px`);
         }
 
@@ -5730,6 +5743,8 @@
                 });
                 elements.blackPlayerCard.classList.remove('active');
                 elements.whitePlayerCard.classList.remove('active');
+                elements.blackPlayerCard.classList.remove('disconnected');
+                elements.whitePlayerCard.classList.remove('disconnected');
                 elements.blackPlayerCard.classList.remove('seat-action');
                 elements.whitePlayerCard.classList.remove('seat-action');
                 elements.spectatorCard.classList.remove('seat-action');
@@ -5748,17 +5763,36 @@
             const whitePeerId = whiteParticipant?.id || '';
             const activePeerId = state.clocks.activePeerId;
 
-            function renderParticipant(identityElement, statusElement, participant) {
+            function formatDisconnectTime(seconds) {
+                const minutes = Math.floor(seconds / 60);
+                return `${minutes}:${String(seconds % 60).padStart(2, '0')}`;
+            }
+
+            function renderParticipant(cardElement, identityElement, statusElement, participant) {
                 identityElement.textContent = participant ? getDisplayName(participant) : i18n('playerNotJoined');
                 const disconnected = isParticipantDisconnected(participant);
                 statusElement.textContent = disconnected
-                    ? `(${i18n('playerDisconnected', getDisconnectedRemainingSeconds(participant))})`
+                    ? i18n(
+                        'playerDisconnected',
+                        formatDisconnectTime(getDisconnectedRemainingSeconds(participant))
+                    )
                     : '';
                 statusElement.hidden = !disconnected;
+                cardElement.classList.toggle('disconnected', disconnected);
             }
 
-            renderParticipant(elements.blackPlayerName, elements.blackPlayerStatus, blackParticipant);
-            renderParticipant(elements.whitePlayerName, elements.whitePlayerStatus, whiteParticipant);
+            renderParticipant(
+                elements.blackPlayerCard,
+                elements.blackPlayerName,
+                elements.blackPlayerStatus,
+                blackParticipant
+            );
+            renderParticipant(
+                elements.whitePlayerCard,
+                elements.whitePlayerName,
+                elements.whitePlayerStatus,
+                whiteParticipant
+            );
             elements.blackPlayerTimer.textContent = blackPeerId ? formatTime(getDisplayRemainingMs(blackPeerId)) : '';
             elements.whitePlayerTimer.textContent = whitePeerId ? formatTime(getDisplayRemainingMs(whitePeerId)) : '';
 
