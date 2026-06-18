@@ -5294,8 +5294,28 @@
             
             if (!container || !wrap) return;
 
+            container.style.height = '';
             const containerRect = container.getBoundingClientRect();
-            const size = Math.max(260, Math.floor(Math.min(containerRect.width, containerRect.height || containerRect.width)));
+            const shouldFitPrimaryControls = window.innerWidth >= 721 && window.innerWidth <= 1080;
+            let sizeLimit = Math.min(containerRect.width, containerRect.height || containerRect.width);
+
+            if (shouldFitPrimaryControls && elements.boardControls) {
+                const controlsRect = elements.boardControls.getBoundingClientRect();
+                const controlsStyle = getComputedStyle(elements.boardControls);
+                const controlsMargins = parseFloat(controlsStyle.marginTop || '0')
+                    + parseFloat(controlsStyle.marginBottom || '0');
+                const availableHeight = window.innerHeight
+                    - containerRect.top
+                    - controlsRect.height
+                    - controlsMargins
+                    - 12;
+                sizeLimit = Math.min(containerRect.width, availableHeight);
+                container.style.height = `${Math.max(0, Math.floor(sizeLimit))}px`;
+            }
+
+            const size = shouldFitPrimaryControls
+                ? Math.max(1, Math.floor(sizeLimit))
+                : Math.max(260, Math.floor(sizeLimit));
 
             wrap.style.width = size + 'px';
             wrap.style.height = size + 'px';
