@@ -474,7 +474,7 @@
             max-width: calc(100vw - 24px);
             max-height: calc(100vh - 24px);
             max-height: calc(100dvh - 24px);
-            padding: 12px;
+            padding: 16px;
             background: rgba(255, 252, 246, 0.94);
             backdrop-filter: blur(10px);
             box-sizing: border-box;
@@ -488,21 +488,19 @@
 
         .time-settings-form {
             display: grid;
-            gap: 12px;
+            gap: 14px;
         }
 
         .time-handicap-row {
             width: fit-content;
-            min-height: 28px;
-            padding: 5px 7px;
-            border-radius: 8px;
-            background: rgba(255, 255, 255, 0.72);
-            border: 1px solid rgba(74, 54, 34, 0.1);
+            min-height: 24px;
+            padding: 0;
             display: flex;
             align-items: center;
-            gap: 7px;
+            gap: 6px;
             font-size: 10px;
             font-weight: 700;
+            color: var(--muted);
             cursor: pointer;
         }
 
@@ -515,40 +513,72 @@
 
         .time-seat-grid {
             display: grid;
-            grid-template-columns: repeat(2, minmax(0, 1fr));
-            gap: 8px;
+            grid-template-columns: max-content max-content max-content;
+            align-items: center;
+            gap: 10px 12px;
         }
 
         .time-seat-grid.single {
-            grid-template-columns: minmax(0, 1fr);
+            grid-template-columns: max-content max-content;
         }
 
-        .time-seat-panel {
-            min-width: 0;
-            padding: 8px;
-            border-radius: 14px;
-            border: 1px solid rgba(74, 54, 34, 0.1);
-            background: rgba(255, 255, 255, 0.62);
-            display: grid;
-            gap: 10px;
-            transition: opacity 0.18s ease;
+        .time-seat-grid.single .time-control-cell {
+            grid-column: 2;
+        }
+
+        .time-seat-grid.single .time-base-label,
+        .time-seat-grid.single .time-base-control {
+            grid-row: 1;
+        }
+
+        .time-seat-grid.single .time-increment-label,
+        .time-seat-grid.single .time-increment-control {
+            grid-row: 2;
         }
 
         .time-seat-title {
-            font-size: 13px;
+            grid-row: 1;
+            text-align: center;
+            font-size: 12px;
             font-weight: 800;
             color: var(--text);
         }
 
-        .time-input-row {
-            display: grid;
-            gap: 6px;
+        #uiTimeLeftLabel {
+            grid-column: 2;
         }
 
-        .time-input-row label {
+        #uiTimeRightLabel {
+            grid-column: 3;
+        }
+
+        .time-row-label {
             color: var(--muted);
             font-size: 12px;
             font-weight: 700;
+            white-space: nowrap;
+        }
+
+        .time-base-label,
+        .time-base-control {
+            grid-row: 2;
+        }
+
+        .time-increment-label,
+        .time-increment-control {
+            grid-row: 3;
+        }
+
+        .time-row-label {
+            grid-column: 1;
+        }
+
+        .time-left-control {
+            grid-column: 2;
+        }
+
+        .time-right-control {
+            grid-column: 3;
         }
 
         .time-stepper {
@@ -611,21 +641,69 @@
             min-width: 1.8em;
         }
 
-        .time-seat-panel:has(input:disabled) {
-            opacity: 0.58;
+        .time-settings-card > .confirm-actions {
+            justify-content: flex-end;
+            padding-top: 12px;
+            border-top: 1px solid rgba(74, 54, 34, 0.08);
+        }
+
+        @media (max-width: 480px) {
+            .time-seat-grid {
+                grid-template-columns: repeat(2, max-content);
+                gap: 7px 8px;
+            }
+
+            .time-base-label {
+                grid-column: 1 / -1;
+                grid-row: 2;
+            }
+
+            .time-base-control {
+                grid-row: 3;
+            }
+
+            .time-increment-label {
+                grid-column: 1 / -1;
+                grid-row: 4;
+            }
+
+            .time-increment-control {
+                grid-row: 5;
+            }
+
+            .time-seat-grid.single {
+                grid-template-columns: max-content;
+            }
+
+            .time-seat-grid.single .time-row-label,
+            .time-seat-grid.single .time-control-cell {
+                grid-column: 1;
+            }
+
+            .time-seat-grid.single .time-base-label {
+                grid-row: 1;
+            }
+
+            .time-seat-grid.single .time-base-control {
+                grid-row: 2;
+            }
+
+            .time-seat-grid.single .time-increment-label {
+                grid-row: 3;
+            }
+
+            .time-seat-grid.single .time-increment-control {
+                grid-row: 4;
+            }
         }
 
         @media (max-width: 340px) {
             .time-settings-card {
-                padding: 10px;
+                padding: 12px;
             }
 
             .time-seat-grid {
-                gap: 5px;
-            }
-
-            .time-seat-panel {
-                padding: 6px;
+                gap: 8px 6px;
             }
 
             .time-stepper {
@@ -1446,54 +1524,50 @@
     <div id="timeSettingsDialog" class="confirm-backdrop" hidden>
         <div class="confirm-card time-settings-card" role="dialog" aria-modal="true">
             <div class="time-settings-form">
+                <div id="timeSeatGrid" class="time-seat-grid">
+                    <div id="uiTimeLeftLabel" class="time-seat-title">左</div>
+                    <div id="uiTimeRightLabel" class="time-seat-title">右</div>
+
+                    <label id="uiTimeLeftBaseLabel" class="time-row-label time-base-label" for="timeLeftBaseInput">持ち時間</label>
+                    <div class="time-control-cell time-left-control time-base-control">
+                        <div class="time-stepper">
+                            <button class="time-step-button" type="button" data-step-target="timeLeftBaseInput" data-step="-1">−</button>
+                            <input id="timeLeftBaseInput" type="number" inputmode="numeric" min="1" max="180" value="5">
+                            <span id="uiTimeLeftMinute" class="time-unit">分</span>
+                            <button class="time-step-button" type="button" data-step-target="timeLeftBaseInput" data-step="1">＋</button>
+                        </div>
+                    </div>
+                    <div class="time-control-cell time-right-control time-base-control">
+                        <div class="time-stepper">
+                            <button class="time-step-button" type="button" data-step-target="timeRightBaseInput" data-step="-1">−</button>
+                            <input id="timeRightBaseInput" type="number" inputmode="numeric" min="1" max="180" value="5">
+                            <span id="uiTimeRightMinute" class="time-unit">分</span>
+                            <button class="time-step-button" type="button" data-step-target="timeRightBaseInput" data-step="1">＋</button>
+                        </div>
+                    </div>
+
+                    <label id="uiTimeLeftIncrementLabel" class="time-row-label time-increment-label" for="timeLeftIncrementInput">加算</label>
+                    <div class="time-control-cell time-left-control time-increment-control">
+                        <div class="time-stepper">
+                            <button class="time-step-button" type="button" data-step-target="timeLeftIncrementInput" data-step="-1">−</button>
+                            <input id="timeLeftIncrementInput" type="number" inputmode="numeric" min="0" max="60" value="5">
+                            <span id="uiTimeLeftSecond" class="time-unit">秒</span>
+                            <button class="time-step-button" type="button" data-step-target="timeLeftIncrementInput" data-step="1">＋</button>
+                        </div>
+                    </div>
+                    <div class="time-control-cell time-right-control time-increment-control">
+                        <div class="time-stepper">
+                            <button class="time-step-button" type="button" data-step-target="timeRightIncrementInput" data-step="-1">−</button>
+                            <input id="timeRightIncrementInput" type="number" inputmode="numeric" min="0" max="60" value="5">
+                            <span id="uiTimeRightSecond" class="time-unit">秒</span>
+                            <button class="time-step-button" type="button" data-step-target="timeRightIncrementInput" data-step="1">＋</button>
+                        </div>
+                    </div>
+                </div>
                 <label class="time-handicap-row">
                     <input id="timeHandicapInput" type="checkbox">
                     <span id="uiTimeHandicapLabel">時間ハンデ</span>
                 </label>
-                <div class="time-seat-grid">
-                    <section id="timeLeftPanel" class="time-seat-panel">
-                        <div id="uiTimeLeftLabel" class="time-seat-title">左</div>
-                        <div class="time-input-row">
-                            <label id="uiTimeLeftBaseLabel" for="timeLeftBaseInput">持ち時間</label>
-                            <div class="time-stepper">
-                                <button class="time-step-button" type="button" data-step-target="timeLeftBaseInput" data-step="-1">−</button>
-                                <input id="timeLeftBaseInput" type="number" inputmode="numeric" min="1" max="180" value="5">
-                                <span id="uiTimeLeftMinute" class="time-unit">分</span>
-                                <button class="time-step-button" type="button" data-step-target="timeLeftBaseInput" data-step="1">＋</button>
-                            </div>
-                        </div>
-                        <div class="time-input-row">
-                            <label id="uiTimeLeftIncrementLabel" for="timeLeftIncrementInput">加算</label>
-                            <div class="time-stepper">
-                                <button class="time-step-button" type="button" data-step-target="timeLeftIncrementInput" data-step="-1">−</button>
-                                <input id="timeLeftIncrementInput" type="number" inputmode="numeric" min="0" max="60" value="5">
-                                <span id="uiTimeLeftSecond" class="time-unit">秒</span>
-                                <button class="time-step-button" type="button" data-step-target="timeLeftIncrementInput" data-step="1">＋</button>
-                            </div>
-                        </div>
-                    </section>
-                    <section id="timeRightPanel" class="time-seat-panel">
-                        <div id="uiTimeRightLabel" class="time-seat-title">右</div>
-                        <div class="time-input-row">
-                            <label id="uiTimeRightBaseLabel" for="timeRightBaseInput">持ち時間</label>
-                            <div class="time-stepper">
-                                <button class="time-step-button" type="button" data-step-target="timeRightBaseInput" data-step="-1">−</button>
-                                <input id="timeRightBaseInput" type="number" inputmode="numeric" min="1" max="180" value="5">
-                                <span id="uiTimeRightMinute" class="time-unit">分</span>
-                                <button class="time-step-button" type="button" data-step-target="timeRightBaseInput" data-step="1">＋</button>
-                            </div>
-                        </div>
-                        <div class="time-input-row">
-                            <label id="uiTimeRightIncrementLabel" for="timeRightIncrementInput">加算</label>
-                            <div class="time-stepper">
-                                <button class="time-step-button" type="button" data-step-target="timeRightIncrementInput" data-step="-1">−</button>
-                                <input id="timeRightIncrementInput" type="number" inputmode="numeric" min="0" max="60" value="5">
-                                <span id="uiTimeRightSecond" class="time-unit">秒</span>
-                                <button class="time-step-button" type="button" data-step-target="timeRightIncrementInput" data-step="1">＋</button>
-                            </div>
-                        </div>
-                    </section>
-                </div>
             </div>
             <div class="confirm-actions">
                 <button id="timeSettingsCancelBtn" class="button button-secondary" type="button">キャンセル</button>
@@ -1596,9 +1670,7 @@
             timeLeftIncrementInput: document.getElementById('timeLeftIncrementInput'),
             timeRightBaseInput: document.getElementById('timeRightBaseInput'),
             timeRightIncrementInput: document.getElementById('timeRightIncrementInput'),
-            timeLeftPanel: document.getElementById('timeLeftPanel'),
-            timeRightPanel: document.getElementById('timeRightPanel'),
-            timeSeatGrid: document.querySelector('.time-seat-grid'),
+            timeSeatGrid: document.getElementById('timeSeatGrid'),
             timeSettingsCancelBtn: document.getElementById('timeSettingsCancelBtn'),
             timeSettingsApplyBtn: document.getElementById('timeSettingsApplyBtn'),
             uiTimeHandicapLabel: document.getElementById('uiTimeHandicapLabel'),
@@ -1608,8 +1680,6 @@
             uiTimeLeftMinute: document.getElementById('uiTimeLeftMinute'),
             uiTimeLeftSecond: document.getElementById('uiTimeLeftSecond'),
             uiTimeRightLabel: document.getElementById('uiTimeRightLabel'),
-            uiTimeRightBaseLabel: document.getElementById('uiTimeRightBaseLabel'),
-            uiTimeRightIncrementLabel: document.getElementById('uiTimeRightIncrementLabel'),
             uiTimeRightMinute: document.getElementById('uiTimeRightMinute'),
             uiTimeRightSecond: document.getElementById('uiTimeRightSecond'),
             toast: document.getElementById('toast'),
@@ -2293,9 +2363,7 @@
             elements.uiTimeLeftLabel.textContent = i18n('timeLeft');
             elements.uiTimeRightLabel.textContent = i18n('timeRight');
             elements.uiTimeLeftBaseLabel.textContent = i18n('timeBase');
-            elements.uiTimeRightBaseLabel.textContent = i18n('timeBase');
             elements.uiTimeLeftIncrementLabel.textContent = i18n('timeIncrement');
-            elements.uiTimeRightIncrementLabel.textContent = i18n('timeIncrement');
             elements.uiTimeLeftMinute.textContent = i18n('minute');
             elements.uiTimeRightMinute.textContent = i18n('minute');
             elements.uiTimeLeftSecond.textContent = i18n('second');
@@ -4689,8 +4757,11 @@
                 .forEach((button) => {
                     button.disabled = !hasHandicap;
                 });
-            elements.timeRightPanel.hidden = !hasHandicap;
+            document.querySelectorAll('.time-right-control').forEach((control) => {
+                control.hidden = !hasHandicap;
+            });
             elements.uiTimeLeftLabel.hidden = !hasHandicap;
+            elements.uiTimeRightLabel.hidden = !hasHandicap;
             elements.timeSeatGrid.classList.toggle('single', !hasHandicap);
             if (!hasHandicap) {
                 elements.timeRightBaseInput.value = elements.timeLeftBaseInput.value;
