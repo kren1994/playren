@@ -491,21 +491,23 @@
         }
 
         .time-handicap-row {
-            min-height: 40px;
-            padding: 8px 10px;
-            border-radius: 12px;
+            width: fit-content;
+            min-height: 28px;
+            padding: 5px 7px;
+            border-radius: 8px;
             background: rgba(255, 255, 255, 0.72);
             border: 1px solid rgba(74, 54, 34, 0.1);
             display: flex;
             align-items: center;
-            gap: 10px;
+            gap: 7px;
+            font-size: 10px;
             font-weight: 700;
             cursor: pointer;
         }
 
         .time-handicap-row input {
-            width: 16px;
-            height: 16px;
+            width: 12px;
+            height: 12px;
             margin: 0;
             accent-color: var(--accent);
         }
@@ -514,6 +516,10 @@
             display: grid;
             grid-template-columns: repeat(2, minmax(0, 1fr));
             gap: 10px;
+        }
+
+        .time-seat-grid.single {
+            grid-template-columns: minmax(0, 1fr);
         }
 
         .time-seat-panel {
@@ -1376,8 +1382,8 @@
                     <span id="uiTimeHandicapLabel">時間ハンデ</span>
                 </label>
                 <div class="time-seat-grid">
-                    <section class="time-seat-panel">
-                        <div id="uiTimeLeftLabel" class="time-seat-title">左上</div>
+                    <section id="timeLeftPanel" class="time-seat-panel">
+                        <div id="uiTimeLeftLabel" class="time-seat-title">左</div>
                         <div class="time-input-row">
                             <label id="uiTimeLeftBaseLabel" for="timeLeftBaseInput">持ち時間</label>
                             <input id="timeLeftBaseInput" type="number" min="1" max="180" value="5">
@@ -1389,8 +1395,8 @@
                             <span id="uiTimeLeftSecond" class="time-unit">秒</span>
                         </div>
                     </section>
-                    <section class="time-seat-panel">
-                        <div id="uiTimeRightLabel" class="time-seat-title">右上</div>
+                    <section id="timeRightPanel" class="time-seat-panel">
+                        <div id="uiTimeRightLabel" class="time-seat-title">右</div>
                         <div class="time-input-row">
                             <label id="uiTimeRightBaseLabel" for="timeRightBaseInput">持ち時間</label>
                             <input id="timeRightBaseInput" type="number" min="1" max="180" value="5">
@@ -1500,6 +1506,9 @@
             timeLeftIncrementInput: document.getElementById('timeLeftIncrementInput'),
             timeRightBaseInput: document.getElementById('timeRightBaseInput'),
             timeRightIncrementInput: document.getElementById('timeRightIncrementInput'),
+            timeLeftPanel: document.getElementById('timeLeftPanel'),
+            timeRightPanel: document.getElementById('timeRightPanel'),
+            timeSeatGrid: document.querySelector('.time-seat-grid'),
             timeSettingsCancelBtn: document.getElementById('timeSettingsCancelBtn'),
             timeSettingsApplyBtn: document.getElementById('timeSettingsApplyBtn'),
             uiTimeHandicapLabel: document.getElementById('uiTimeHandicapLabel'),
@@ -2105,22 +2114,22 @@
         translations.ja.menuSwapSeatColors = '色を交換';
         translations.ja.menuTimeSettings = '持ち時間設定';
         translations.ja.timeHandicap = '時間ハンデ';
-        translations.ja.timeLeft = '左上';
-        translations.ja.timeRight = '右上';
+        translations.ja.timeLeft = '左';
+        translations.ja.timeRight = '右';
         translations.ja.timeBase = '持ち時間';
         translations.ja.timeIncrement = '加算';
         translations.zh.menuSwapSeatColors = '交换颜色';
         translations.zh.menuTimeSettings = '时间设置';
         translations.zh.timeHandicap = '时间让子';
-        translations.zh.timeLeft = '左上';
-        translations.zh.timeRight = '右上';
+        translations.zh.timeLeft = '左';
+        translations.zh.timeRight = '右';
         translations.zh.timeBase = '用时';
         translations.zh.timeIncrement = '加秒';
         translations.en.menuSwapSeatColors = 'Swap Colors';
         translations.en.menuTimeSettings = 'Time Settings';
         translations.en.timeHandicap = 'Time Handicap';
-        translations.en.timeLeft = 'Upper Left';
-        translations.en.timeRight = 'Upper Right';
+        translations.en.timeLeft = 'Left';
+        translations.en.timeRight = 'Right';
         translations.en.timeBase = 'Main Time';
         translations.en.timeIncrement = 'Increment';
 
@@ -4539,6 +4548,9 @@
             const hasHandicap = elements.timeHandicapInput.checked;
             elements.timeRightBaseInput.disabled = !hasHandicap;
             elements.timeRightIncrementInput.disabled = !hasHandicap;
+            elements.timeRightPanel.hidden = !hasHandicap;
+            elements.uiTimeLeftLabel.hidden = !hasHandicap;
+            elements.timeSeatGrid.classList.toggle('single', !hasHandicap);
             if (!hasHandicap) {
                 elements.timeRightBaseInput.value = elements.timeLeftBaseInput.value;
                 elements.timeRightIncrementInput.value = elements.timeLeftIncrementInput.value;
