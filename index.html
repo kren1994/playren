@@ -336,6 +336,8 @@
             gap: 12px;
             padding-left: 24px;
             width: 100%;
+            min-width: 0;
+            box-sizing: border-box;
         }
 
         .player-main {
@@ -390,6 +392,7 @@
         }
 
         .player-timer {
+            flex: 0 0 auto;
             font-size: clamp(16px, 2.8vw, 22px);
             font-weight: 800;
             letter-spacing: -0.04em;
@@ -5739,7 +5742,7 @@
             context.font = `700 100px ${style.fontFamily}`;
             const fitSample = '漢漢漢漢漢漢';
             const sampleWidth = context.measureText(fitSample).width;
-            const fontSize = Math.max(11, Math.min(16, Math.floor(availableWidth * 100 / sampleWidth)));
+            const fontSize = Math.max(11, Math.min(14, Math.floor(availableWidth * 100 / sampleWidth)));
             players.style.setProperty('--mobile-player-name-size', `${fontSize}px`);
         }
 
