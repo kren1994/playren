@@ -1197,11 +1197,11 @@
                 <section class="panel">
                     <div class="field">
                         <label for="nameInput" id="uiDisplayNameLabel">表示名</label>
-                        <input id="nameInput" type="text" maxlength="24" placeholder="例: kren1994">
+                        <input id="nameInput" type="text" placeholder="例: kren1994">
                     </div>
                     <div class="field" style="margin-top: 14px;">
                         <label for="roomCodeInput" id="uiRoomCodeLabel">合言葉</label>
-                        <input id="roomCodeInput" type="text" maxlength="24" placeholder="例: apple123">
+                        <input id="roomCodeInput" type="text" placeholder="例: apple123">
                     </div>
                     <div class="button-row" style="margin-top: 24px;">
                         <button id="joinRoomBtn" class="button button-primary" type="button" style="width: 100%;">入室</button>
@@ -1794,6 +1794,8 @@
                 seatRightAria: '右上席に着席',
                 
                 errNeedRoomCode: '合言葉を入力してください。',
+                errDisplayNameTooLong: '表示名は全角6文字（半角12文字）以内にしてください。',
+                errRoomCodeTooLong: '合言葉は全角6文字（半角12文字）以内にしてください。',
                 errReviewOnlyAfter: '対局終了後のみ局後検討できます。',
                 errReviewOnlyParticipant: '部屋参加者のみ局後検討できます。',
                 errReviewOccupied: 'その交点にはすでに石があります。',
@@ -1913,6 +1915,8 @@
                 seatRightAria: '坐到右上席',
                 
                 errNeedRoomCode: '请输入口令。',
+                errDisplayNameTooLong: '昵称请控制在6个全角字符（或12个半角字符）以内。',
+                errRoomCodeTooLong: '口令请控制在6个全角字符（或12个半角字符）以内。',
                 errReviewOnlyAfter: '对局结束后才可进行复盘。',
                 errReviewOnlyParticipant: '仅房间参与者可进行复盘。',
                 errReviewOccupied: '该交叉点已有棋子。',
@@ -2032,6 +2036,8 @@
                 seatRightAria: 'Take the upper-right seat',
 
                 errNeedRoomCode: 'Enter a room code.',
+                errDisplayNameTooLong: 'Display name must be within 6 full-width or 12 half-width characters.',
+                errRoomCodeTooLong: 'Room code must be within 6 full-width or 12 half-width characters.',
                 errReviewOnlyAfter: 'Review is available only after the game ends.',
                 errReviewOnlyParticipant: 'Only room participants can review after the game.',
                 errReviewOccupied: 'That point is already occupied.',
@@ -2228,7 +2234,37 @@
         function sanitizeName(value) {
             const fallback = 'Player';
             const trimmed = String(value || '').trim().replace(/\s+/g, ' ');
-            return (trimmed || fallback).slice(0, 24);
+            return trimmed || fallback;
+        }
+
+        function splitGraphemes(value) {
+            const text = String(value || '');
+            if (typeof Intl?.Segmenter === 'function') {
+                const segmenter = new Intl.Segmenter(undefined, { granularity: 'grapheme' });
+                return Array.from(segmenter.segment(text), ({ segment }) => segment);
+            }
+            return Array.from(text);
+        }
+
+        function isHalfWidthGrapheme(grapheme) {
+            let hasBaseCharacter = false;
+            for (const character of Array.from(grapheme)) {
+                if (/\p{Mark}/u.test(character) || character === '\u200d' || character === '\ufe0f') continue;
+                hasBaseCharacter = true;
+                const codePoint = character.codePointAt(0);
+                const isHalfWidth = codePoint <= 0x7f
+                    || (codePoint >= 0xff61 && codePoint <= 0xff9f)
+                    || (codePoint >= 0xffa0 && codePoint <= 0xffdc);
+                if (!isHalfWidth) return false;
+            }
+            return hasBaseCharacter;
+        }
+
+        function getTextWidthUnits(value) {
+            return splitGraphemes(value).reduce(
+                (total, grapheme) => total + (isHalfWidthGrapheme(grapheme) ? 1 : 2),
+                0
+            );
         }
 
         function createToken() {
@@ -4757,16 +4793,26 @@
         }
 
         function joinRoom() {
-            if (peer) resetAppState();
-
-            persistLobbySettings();
             const roomCode = elements.roomCodeInput.value.trim();
+            const hostName = sanitizeName(elements.nameInput.value);
+            if (getTextWidthUnits(hostName) > 12) {
+                showToast(i18n('errDisplayNameTooLong'));
+                elements.nameInput.focus();
+                return;
+            }
             if (!roomCode) {
                 showToast(i18n('errNeedRoomCode'));
+                elements.roomCodeInput.focus();
+                return;
+            }
+            if (getTextWidthUnits(roomCode) > 12) {
+                showToast(i18n('errRoomCodeTooLong'));
+                elements.roomCodeInput.focus();
                 return;
             }
 
-            const hostName = sanitizeName(elements.nameInput.value || 'Player');
+            if (peer) resetAppState();
+            persistLobbySettings();
             const settings = buildSettings();
             roomId = `${ROOM_PREFIX}${roomCode}`;
             localPlayerToken = getLocalPlayerToken(roomCode);
