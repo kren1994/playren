@@ -583,17 +583,18 @@
 
         .time-stepper {
             display: grid;
-            grid-template-columns: 30px 4em auto 30px;
+            grid-template-columns: 30px 4em 30px auto;
             align-items: center;
             justify-content: start;
-            gap: 3px;
+            gap: 0;
         }
 
         .time-stepper input {
             width: 4em;
             max-width: 4em;
             min-height: 34px;
-            padding: 6px 7px;
+            margin-left: 3px;
+            padding: 6px 6px 6px 7px;
             border-radius: 10px;
             border: 1px solid rgba(74, 54, 34, 0.14);
             background: rgba(255, 255, 255, 0.9);
@@ -619,6 +620,7 @@
             background: rgba(255, 255, 255, 0.9);
             color: var(--text);
             font-size: 18px;
+            font-family: inherit;
             line-height: 1;
             font-weight: 500;
             cursor: pointer;
@@ -635,6 +637,7 @@
         }
 
         .time-unit {
+            margin-left: 9px;
             color: var(--muted);
             font-size: 12px;
             font-weight: 700;
@@ -707,7 +710,7 @@
             }
 
             .time-stepper {
-                grid-template-columns: 28px 3.6em auto 28px;
+                grid-template-columns: 28px 3.6em 28px auto;
             }
 
             .time-stepper input {
@@ -1533,16 +1536,16 @@
                         <div class="time-stepper">
                             <button class="time-step-button" type="button" data-step-target="timeLeftBaseInput" data-step="-1">−</button>
                             <input id="timeLeftBaseInput" type="number" inputmode="numeric" min="1" max="180" value="5">
-                            <span id="uiTimeLeftMinute" class="time-unit">分</span>
                             <button class="time-step-button" type="button" data-step-target="timeLeftBaseInput" data-step="1">＋</button>
+                            <span id="uiTimeLeftMinute" class="time-unit">分</span>
                         </div>
                     </div>
                     <div class="time-control-cell time-right-control time-base-control">
                         <div class="time-stepper">
                             <button class="time-step-button" type="button" data-step-target="timeRightBaseInput" data-step="-1">−</button>
                             <input id="timeRightBaseInput" type="number" inputmode="numeric" min="1" max="180" value="5">
-                            <span id="uiTimeRightMinute" class="time-unit">分</span>
                             <button class="time-step-button" type="button" data-step-target="timeRightBaseInput" data-step="1">＋</button>
+                            <span id="uiTimeRightMinute" class="time-unit">分</span>
                         </div>
                     </div>
 
@@ -1551,16 +1554,16 @@
                         <div class="time-stepper">
                             <button class="time-step-button" type="button" data-step-target="timeLeftIncrementInput" data-step="-1">−</button>
                             <input id="timeLeftIncrementInput" type="number" inputmode="numeric" min="0" max="60" value="5">
-                            <span id="uiTimeLeftSecond" class="time-unit">秒</span>
                             <button class="time-step-button" type="button" data-step-target="timeLeftIncrementInput" data-step="1">＋</button>
+                            <span id="uiTimeLeftSecond" class="time-unit">秒</span>
                         </div>
                     </div>
                     <div class="time-control-cell time-right-control time-increment-control">
                         <div class="time-stepper">
                             <button class="time-step-button" type="button" data-step-target="timeRightIncrementInput" data-step="-1">−</button>
                             <input id="timeRightIncrementInput" type="number" inputmode="numeric" min="0" max="60" value="5">
-                            <span id="uiTimeRightSecond" class="time-unit">秒</span>
                             <button class="time-step-button" type="button" data-step-target="timeRightIncrementInput" data-step="1">＋</button>
+                            <span id="uiTimeRightSecond" class="time-unit">秒</span>
                         </div>
                     </div>
                 </div>
