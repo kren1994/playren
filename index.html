@@ -357,13 +357,25 @@
             white-space: nowrap;
         }
 
+        .host-name {
+            text-decoration-line: underline;
+            text-decoration-color: var(--accent);
+            text-decoration-thickness: 1px;
+            text-underline-offset: 3px;
+        }
+
+        .player-name.host-name {
+            text-underline-offset: 1px;
+        }
+
         .player-identity {
             flex: 1;
             min-width: 0;
             display: flex;
             align-items: center;
             gap: 4px;
-            overflow: hidden;
+            position: relative;
+            overflow: visible;
         }
 
         .player-status {
@@ -3003,7 +3015,7 @@
 
         function getDisplayName(participant) {
             if (!participant) return i18n('playerNotJoined');
-            return isHostParticipant(participant) ? `${participant.name}*` : participant.name;
+            return participant.name;
         }
 
         function setHostPeerId(nextHostPeerId) {
@@ -5787,6 +5799,8 @@
             if (!state) {
                 elements.blackPlayerName.textContent = i18n('playerNotJoined');
                 elements.whitePlayerName.textContent = i18n('playerNotJoined');
+                elements.blackPlayerName.classList.remove('host-name');
+                elements.whitePlayerName.classList.remove('host-name');
                 elements.blackPlayerStatus.textContent = '';
                 elements.whitePlayerStatus.textContent = '';
                 elements.blackPlayerStatus.hidden = true;
@@ -5824,7 +5838,8 @@
             }
 
             function renderParticipant(cardElement, identityElement, statusElement, participant) {
-                identityElement.textContent = participant ? getDisplayName(participant) : i18n('playerNotJoined');
+                identityElement.textContent = participant ? participant.name : i18n('playerNotJoined');
+                identityElement.classList.toggle('host-name', isHostParticipant(participant));
                 const disconnected = isParticipantDisconnected(participant);
                 statusElement.textContent = disconnected
                     ? i18n(
@@ -5923,6 +5938,7 @@
                 const item = document.createElement('li');
                 item.className = 'spectator-item';
                 item.textContent = getDisplayName(participant);
+                item.classList.toggle('host-name', isHostParticipant(participant));
                 elements.spectatorList.appendChild(item);
             });
 
