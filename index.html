@@ -2502,7 +2502,7 @@
             }
         }
 
-        function loadRoomStateSnapshot(nextRoomId, localName) {
+        function loadRoomStateSnapshot(nextRoomId, localName, localToken = '') {
             if (!nextRoomId || !localName) return null;
             try {
                 const raw = window.localStorage.getItem(getRoomStateStorageKey(nextRoomId));
@@ -2514,7 +2514,12 @@
                     return null;
                 }
                 const participants = Object.values(parsed.state.participantsById || {});
-                if (!participants.some((participant) => participant?.name === localName)) return null;
+                const hasLocalParticipant = participants.some((participant) => {
+                    if (!participant) return false;
+                    if (localToken && participant.token === localToken && participant.name === localName) return true;
+                    return participant.name === localName;
+                });
+                if (!hasLocalParticipant) return null;
                 return parsed.state;
             } catch (error) {
                 return null;
@@ -3069,6 +3074,21 @@
             }) || null;
         }
 
+        function findParticipantForReconnect(name, token, exceptPeerId = '') {
+            if (!state) return null;
+            const participants = Object.values(state.participantsById || {});
+            if (token) {
+                const tokenMatch = participants.find((participant) => {
+                    return participant
+                        && participant.id !== exceptPeerId
+                        && participant.token === token
+                        && participant.name === name;
+                });
+                if (tokenMatch) return tokenMatch;
+            }
+            return findParticipantByName(name, exceptPeerId);
+        }
+
         function replacePeerIdReferences(oldPeerId, nextPeerId) {
             if (!state || !oldPeerId || !nextPeerId || oldPeerId === nextPeerId) return;
 
@@ -3113,16 +3133,28 @@
         }
 
         function restoreLocalHostFromSnapshot(nextRoomId, nextHostId, nextHostName, settings, hostToken) {
-            const restored = loadRoomStateSnapshot(nextRoomId, nextHostName);
+            const restored = loadRoomStateSnapshot(nextRoomId, nextHostName, hostToken);
             if (!restored) {
                 return createInitialState(nextRoomId, nextHostId, nextHostName, settings, hostToken);
             }
 
             state = restored;
-            const localParticipant = Object.values(state.participantsById || {})
-                .find((participant) => participant?.name === nextHostName);
+            const localParticipant = findParticipantForReconnect(nextHostName, hostToken);
 
             if (localParticipant && localParticipant.id !== nextHostId) {
+                const previousHost = getParticipantById(nextHostId);
+                if (previousHost && previousHost !== localParticipant) {
+                    const placeholderId = `host-disconnected-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+                    replacePeerIdReferences(nextHostId, placeholderId);
+                    const placeholder = getParticipantById(placeholderId);
+                    if (placeholder) {
+                        placeholder.isHost = false;
+                        if (!placeholder.disconnectedAt) {
+                            placeholder.disconnectedAt = Date.now();
+                            placeholder.disconnectedUntil = placeholder.disconnectedAt + DISCONNECT_GRACE_MS;
+                        }
+                    }
+                }
                 replacePeerIdReferences(localParticipant.id, nextHostId);
             }
 
@@ -5123,7 +5155,7 @@
                 if (message.type === 'hello' && localMode === 'host') {
                     const nextName = sanitizeName(message.name || 'Player');
                     const token = String(message.token || connection.metadata?.token || '');
-                    const nameMatchedParticipant = findParticipantByName(nextName, connection.peer);
+                    const nameMatchedParticipant = findParticipantForReconnect(nextName, token, connection.peer);
                     const existing = getParticipantById(connection.peer);
                     if (nameMatchedParticipant && isHostParticipant(nameMatchedParticipant)) {
                         connection.send({ type: 'reject', message: 'Display name is already in this room.' });
