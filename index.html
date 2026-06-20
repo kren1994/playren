@@ -282,6 +282,7 @@
             overflow: hidden;
             display: flex;
             align-items: center;
+            gap: 8px;
         }
 
         .player-card.active {
@@ -290,7 +291,19 @@
             background: rgba(234, 247, 242, 0.92);
         }
 
+        .player-slot {
+            width: 100%;
+            min-width: 0;
+            border-radius: 10px;
+        }
+
+        .players.pair-renju .player-slot.active {
+            background: rgba(23, 89, 74, 0.09);
+            box-shadow: inset 0 0 0 1px rgba(23, 89, 74, 0.16);
+        }
+
         .player-card.seat-action,
+        .player-slot.seat-action,
         .spectator-card.seat-action {
             cursor: pointer;
             touch-action: manipulation;
@@ -298,14 +311,40 @@
         }
 
         .player-card.seat-action:hover,
+        .player-slot.seat-action:hover,
         .spectator-card.seat-action:hover {
             border-color: rgba(23, 89, 74, 0.28);
             background: rgba(239, 248, 244, 0.92);
         }
 
         .player-card.seat-action:active,
+        .player-slot.seat-action:active,
         .spectator-card.seat-action:active {
             transform: translateY(1px);
+        }
+
+        .players.pair-renju .player-card {
+            align-items: stretch;
+        }
+
+        .players.pair-renju .player-team-members {
+            display: grid;
+            grid-template-rows: repeat(2, minmax(0, 1fr));
+            flex: 1;
+            min-width: 0;
+        }
+
+        .players.pair-renju .player-slot + .player-slot {
+            border-top: 1px solid rgba(74, 54, 34, 0.1);
+            border-radius: 0 0 10px 10px;
+        }
+
+        .players.pair-renju .player-head {
+            min-height: 34px;
+        }
+
+        .players:not(.pair-renju) .player-slot-bottom {
+            display: none;
         }
 
         .player-card.black::before,
@@ -338,6 +377,15 @@
             width: 100%;
             min-width: 0;
             box-sizing: border-box;
+        }
+
+        .player-team-members {
+            flex: 1;
+            min-width: 0;
+        }
+
+        .players.pair-renju .player-timer {
+            align-self: center;
         }
 
         .player-main {
@@ -399,7 +447,9 @@
 
         .player-card.disconnected .player-name,
         .player-card.disconnected .player-timer,
-        .player-card.disconnected .player-ready {
+        .player-card.disconnected .player-ready,
+        .player-slot.disconnected .player-name,
+        .player-slot.disconnected .player-ready {
             opacity: 0.32;
         }
 
@@ -1299,6 +1349,7 @@
             .player-card {
                 min-width: 0;
                 padding: 6px 8px; /* 縦幅を小さく */
+                gap: 4px;
             }
 
             .player-head {
@@ -1416,28 +1467,58 @@
                 <section class="panel">
                     <div class="players">
                         <article id="blackPlayerCard" class="player-card black">
-                            <div class="player-head">
-                                <div class="player-main">
-                                    <div class="player-identity">
-                                        <div id="blackPlayerName" class="player-name"></div>
-                                        <div id="blackPlayerStatus" class="player-status" hidden></div>
+                            <div class="player-team-members">
+                                <div id="blackPlayerSlot" class="player-slot player-slot-top">
+                                    <div class="player-head">
+                                        <div class="player-main">
+                                            <div class="player-identity">
+                                                <div id="blackPlayerName" class="player-name"></div>
+                                                <div id="blackPlayerStatus" class="player-status" hidden></div>
+                                            </div>
+                                            <div id="blackReadyWrap" class="player-ready"></div>
+                                        </div>
                                     </div>
-                                    <div id="blackReadyWrap" class="player-ready"></div>
-                                    <div id="blackPlayerTimer" class="player-timer">05:00</div>
+                                </div>
+                                <div id="blackBottomPlayerSlot" class="player-slot player-slot-bottom">
+                                    <div class="player-head">
+                                        <div class="player-main">
+                                            <div class="player-identity">
+                                                <div id="blackBottomPlayerName" class="player-name"></div>
+                                                <div id="blackBottomPlayerStatus" class="player-status" hidden></div>
+                                            </div>
+                                            <div id="blackBottomReadyWrap" class="player-ready"></div>
+                                        </div>
+                                    </div>
                                 </div>
                             </div>
+                            <div id="blackPlayerTimer" class="player-timer">05:00</div>
                         </article>
                         <article id="whitePlayerCard" class="player-card white">
-                            <div class="player-head">
-                                <div class="player-main">
-                                    <div class="player-identity">
-                                        <div id="whitePlayerName" class="player-name"></div>
-                                        <div id="whitePlayerStatus" class="player-status" hidden></div>
+                            <div class="player-team-members">
+                                <div id="whitePlayerSlot" class="player-slot player-slot-top">
+                                    <div class="player-head">
+                                        <div class="player-main">
+                                            <div class="player-identity">
+                                                <div id="whitePlayerName" class="player-name"></div>
+                                                <div id="whitePlayerStatus" class="player-status" hidden></div>
+                                            </div>
+                                            <div id="whiteReadyWrap" class="player-ready"></div>
+                                        </div>
                                     </div>
-                                    <div id="whiteReadyWrap" class="player-ready"></div>
-                                    <div id="whitePlayerTimer" class="player-timer">05:00</div>
+                                </div>
+                                <div id="whiteBottomPlayerSlot" class="player-slot player-slot-bottom">
+                                    <div class="player-head">
+                                        <div class="player-main">
+                                            <div class="player-identity">
+                                                <div id="whiteBottomPlayerName" class="player-name"></div>
+                                                <div id="whiteBottomPlayerStatus" class="player-status" hidden></div>
+                                            </div>
+                                            <div id="whiteBottomReadyWrap" class="player-ready"></div>
+                                        </div>
+                                    </div>
                                 </div>
                             </div>
+                            <div id="whitePlayerTimer" class="player-timer">05:00</div>
                         </article>
                     </div>
 
@@ -1456,6 +1537,7 @@
                                     </span>
                                 </button>
                                 <div id="actionMenu" class="control-menu-popup" hidden>
+                                    <button id="menuPairRenjuBtn" class="control-menu-item" type="button">ペア連珠</button>
                                     <button id="menuSwapSeatColorsBtn" class="control-menu-item" type="button">色を交換</button>
                                     <button id="menuTimeSettingsBtn" class="control-menu-item" type="button">時間設定</button>
                                     <button id="menuResignBtn" class="control-menu-item" type="button">終局</button>
@@ -1679,14 +1761,24 @@
             gameKicker: document.getElementById('gameKicker'),
             blackPlayerCard: document.getElementById('blackPlayerCard'),
             whitePlayerCard: document.getElementById('whitePlayerCard'),
+            blackPlayerSlot: document.getElementById('blackPlayerSlot'),
+            whitePlayerSlot: document.getElementById('whitePlayerSlot'),
+            blackBottomPlayerSlot: document.getElementById('blackBottomPlayerSlot'),
+            whiteBottomPlayerSlot: document.getElementById('whiteBottomPlayerSlot'),
             blackPlayerName: document.getElementById('blackPlayerName'),
             whitePlayerName: document.getElementById('whitePlayerName'),
+            blackBottomPlayerName: document.getElementById('blackBottomPlayerName'),
+            whiteBottomPlayerName: document.getElementById('whiteBottomPlayerName'),
             blackPlayerStatus: document.getElementById('blackPlayerStatus'),
             whitePlayerStatus: document.getElementById('whitePlayerStatus'),
+            blackBottomPlayerStatus: document.getElementById('blackBottomPlayerStatus'),
+            whiteBottomPlayerStatus: document.getElementById('whiteBottomPlayerStatus'),
             blackPlayerTimer: document.getElementById('blackPlayerTimer'),
             whitePlayerTimer: document.getElementById('whitePlayerTimer'),
             blackReadyWrap: document.getElementById('blackReadyWrap'),
             whiteReadyWrap: document.getElementById('whiteReadyWrap'),
+            blackBottomReadyWrap: document.getElementById('blackBottomReadyWrap'),
+            whiteBottomReadyWrap: document.getElementById('whiteBottomReadyWrap'),
             boardCanvas: document.getElementById('boardCanvas'),
             boardControls: document.querySelector('.board-controls'),
             spectatorList: document.getElementById('spectatorList'),
@@ -1710,6 +1802,7 @@
             menuResignBtn: document.getElementById('menuResignBtn'),
             menuTakebackBtn: document.getElementById('menuTakebackBtn'),
             menuMoveConfirmBtn: document.getElementById('menuMoveConfirmBtn'),
+            menuPairRenjuBtn: document.getElementById('menuPairRenjuBtn'),
             menuSwapSeatColorsBtn: document.getElementById('menuSwapSeatColorsBtn'),
             menuTimeSettingsBtn: document.getElementById('menuTimeSettingsBtn'),
             timeSettingsDialog: document.getElementById('timeSettingsDialog'),
@@ -1987,6 +2080,7 @@
                 menuTheme: '盤面色',
                 menuMoveNum: '手数',
                 menuMoveConfirm: '着手確認',
+                menuPairRenju: 'ペア連珠',
                 actionDialogChoice2: '10 題',
                 actionDialogSwap: 'Swap',
                 actionDialogRegular: 'そのまま',
@@ -2108,6 +2202,7 @@
                 menuTheme: '棋盘色',
                 menuMoveNum: '手数',
                 menuMoveConfirm: '落子确认',
+                menuPairRenju: '双人连珠',
                 actionDialogChoice2: '10 题',
                 actionDialogSwap: 'Swap',
                 actionDialogRegular: '不交换',
@@ -2229,6 +2324,7 @@
                 menuTheme: 'Board Color',
                 menuMoveNum: 'Move Nos.',
                 menuMoveConfirm: 'Move Confirm',
+                menuPairRenju: 'Pair Renju',
                 actionDialogChoice2: '10 moves',
                 actionDialogSwap: 'Swap',
                 actionDialogRegular: 'Keep',
@@ -2405,6 +2501,7 @@
             elements.menuResignBtn.textContent = i18n('menuResign');
             elements.menuTakebackBtn.textContent = i18n('menuTakeback');
             elements.menuMoveConfirmBtn.textContent = i18n('menuMoveConfirm');
+            elements.menuPairRenjuBtn.textContent = i18n('menuPairRenju');
             elements.menuSwapSeatColorsBtn.textContent = i18n('menuSwapSeatColors');
             elements.menuTimeSettingsBtn.textContent = i18n('menuTimeSettings');
             elements.uiTimeHandicapLabel.textContent = i18n('timeHandicap');
@@ -2725,6 +2822,7 @@
             return {
                 roomId: nextRoomId,
                 config: settings,
+                pairRenjuEnabled: false,
                 timeHandicapEnabled: false,
                 seatClockSettings: {
                     black: { baseSeconds: settings.baseSeconds, incrementSeconds: settings.incrementSeconds },
@@ -2738,6 +2836,8 @@
                 seats: {
                     black: hostId,
                     white: null,
+                    blackBottom: null,
+                    whiteBottom: null,
                 },
                 readyByPeerId: {
                     [hostId]: false,
@@ -2763,7 +2863,12 @@
                 resultText: '',
                 resultMessage: null,
                 drawOfferByPeerId: '',
+                drawResponderPeerId: '',
                 takebackOfferByPeerId: '',
+                takebackResponderPeerId: '',
+                takebackMoveCount: 0,
+                pairTurnOrder: [],
+                pairTurnIndex: 0,
                 connectionPause: null,
                 reviewMoves: [],
                 reviewCursor: 0,
@@ -2771,6 +2876,19 @@
                 log: [createLogEntry('presence', i18n('msgJoined', hostName))],
                 version: 0,
             };
+        }
+
+        function ensurePairRenjuState() {
+            if (!state) return;
+            state.pairRenjuEnabled = Boolean(state.pairRenjuEnabled);
+            state.seats = state.seats || { black: null, white: null };
+            if (!Object.prototype.hasOwnProperty.call(state.seats, 'blackBottom')) state.seats.blackBottom = null;
+            if (!Object.prototype.hasOwnProperty.call(state.seats, 'whiteBottom')) state.seats.whiteBottom = null;
+            if (!Array.isArray(state.pairTurnOrder)) state.pairTurnOrder = [];
+            if (!Number.isInteger(state.pairTurnIndex)) state.pairTurnIndex = 0;
+            if (typeof state.drawResponderPeerId !== 'string') state.drawResponderPeerId = '';
+            if (typeof state.takebackResponderPeerId !== 'string') state.takebackResponderPeerId = '';
+            if (!Number.isInteger(state.takebackMoveCount)) state.takebackMoveCount = 0;
         }
 
         function createLogEntry(kind, text, options = {}) {
@@ -2916,8 +3034,15 @@
         function clearLocalOptimisticRequests() {
             if (!state || !localPeerId) return;
             clearConfirmMovePoint();
-            if (state.drawOfferByPeerId === localPeerId) state.drawOfferByPeerId = '';
-            if (state.takebackOfferByPeerId === localPeerId) state.takebackOfferByPeerId = '';
+            if (state.drawOfferByPeerId === localPeerId) {
+                state.drawOfferByPeerId = '';
+                state.drawResponderPeerId = '';
+            }
+            if (state.takebackOfferByPeerId === localPeerId) {
+                state.takebackOfferByPeerId = '';
+                state.takebackResponderPeerId = '';
+                state.takebackMoveCount = 0;
+            }
         }
 
         function applyOptimisticRequest(kind) {
@@ -3087,7 +3212,7 @@
 
         function hasDisconnectedSeatedPlayer() {
             if (!state) return false;
-            return [state.seats.black, state.seats.white].some((peerId) => {
+            return getActiveSeatKeys().map((seat) => state.seats[seat]).some((peerId) => {
                 const participant = getParticipantById(peerId);
                 return isParticipantDisconnected(participant);
             });
@@ -3129,11 +3254,17 @@
             }
 
             if (state.hostPeerId === oldPeerId) state.hostPeerId = nextPeerId;
-            if (state.seats.black === oldPeerId) state.seats.black = nextPeerId;
-            if (state.seats.white === oldPeerId) state.seats.white = nextPeerId;
+            Object.keys(state.seats || {}).forEach((seat) => {
+                if (state.seats[seat] === oldPeerId) state.seats[seat] = nextPeerId;
+            });
             if (state.clocks.activePeerId === oldPeerId) state.clocks.activePeerId = nextPeerId;
             if (state.drawOfferByPeerId === oldPeerId) state.drawOfferByPeerId = nextPeerId;
             if (state.takebackOfferByPeerId === oldPeerId) state.takebackOfferByPeerId = nextPeerId;
+            if (state.drawResponderPeerId === oldPeerId) state.drawResponderPeerId = nextPeerId;
+            if (state.takebackResponderPeerId === oldPeerId) state.takebackResponderPeerId = nextPeerId;
+            if (Array.isArray(state.pairTurnOrder)) {
+                state.pairTurnOrder = state.pairTurnOrder.map((peerId) => peerId === oldPeerId ? nextPeerId : peerId);
+            }
             if (state.connectionPause?.peerId === oldPeerId) state.connectionPause.peerId = nextPeerId;
             if (state.connectionPause?.activePeerId === oldPeerId) state.connectionPause.activePeerId = nextPeerId;
 
@@ -3168,6 +3299,7 @@
             }
 
             state = restored;
+            ensurePairRenjuState();
             const localParticipant = findParticipantForReconnect(nextHostName, hostToken);
 
             if (localParticipant && localParticipant.id !== nextHostId) {
@@ -3226,6 +3358,68 @@
             return state?.seats?.[seat] || '';
         }
 
+        function getActiveSeatKeys() {
+            return state?.pairRenjuEnabled
+                ? ['black', 'white', 'blackBottom', 'whiteBottom']
+                : ['black', 'white'];
+        }
+
+        function isPlayingSeat(seat) {
+            return getActiveSeatKeys().includes(seat);
+        }
+
+        function getTeamForSeat(seat) {
+            if (seat === 'black' || seat === 'blackBottom') return 'black';
+            if (seat === 'white' || seat === 'whiteBottom') return 'white';
+            return '';
+        }
+
+        function getTeamForPeer(peerId) {
+            return getTeamForSeat(getSeatForPeer(peerId));
+        }
+
+        function isSeatedParticipant(participant) {
+            return Boolean(participant && isPlayingSeat(participant.seat));
+        }
+
+        function getTeamPeerIds(team) {
+            if (!state || !['black', 'white'].includes(team)) return [];
+            const keys = state.pairRenjuEnabled ? [team, `${team}Bottom`] : [team];
+            return keys.map((key) => state.seats?.[key]).filter(Boolean);
+        }
+
+        function getOpponentTeam(team) {
+            return team === 'black' ? 'white' : team === 'white' ? 'black' : '';
+        }
+
+        function getPairTurnActor() {
+            if (!state?.pairRenjuEnabled || !state.pairTurnOrder?.length) return '';
+            return state.pairTurnOrder[state.pairTurnIndex % state.pairTurnOrder.length] || '';
+        }
+
+        function advancePairTurn() {
+            if (!state?.pairRenjuEnabled || !state.pairTurnOrder?.length) return;
+            state.pairTurnIndex = (state.pairTurnIndex + 1) % state.pairTurnOrder.length;
+        }
+
+        function initializePairTurnOrder() {
+            if (!state?.pairRenjuEnabled) {
+                state.pairTurnOrder = [];
+                state.pairTurnIndex = 0;
+                return;
+            }
+            ensureSeatColors();
+            const blackTeam = state.seatColors.black === 'black' ? 'black' : 'white';
+            const whiteTeam = getOpponentTeam(blackTeam);
+            state.pairTurnOrder = [
+                state.seats[blackTeam],
+                state.seats[whiteTeam],
+                state.seats[`${blackTeam}Bottom`],
+                state.seats[`${whiteTeam}Bottom`],
+            ];
+            state.pairTurnIndex = 0;
+        }
+
         function getColorForPeer(peerId) {
             return state?.colorsByPeerId?.[peerId] || '';
         }
@@ -3236,19 +3430,21 @@
             return ids.find((id) => id !== peerId) || '';
         }
 
-        function bothPlayersReady() {
-            return Boolean(state?.seats?.black && state?.seats?.white && state.seats.black !== state.seats.white);
+        function allRequiredSeatsOccupied() {
+            const ids = getActiveSeatKeys().map((seat) => state?.seats?.[seat]).filter(Boolean);
+            return ids.length === getActiveSeatKeys().length && new Set(ids).size === ids.length;
         }
 
-        function seatedPlayersMarkedReady() {
-            if (!bothPlayersReady()) return false;
-            return Boolean(state.readyByPeerId?.[state.seats.black] && state.readyByPeerId?.[state.seats.white]);
+        function allSeatedPlayersReady() {
+            if (!allRequiredSeatsOccupied()) return false;
+            return getActiveSeatKeys().every((seat) => state.readyByPeerId?.[state.seats[seat]]);
         }
 
         function resetReadyFlags() {
             if (!state) return;
-            if (state.seats.black) state.readyByPeerId[state.seats.black] = false;
-            if (state.seats.white) state.readyByPeerId[state.seats.white] = false;
+            getActiveSeatKeys().forEach((seat) => {
+                if (state.seats[seat]) state.readyByPeerId[state.seats[seat]] = false;
+            });
         }
 
         function clearBoardForNewMatch() {
@@ -3265,7 +3461,10 @@
             state.resultText = '';
             state.resultMessage = null;
             state.drawOfferByPeerId = '';
+            state.drawResponderPeerId = '';
             state.takebackOfferByPeerId = '';
+            state.takebackResponderPeerId = '';
+            state.takebackMoveCount = 0;
             state.connectionPause = null;
             state.clocks.remainingMsByPeerId = {};
             ensureSeatClockSettings();
@@ -3277,9 +3476,9 @@
             if (!state) return;
             ensureSeatColors();
             const nextColors = {};
-            ['black', 'white'].forEach((seat) => {
+            getActiveSeatKeys().forEach((seat) => {
                 const peerId = state.seats?.[seat];
-                const color = state.seatColors?.[seat];
+                const color = state.seatColors?.[getTeamForSeat(seat)];
                 if (peerId && (color === 'black' || color === 'white')) {
                     nextColors[peerId] = color;
                 }
@@ -3335,15 +3534,19 @@
 
         function getSeatForPeer(peerId) {
             if (!state || !peerId) return '';
-            if (state.seats.black === peerId) return 'black';
-            if (state.seats.white === peerId) return 'white';
-            return '';
+            return getActiveSeatKeys().find((seat) => state.seats?.[seat] === peerId) || '';
         }
 
         function getClockSettingForPeer(peerId) {
             ensureSeatClockSettings();
-            const seat = getSeatForPeer(peerId);
-            return state?.seatClockSettings?.[seat] || normalizeClockSetting();
+            const team = getTeamForPeer(peerId);
+            return state?.seatClockSettings?.[team] || normalizeClockSetting();
+        }
+
+        function getClockKeyForPeer(peerId) {
+            if (!state?.pairRenjuEnabled) return peerId;
+            const team = getTeamForPeer(peerId);
+            return team ? `team:${team}` : peerId;
         }
 
         function syncSeatClockToParticipant(seat) {
@@ -3351,7 +3554,9 @@
             ensureSeatClockSettings();
             const peerId = state.seats?.[seat];
             if (!peerId) return;
-            state.clocks.remainingMsByPeerId[peerId] = state.seatClockSettings[seat].baseSeconds * 1000;
+            const team = getTeamForSeat(seat);
+            const clockKey = state.pairRenjuEnabled ? `team:${team}` : peerId;
+            state.clocks.remainingMsByPeerId[clockKey] = state.seatClockSettings[team].baseSeconds * 1000;
         }
 
         function syncSeatClocksToParticipants() {
@@ -3368,10 +3573,37 @@
             rebuildColors();
         }
 
+        function setPairRenjuEnabled(enabled) {
+            if (!state || state.status === 'playing') return;
+            ensurePairRenjuState();
+            const nextEnabled = Boolean(enabled);
+            if (state.pairRenjuEnabled === nextEnabled) return;
+
+            if (!nextEnabled) {
+                for (const seat of ['blackBottom', 'whiteBottom']) {
+                    const peerId = state.seats[seat];
+                    const participant = getParticipantById(peerId);
+                    if (participant) participant.seat = 'spectator';
+                    if (peerId) state.readyByPeerId[peerId] = false;
+                    state.seats[seat] = null;
+                }
+            }
+
+            state.pairRenjuEnabled = nextEnabled;
+            clearBoardForNewMatch();
+            resetReadyFlags();
+            state.pairTurnOrder = [];
+            state.pairTurnIndex = 0;
+            state.phase = 'waiting-guest';
+            state.status = 'waiting';
+            rebuildColors();
+        }
+
         function ensureClockEntry(peerId) {
             if (!state || !peerId) return;
-            if (state.clocks.remainingMsByPeerId[peerId] == null) {
-                state.clocks.remainingMsByPeerId[peerId] = getClockSettingForPeer(peerId).baseSeconds * 1000;
+            const clockKey = getClockKeyForPeer(peerId);
+            if (state.clocks.remainingMsByPeerId[clockKey] == null) {
+                state.clocks.remainingMsByPeerId[clockKey] = getClockSettingForPeer(peerId).baseSeconds * 1000;
             }
             if (state.readyByPeerId[peerId] == null) {
                 state.readyByPeerId[peerId] = false;
@@ -3384,7 +3616,7 @@
             if (!participant) return false;
             if (state.status === 'playing') return false;
             if (nextSeat === 'spectator') return true;
-            if (nextSeat !== 'black' && nextSeat !== 'white') return false;
+            if (!getActiveSeatKeys().includes(nextSeat)) return false;
             const occupant = state.seats[nextSeat];
             return !occupant || occupant === peerId;
         }
@@ -3393,37 +3625,36 @@
             if (!state) return i18n('errUnconnected');
             const participant = getParticipantById(targetPeerId);
             if (!participant) return '';
-            if (!['black', 'white', 'spectator'].includes(nextSeat)) return i18n('errInvalidSeat');
+            if (nextSeat !== 'spectator' && !getActiveSeatKeys().includes(nextSeat)) return i18n('errInvalidSeat');
 
             const currentSeat = participant.seat || 'spectator';
             if (currentSeat === nextSeat) return '';
-            if (nextSeat === 'black' || nextSeat === 'white') {
+            if (isPlayingSeat(nextSeat)) {
                 const occupantPeerId = state.seats[nextSeat];
                 if (occupantPeerId && occupantPeerId !== targetPeerId) return i18n('errSeatOccupied');
             }
 
-            const beforeSeatedIds = [state.seats.black, state.seats.white].filter(Boolean);
-            if (currentSeat === 'black') state.seats.black = null;
-            if (currentSeat === 'white') state.seats.white = null;
+            const beforeSeatedIds = getActiveSeatKeys().map((seat) => state.seats[seat]).filter(Boolean);
+            if (isPlayingSeat(currentSeat)) state.seats[currentSeat] = null;
             state.readyByPeerId[targetPeerId] = false;
 
-            if (nextSeat === 'black' || nextSeat === 'white') {
+            if (isPlayingSeat(nextSeat)) {
                 state.seats[nextSeat] = targetPeerId;
             }
 
             participant.seat = nextSeat;
             rebuildColors();
-            if (nextSeat === 'black' || nextSeat === 'white') {
+            if (isPlayingSeat(nextSeat)) {
                 syncSeatClockToParticipant(nextSeat);
             }
             ensureClockEntry(targetPeerId);
-            const afterSeatedIds = [state.seats.black, state.seats.white].filter(Boolean);
+            const afterSeatedIds = getActiveSeatKeys().map((seat) => state.seats[seat]).filter(Boolean);
             const seatingChanged = beforeSeatedIds.join(':') !== afterSeatedIds.join(':');
 
             if (
                 state.status === 'playing'
                 && nextSeat === 'spectator'
-                && (currentSeat === 'black' || currentSeat === 'white')
+                && isPlayingSeat(currentSeat)
             ) {
                 finishGame('', null, messageSpec('msgAgreedEndLog'));
                 return '';
@@ -3434,7 +3665,7 @@
                 return '';
             }
 
-            if (!bothPlayersReady()) {
+            if (!allRequiredSeatsOccupied()) {
                 state.phase = 'waiting-guest';
                 state.status = 'waiting';
                 stopClock();
@@ -3472,7 +3703,7 @@
             if (!state || !peerId) return false;
             const participant = getParticipantById(peerId);
             if (!participant) return false;
-            const wasSeated = participant.seat === 'black' || participant.seat === 'white';
+            const wasSeated = isSeatedParticipant(participant);
             if (!wasSeated || state.status !== 'playing' || state.moves.length === 0) return false;
             if (participant.disconnectedAt) return true;
 
@@ -3513,9 +3744,8 @@
             if (!state || !peerId) return;
             const participant = getParticipantById(peerId);
             if (!participant) return;
-            const wasSeated = participant.seat === 'black' || participant.seat === 'white';
-            if (participant.seat === 'black') state.seats.black = null;
-            if (participant.seat === 'white') state.seats.white = null;
+            const wasSeated = isSeatedParticipant(participant);
+            if (isPlayingSeat(participant.seat)) state.seats[participant.seat] = null;
             delete state.participantsById[peerId];
             delete state.colorsByPeerId[peerId];
             delete state.clocks.remainingMsByPeerId[peerId];
@@ -3529,7 +3759,7 @@
                 return;
             }
 
-            if (!bothPlayersReady()) {
+            if (!allRequiredSeatsOccupied()) {
                 state.phase = 'waiting-guest';
                 state.status = 'waiting';
                 stopClock();
@@ -3782,7 +4012,7 @@
 
             const lostHostId = (state && state.hostPeerId) || roomId;
             const lostHost = getParticipantById(lostHostId);
-            const isHostSeated = Boolean(lostHost && (lostHost.seat === 'black' || lostHost.seat === 'white'));
+            const isHostSeated = isSeatedParticipant(lostHost);
             const shouldPreserveHost = Boolean(
                 lostHost && isHostSeated && state.status === 'playing' && (state.moves || []).length > 0
             );
@@ -3826,8 +4056,10 @@
 
         function getDisplayRemainingMs(peerId) {
             if (!state || !peerId) return 0;
-            const base = state.clocks.remainingMsByPeerId[peerId] ?? state.config.baseSeconds * 1000;
-            if (state.status !== 'playing' || state.clocks.activePeerId !== peerId || !state.clocks.activeStartedAt) {
+            const clockKey = getClockKeyForPeer(peerId);
+            const base = state.clocks.remainingMsByPeerId[clockKey] ?? state.config.baseSeconds * 1000;
+            const sameActiveClock = getClockKeyForPeer(state.clocks.activePeerId) === clockKey;
+            if (state.status !== 'playing' || !sameActiveClock || !state.clocks.activeStartedAt) {
                 return base;
             }
             return Math.max(0, base - (Date.now() - state.clocks.activeStartedAt));
@@ -3839,9 +4071,10 @@
             const startedAt = state.clocks.activeStartedAt;
             if (!activePeerId || !startedAt) return;
             const elapsed = Math.max(0, timestamp - startedAt);
-            state.clocks.remainingMsByPeerId[activePeerId] = Math.max(
+            const clockKey = getClockKeyForPeer(activePeerId);
+            state.clocks.remainingMsByPeerId[clockKey] = Math.max(
                 0,
-                (state.clocks.remainingMsByPeerId[activePeerId] ?? 0) - elapsed
+                (state.clocks.remainingMsByPeerId[clockKey] ?? 0) - elapsed
             );
             state.clocks.activeStartedAt = timestamp;
         }
@@ -3865,13 +4098,14 @@
         function grantIncrement(peerId) {
             if (!state || !peerId) return;
             const increment = getClockSettingForPeer(peerId).incrementSeconds * 1000;
-            state.clocks.remainingMsByPeerId[peerId] = (state.clocks.remainingMsByPeerId[peerId] ?? 0) + increment;
+            const clockKey = getClockKeyForPeer(peerId);
+            state.clocks.remainingMsByPeerId[clockKey] = (state.clocks.remainingMsByPeerId[clockKey] ?? 0) + increment;
         }
 
         function grantIncrementIfTurnPasses(actorPeerId, previousActorPeerId) {
             if (!state || !actorPeerId || actorPeerId !== previousActorPeerId) return;
             const nextActorPeerId = phaseDescriptor().actorPeerId;
-            if (nextActorPeerId && nextActorPeerId !== actorPeerId) {
+            if (nextActorPeerId && getClockKeyForPeer(nextActorPeerId) !== getClockKeyForPeer(actorPeerId)) {
                 grantIncrement(actorPeerId);
             }
         }
@@ -3891,7 +4125,7 @@
             }
         }
 
-        function phaseDescriptor() {
+        function phaseDescriptorBase() {
             if (!state) {
                 return {
                     label: '',
@@ -3973,6 +4207,18 @@
             }
         }
 
+        function phaseDescriptor() {
+            const descriptor = phaseDescriptorBase();
+            if (
+                state?.pairRenjuEnabled &&
+                state.status === 'playing' &&
+                descriptor.allowBoardAction
+            ) {
+                descriptor.actorPeerId = getPairTurnActor();
+            }
+            return descriptor;
+        }
+
         function setPhase(nextPhase, timestamp = Date.now()) {
             if (!state) return;
             state.phase = nextPhase;
@@ -3996,9 +4242,10 @@
         }
 
         function maybeStartMatch() {
-            if (!state || !['waiting-guest', 'finished'].includes(state.phase) || !bothPlayersReady() || !seatedPlayersMarkedReady()) return;
+            if (!state || !['waiting-guest', 'finished'].includes(state.phase) || !allRequiredSeatsOccupied() || !allSeatedPlayersReady()) return;
             clearBoardForNewMatch();
             resetReadyFlags();
+            initializePairTurnOrder();
             setPhase('opening-move-1');
         }
 
@@ -4093,7 +4340,10 @@
                 : null;
             state.resultText = renderMessageSpec(state.resultMessage, resultMessage);
             state.drawOfferByPeerId = '';
+            state.drawResponderPeerId = '';
             state.takebackOfferByPeerId = '';
+            state.takebackResponderPeerId = '';
+            state.takebackMoveCount = 0;
             state.connectionPause = null;
             if (state.opening) state.opening.offeredMoves = [];
             if (logMessage) {
@@ -4112,7 +4362,7 @@
         function setReadyState(peerId, ready) {
             if (!state || !peerId) return i18n('errNotReadyState');
             const participant = getParticipantById(peerId);
-            if (!participant || (participant.seat !== 'black' && participant.seat !== 'white')) {
+            if (!isSeatedParticipant(participant)) {
                 return i18n('errReadyPlayerOnly');
             }
             if (state.status === 'playing') {
@@ -4129,6 +4379,7 @@
             }
             if (state?.drawOfferByPeerId && state.drawOfferByPeerId !== peerId) {
                 state.drawOfferByPeerId = '';
+                state.drawResponderPeerId = '';
             }
             const originalPhase = state?.phase || '';
             const implicitPhase = getImplicitMovePhase(originalPhase);
@@ -4162,8 +4413,16 @@
             
             const color = getColorForPeer(peerId);
             const moveNumber = state.moves.length + 1;
-            state.moves.push({ x, y, color, peerId, number: moveNumber });
+            state.moves.push({
+                x,
+                y,
+                color,
+                peerId,
+                number: moveNumber,
+                ...(state.pairRenjuEnabled ? { pairTurnIndex: state.pairTurnIndex } : {}),
+            });
             grantIncrement(peerId);
+            advancePairTurn();
 
             switch (state.phase) {
                 case 'opening-move-1': setPhase('swap-after-1', timestamp); break;
@@ -4189,6 +4448,7 @@
             if (shouldSwap) {
                 swapColors();
             }
+            advancePairTurn();
 
             if (state.phase === 'swap-after-1') setPhase('opening-move-2', timestamp);
             if (state.phase === 'swap-after-2') setPhase('opening-move-3', timestamp);
@@ -4224,6 +4484,7 @@
             state.opening.offeredMoves.push({ x, y });
             
             if (state.opening.offeredMoves.length >= 10) {
+                advancePairTurn();
                 setPhase('select-offer', timestamp);
             } else {
                 setPhase('offering-choice2', timestamp);
@@ -4234,6 +4495,7 @@
 
         function selectOfferedMove(peerId, x, y, timestamp = Date.now()) {
             const descriptor = phaseDescriptor();
+            const previousActorPeerId = descriptor.actorPeerId;
             if (state?.phase !== 'select-offer') return i18n('errNotSelectPhase');
             if (peerId !== descriptor.actorPeerId) return i18n('errOnlyWhiteSelect');
             const selected = state.opening.offeredMoves.find((move) => move.x === x && move.y === y);
@@ -4242,27 +4504,42 @@
             applyElapsedTime(timestamp);
             const blackPeerId = getBlackPeerId();
             const moveNumber = state.moves.length + 1;
-            state.moves.push({ x: selected.x, y: selected.y, color: 'black', peerId: blackPeerId, number: moveNumber, offered: true });
+            state.moves.push({
+                x: selected.x,
+                y: selected.y,
+                color: 'black',
+                peerId: blackPeerId,
+                number: moveNumber,
+                offered: true,
+                ...(state.pairRenjuEnabled ? { pairTurnIndex: state.pairTurnIndex } : {}),
+            });
             state.opening.offeredMoves = [];
-            
             setPhase('opening-move-6-choice2', timestamp);
+            grantIncrementIfTurnPasses(peerId, previousActorPeerId);
             return '';
         }
 
         function getDrawRequestError(peerId) {
             if (!state || state.status !== 'playing') return i18n('errDrawPlayingOnly');
             const participant = getParticipantById(peerId);
-            if (!participant || (participant.seat !== 'black' && participant.seat !== 'white')) {
+            if (!isSeatedParticipant(participant)) {
                 return i18n('errDrawPlayerOnly');
             }
             const descriptor = phaseDescriptor();
-            if (descriptor.actorPeerId === peerId) {
+            if (
+                state.pairRenjuEnabled
+                    ? getTeamForPeer(descriptor.actorPeerId) === getTeamForPeer(peerId)
+                    : descriptor.actorPeerId === peerId
+            ) {
                 return i18n('errDrawNotYourTurn');
             }
 
-            const opponentPeerId = getOpponentPeerId(peerId);
+            const opponentPeerId = state.pairRenjuEnabled ? descriptor.actorPeerId : getOpponentPeerId(peerId);
             if (!opponentPeerId) return i18n('errDrawNoOpponent');
 
+            if (state.pairRenjuEnabled && state.drawOfferByPeerId) {
+                return i18n('errDrawAlready');
+            }
             if (state.drawOfferByPeerId === peerId) {
                 return i18n('errDrawAlready');
             }
@@ -4272,7 +4549,7 @@
         function offerDraw(peerId) {
             const requestError = getDrawRequestError(peerId);
             if (requestError) return requestError;
-            const opponentPeerId = getOpponentPeerId(peerId);
+            const opponentPeerId = state.pairRenjuEnabled ? phaseDescriptor().actorPeerId : getOpponentPeerId(peerId);
 
             if (state.drawOfferByPeerId === opponentPeerId) {
                 finishGame('', messageSpec('msgDraw'), messageSpec('msgDrawLog'));
@@ -4280,6 +4557,7 @@
             }
 
             state.drawOfferByPeerId = peerId;
+            state.drawResponderPeerId = opponentPeerId;
             return '';
         }
 
@@ -4287,7 +4565,7 @@
             if (!state || state.status !== 'playing') return i18n('errDrawCannotRespond');
             const offerPeerId = state.drawOfferByPeerId;
             if (!offerPeerId) return i18n('errDrawNoOffer');
-            const opponentPeerId = getOpponentPeerId(offerPeerId);
+            const opponentPeerId = state.drawResponderPeerId || getOpponentPeerId(offerPeerId);
             if (peerId !== opponentPeerId) return i18n('errDrawOnlyOpponentRespond');
 
             if (accept) {
@@ -4296,13 +4574,14 @@
             }
 
             state.drawOfferByPeerId = '';
+            state.drawResponderPeerId = '';
             return '';
         }
 
         function getTakebackRequestError(peerId) {
             if (!state || state.status !== 'playing') return i18n('errTakebackPlayingOnly');
             const participant = getParticipantById(peerId);
-            if (!participant || (participant.seat !== 'black' && participant.seat !== 'white')) {
+            if (!isSeatedParticipant(participant)) {
                 return i18n('errTakebackPlayerOnly');
             }
             if ((state.moves || []).length <= 6) return i18n('errTakebackTooEarly');
@@ -4316,18 +4595,49 @@
             const requestError = getTakebackRequestError(peerId);
             if (requestError) return requestError;
             state.takebackOfferByPeerId = peerId;
+            if (state.pairRenjuEnabled) {
+                const activePeerId = phaseDescriptor().actorPeerId;
+                const proposerTeam = getTeamForPeer(peerId);
+                const activeTeam = getTeamForPeer(activePeerId);
+                const isOwnTeamTurn = proposerTeam === activeTeam;
+                state.takebackMoveCount = isOwnTeamTurn ? 2 : 1;
+                if (isOwnTeamTurn) {
+                    const opponentTeam = getOpponentTeam(proposerTeam);
+                    const lastOpponentMove = [...(state.moves || [])]
+                        .reverse()
+                        .find((move) => getTeamForPeer(move.peerId) === opponentTeam);
+                    state.takebackResponderPeerId = lastOpponentMove?.peerId || '';
+                } else {
+                    state.takebackResponderPeerId = activePeerId;
+                }
+            } else {
+                state.takebackMoveCount = 0;
+                state.takebackResponderPeerId = getOpponentPeerId(peerId);
+            }
             return '';
         }
 
         function applyTakeback(peerId, timestamp = Date.now()) {
             if (!state || !state.moves?.length) return;
             applyElapsedTime(timestamp);
-            do {
-                state.moves.pop();
-            } while (state.moves.length && state.moves[state.moves.length - 1].peerId === peerId);
+            if (state.pairRenjuEnabled) {
+                const count = Math.min(state.takebackMoveCount || 1, state.moves.length);
+                const firstRemovedMove = state.moves[state.moves.length - count];
+                state.moves.splice(state.moves.length - count, count);
+                if (Number.isInteger(firstRemovedMove?.pairTurnIndex)) {
+                    state.pairTurnIndex = firstRemovedMove.pairTurnIndex;
+                }
+            } else {
+                do {
+                    state.moves.pop();
+                } while (state.moves.length && state.moves[state.moves.length - 1].peerId === peerId);
+            }
             state.opening.offeredMoves = [];
             state.drawOfferByPeerId = '';
+            state.drawResponderPeerId = '';
             state.takebackOfferByPeerId = '';
+            state.takebackResponderPeerId = '';
+            state.takebackMoveCount = 0;
             displayMoveCount = -1;
             setPhase('regular', timestamp);
         }
@@ -4336,10 +4646,12 @@
             if (!state || state.status !== 'playing') return i18n('errTakebackCannotRespond');
             const offerPeerId = state.takebackOfferByPeerId;
             if (!offerPeerId) return i18n('errTakebackNoOffer');
-            const opponentPeerId = getOpponentPeerId(offerPeerId);
+            const opponentPeerId = state.takebackResponderPeerId || getOpponentPeerId(offerPeerId);
             if (peerId !== opponentPeerId) return i18n('errTakebackOnlyOpponentRespond');
             if (!accept) {
                 state.takebackOfferByPeerId = '';
+                state.takebackResponderPeerId = '';
+                state.takebackMoveCount = 0;
                 return '';
             }
             applyTakeback(offerPeerId);
@@ -4349,8 +4661,12 @@
         function resignGame(peerId) {
             if (!state || state.status !== 'playing') return i18n('errResignPlayingOnly');
             const participant = getParticipantById(peerId);
-            if (!participant || (participant.seat !== 'black' && participant.seat !== 'white')) {
+            if (!isSeatedParticipant(participant)) {
                 return i18n('errResignPlayerOnly');
+            }
+            if (state.pairRenjuEnabled) {
+                finishGame('', null, messageSpec('msgAgreedEndLog'));
+                return '';
             }
             const opponentPeerId = getOpponentPeerId(peerId);
             finishGame(opponentPeerId, messageSpec('msgWin', getPeerName(opponentPeerId)), messageSpec('msgAgreedEndLog'));
@@ -4369,7 +4685,7 @@
 
         function isSeatedPlayerId(peerId) {
             const participant = getParticipantById(peerId);
-            return Boolean(participant && (participant.seat === 'black' || participant.seat === 'white'));
+            return isSeatedParticipant(participant);
         }
 
         function isRemoteActionNotificationKind(kind) {
@@ -4384,6 +4700,12 @@
         }
 
         function shouldNotifyRemoteAction(actorPeerId, kind) {
+            if (state?.pairRenjuEnabled && kind === 'draw') {
+                return localPeerId === state.drawResponderPeerId && actorPeerId !== localPeerId;
+            }
+            if (state?.pairRenjuEnabled && kind === 'takeback') {
+                return localPeerId === state.takebackResponderPeerId && actorPeerId !== localPeerId;
+            }
             return Boolean(
                 isRemoteActionNotificationKind(kind) &&
                 actorPeerId &&
@@ -4426,6 +4748,15 @@
                 } else {
                     swapSeatColors();
                     resetReadyFlags();
+                }
+            }
+            if (!error && action.kind === 'pair-renju') {
+                if (peerId !== state.hostPeerId) {
+                    error = i18n('errUnconnected');
+                } else if (state.status === 'playing') {
+                    error = i18n('errCannotSwap');
+                } else {
+                    setPairRenjuEnabled(Boolean(action.enabled));
                 }
             }
             if (!error && action.kind === 'offer') error = offerMove(peerId, action.x, action.y);
@@ -4542,7 +4873,7 @@
         function canLocalResign() {
             if (!state || state.status !== 'playing') return false;
             const localParticipant = getParticipantById(localPeerId);
-            return Boolean(localParticipant && (localParticipant.seat === 'black' || localParticipant.seat === 'white'));
+            return isSeatedParticipant(localParticipant);
         }
 
         function openResignConfirm() {
@@ -4585,7 +4916,12 @@
                 resultText: state.resultText,
                 resultMessage: state.resultMessage || null,
                 drawOfferByPeerId: state.drawOfferByPeerId,
+                drawResponderPeerId: state.drawResponderPeerId,
                 takebackOfferByPeerId: state.takebackOfferByPeerId,
+                takebackResponderPeerId: state.takebackResponderPeerId,
+                takebackMoveCount: state.takebackMoveCount,
+                pairTurnOrder: state.pairTurnOrder,
+                pairTurnIndex: state.pairTurnIndex,
                 opening: state.opening,
                 clocks: state.clocks,
                 readyByPeerId: state.readyByPeerId,
@@ -4609,7 +4945,12 @@
                 resultText: state.resultText,
                 resultMessage: state.resultMessage || null,
                 drawOfferByPeerId: state.drawOfferByPeerId,
+                drawResponderPeerId: state.drawResponderPeerId,
                 takebackOfferByPeerId: state.takebackOfferByPeerId,
+                takebackResponderPeerId: state.takebackResponderPeerId,
+                takebackMoveCount: state.takebackMoveCount,
+                pairTurnOrder: state.pairTurnOrder,
+                pairTurnIndex: state.pairTurnIndex,
                 opening: state.opening,
                 clocks: state.clocks,
                 readyByPeerId: state.readyByPeerId,
@@ -4707,7 +5048,12 @@
             state.resultMessage = event.resultMessage || null;
             state.resultText = renderMessageSpec(state.resultMessage, event.resultText);
             state.drawOfferByPeerId = event.drawOfferByPeerId;
+            state.drawResponderPeerId = event.drawResponderPeerId || '';
             state.takebackOfferByPeerId = event.takebackOfferByPeerId || '';
+            state.takebackResponderPeerId = event.takebackResponderPeerId || '';
+            state.takebackMoveCount = event.takebackMoveCount || 0;
+            state.pairTurnOrder = event.pairTurnOrder || state.pairTurnOrder || [];
+            state.pairTurnIndex = event.pairTurnIndex ?? state.pairTurnIndex ?? 0;
             state.opening = event.opening;
             state.clocks = event.clocks;
             state.readyByPeerId = event.readyByPeerId;
@@ -4745,7 +5091,12 @@
             state.resultMessage = event.resultMessage || null;
             state.resultText = renderMessageSpec(state.resultMessage, event.resultText);
             state.drawOfferByPeerId = event.drawOfferByPeerId || '';
+            state.drawResponderPeerId = event.drawResponderPeerId || '';
             state.takebackOfferByPeerId = event.takebackOfferByPeerId || '';
+            state.takebackResponderPeerId = event.takebackResponderPeerId || '';
+            state.takebackMoveCount = event.takebackMoveCount || 0;
+            state.pairTurnOrder = event.pairTurnOrder || state.pairTurnOrder || [];
+            state.pairTurnIndex = event.pairTurnIndex ?? state.pairTurnIndex ?? 0;
             state.opening = event.opening;
             state.clocks = event.clocks;
             state.readyByPeerId = event.readyByPeerId;
@@ -4987,8 +5338,8 @@
                 offerPeerId &&
                 state.status === 'playing' &&
                 localParticipant &&
-                (localParticipant.seat === 'black' || localParticipant.seat === 'white') &&
-                localPeerId !== offerPeerId
+                isSeatedParticipant(localParticipant) &&
+                localPeerId === (state.drawResponderPeerId || getOpponentPeerId(offerPeerId))
             );
             elements.drawConfirm.hidden = !isResponder;
             if (isResponder) updateConfirmDialogPosition();
@@ -5005,8 +5356,8 @@
                 offerPeerId &&
                 state.status === 'playing' &&
                 localParticipant &&
-                (localParticipant.seat === 'black' || localParticipant.seat === 'white') &&
-                localPeerId !== offerPeerId
+                isSeatedParticipant(localParticipant) &&
+                localPeerId === (state.takebackResponderPeerId || getOpponentPeerId(offerPeerId))
             );
             elements.takebackConfirm.hidden = !isResponder;
             if (isResponder) updateConfirmDialogPosition();
@@ -5242,7 +5593,7 @@
                 if (message.type === 'bye' && localMode === 'host') {
                     const participant = getParticipantById(connection.peer);
                     if (participant) {
-                        const wasSeated = participant.seat === 'black' || participant.seat === 'white';
+                        const wasSeated = isSeatedParticipant(participant);
                         const isPlaying = state && state.status === 'playing' && (state.moves || []).length > 0;
                         if (!preserveDisconnectedParticipant(connection.peer)) {
                             if (wasSeated && isPlaying) {
@@ -5271,6 +5622,7 @@
                         return;
                     }
                     state = message.state;
+                    ensurePairRenjuState();
                     refreshLocalizedResultText();
                     persistRoomStateSnapshot();
                     clearPendingMove();
@@ -5338,7 +5690,7 @@
                     }
                     const participant = getParticipantById(connection.peer);
                     if (participant) {
-                        const wasSeated = participant.seat === 'black' || participant.seat === 'white';
+                        const wasSeated = isSeatedParticipant(participant);
                         const isPlaying = state && state.status === 'playing' && (state.moves || []).length > 0;
                         if (!preserveDisconnectedParticipant(connection.peer)) {
                             if (wasSeated && isPlaying) {
@@ -5809,12 +6161,14 @@
                 return;
             }
 
-            const blackIdentity = elements.blackPlayerName.closest('.player-identity');
-            const whiteIdentity = elements.whitePlayerName.closest('.player-identity');
-            const availableWidth = Math.min(
-                blackIdentity.clientWidth,
-                whiteIdentity.clientWidth
-            );
+            const identities = [
+                elements.blackPlayerName,
+                elements.whitePlayerName,
+                ...(state?.pairRenjuEnabled
+                    ? [elements.blackBottomPlayerName, elements.whiteBottomPlayerName]
+                    : []),
+            ].map((element) => element.closest('.player-identity'));
+            const availableWidth = Math.min(...identities.map((identity) => identity.clientWidth));
             if (!availableWidth) return;
 
             const context = document.createElement('canvas').getContext('2d');
@@ -5832,122 +6186,132 @@
         }
 
         function renderPlayers() {
-            if (!state) {
-                elements.blackPlayerName.textContent = i18n('playerNotJoined');
-                elements.whitePlayerName.textContent = i18n('playerNotJoined');
-                elements.blackPlayerName.classList.remove('host-name');
-                elements.whitePlayerName.classList.remove('host-name');
-                elements.blackPlayerStatus.textContent = '';
-                elements.whitePlayerStatus.textContent = '';
-                elements.blackPlayerStatus.hidden = true;
-                elements.whitePlayerStatus.hidden = true;
-                elements.blackPlayerTimer.textContent = '';
-                elements.whitePlayerTimer.textContent = '';
-                [elements.blackReadyWrap, elements.whiteReadyWrap].forEach((wrap) => {
-                    wrap.innerHTML = '';
-                });
-                elements.blackPlayerCard.classList.remove('active');
-                elements.whitePlayerCard.classList.remove('active');
-                elements.blackPlayerCard.classList.remove('disconnected');
-                elements.whitePlayerCard.classList.remove('disconnected');
-                elements.blackPlayerCard.classList.remove('seat-action');
-                elements.whitePlayerCard.classList.remove('seat-action');
-                elements.spectatorCard.classList.remove('seat-action');
-                [elements.blackPlayerCard, elements.whitePlayerCard, elements.spectatorCard].forEach((element) => {
-                    element.removeAttribute('role');
-                    element.removeAttribute('tabindex');
-                    element.removeAttribute('aria-label');
-                });
-                scheduleMobilePlayerNameSize();
-                return;
-            }
-
-            const blackParticipant = getSeatOccupant('black');
-            const whiteParticipant = getSeatOccupant('white');
-            const blackPeerId = blackParticipant?.id || '';
-            const whitePeerId = whiteParticipant?.id || '';
-            const activePeerId = state.clocks.activePeerId;
+            const pairEnabled = Boolean(state?.pairRenjuEnabled);
+            elements.blackPlayerCard.parentElement.classList.toggle('pair-renju', pairEnabled);
+            const seatViews = [
+                { seat: 'black', slot: elements.blackPlayerSlot, name: elements.blackPlayerName, status: elements.blackPlayerStatus, ready: elements.blackReadyWrap },
+                { seat: 'white', slot: elements.whitePlayerSlot, name: elements.whitePlayerName, status: elements.whitePlayerStatus, ready: elements.whiteReadyWrap },
+                { seat: 'blackBottom', slot: elements.blackBottomPlayerSlot, name: elements.blackBottomPlayerName, status: elements.blackBottomPlayerStatus, ready: elements.blackBottomReadyWrap },
+                { seat: 'whiteBottom', slot: elements.whiteBottomPlayerSlot, name: elements.whiteBottomPlayerName, status: elements.whiteBottomPlayerStatus, ready: elements.whiteBottomReadyWrap },
+            ];
+            const activePeerId = state?.clocks?.activePeerId || '';
 
             function formatDisconnectTime(seconds) {
                 const minutes = Math.floor(seconds / 60);
                 return `${minutes}:${String(seconds % 60).padStart(2, '0')}`;
             }
 
-            function renderParticipant(cardElement, identityElement, statusElement, participant) {
-                identityElement.textContent = participant ? participant.name : i18n('playerNotJoined');
-                identityElement.classList.toggle('host-name', isHostParticipant(participant));
+            function renderParticipant(view, participant) {
+                view.name.textContent = participant ? participant.name : i18n('playerNotJoined');
+                view.name.classList.toggle('host-name', isHostParticipant(participant));
                 const disconnected = isParticipantDisconnected(participant);
-                statusElement.textContent = disconnected
+                view.status.textContent = disconnected
                     ? i18n(
                         'playerDisconnected',
                         formatDisconnectTime(getDisconnectedRemainingSeconds(participant))
                     )
                     : '';
-                statusElement.hidden = !disconnected;
-                cardElement.classList.toggle('disconnected', disconnected);
+                view.status.hidden = !disconnected;
+                view.slot.classList.toggle('disconnected', disconnected);
+                view.slot.classList.toggle('active', Boolean(participant && participant.id === activePeerId && state?.status === 'playing'));
+                renderReadyMark(view.ready, participant);
             }
 
-            renderParticipant(
-                elements.blackPlayerCard,
-                elements.blackPlayerName,
-                elements.blackPlayerStatus,
-                blackParticipant
+            seatViews.forEach((view) => renderParticipant(view, state ? getSeatOccupant(view.seat) : null));
+            elements.blackPlayerCard.classList.toggle(
+                'disconnected',
+                getTeamPeerIds('black').some((peerId) => isParticipantDisconnected(getParticipantById(peerId)))
             );
-            renderParticipant(
-                elements.whitePlayerCard,
-                elements.whitePlayerName,
-                elements.whitePlayerStatus,
-                whiteParticipant
+            elements.whitePlayerCard.classList.toggle(
+                'disconnected',
+                getTeamPeerIds('white').some((peerId) => isParticipantDisconnected(getParticipantById(peerId)))
             );
+            const blackPeerId = getTeamPeerIds('black')[0] || '';
+            const whitePeerId = getTeamPeerIds('white')[0] || '';
             elements.blackPlayerTimer.textContent = blackPeerId ? formatTime(getDisplayRemainingMs(blackPeerId)) : '';
             elements.whitePlayerTimer.textContent = whitePeerId ? formatTime(getDisplayRemainingMs(whitePeerId)) : '';
 
-            ensureSeatColors();
-            const blackCardColor = state.seatColors.black;
-            const whiteCardColor = state.seatColors.white;
+            if (state) ensureSeatColors();
+            const blackCardColor = state?.seatColors?.black || 'black';
+            const whiteCardColor = state?.seatColors?.white || 'white';
             elements.blackPlayerCard.classList.toggle('black', blackCardColor === 'black');
             elements.blackPlayerCard.classList.toggle('white', blackCardColor === 'white');
             elements.whitePlayerCard.classList.toggle('black', whiteCardColor === 'black');
             elements.whitePlayerCard.classList.toggle('white', whiteCardColor === 'white');
-            elements.blackPlayerCard.classList.toggle('active', activePeerId === blackPeerId && state.status === 'playing');
-            elements.whitePlayerCard.classList.toggle('active', activePeerId === whitePeerId && state.status === 'playing');
-            renderReadyMark(elements.blackReadyWrap, blackParticipant);
-            renderReadyMark(elements.whiteReadyWrap, whiteParticipant);
+            elements.blackPlayerCard.classList.toggle(
+                'active',
+                Boolean(!pairEnabled && state?.status === 'playing' && getTeamForPeer(activePeerId) === 'black')
+            );
+            elements.whitePlayerCard.classList.toggle(
+                'active',
+                Boolean(!pairEnabled && state?.status === 'playing' && getTeamForPeer(activePeerId) === 'white')
+            );
 
             const localParticipant = getParticipantById(localPeerId);
-            const canUseBlackCard = state.status !== 'playing' && (!blackParticipant || blackPeerId === localPeerId);
-            const canUseWhiteCard = state.status !== 'playing' && (!whiteParticipant || whitePeerId === localPeerId);
-            const canUseSpectatorCard = state.status !== 'playing'
-                && localParticipant
-                && localParticipant.seat !== 'spectator';
-            [
-                [
-                    elements.blackPlayerCard,
-                    canUseBlackCard,
-                    blackParticipant
-                        ? i18n(state.readyByPeerId?.[localPeerId] ? 'readyAriaCancel' : 'readyAriaTitle')
-                        : i18n('seatLeftAria'),
-                ],
-                [
-                    elements.whitePlayerCard,
-                    canUseWhiteCard,
-                    whiteParticipant
-                        ? i18n(state.readyByPeerId?.[localPeerId] ? 'readyAriaCancel' : 'readyAriaTitle')
-                        : i18n('seatRightAria'),
-                ],
-                [elements.spectatorCard, canUseSpectatorCard, i18n('spectatorTitle')],
-            ].forEach(([element, enabled, label]) => {
-                element.classList.toggle('seat-action', Boolean(enabled));
+            seatViews.forEach((view) => {
+                const participant = state ? getSeatOccupant(view.seat) : null;
+                const enabled = Boolean(
+                    state &&
+                    isPlayingSeat(view.seat) &&
+                    state.status !== 'playing' &&
+                    pairEnabled &&
+                    (!participant || participant.id === localPeerId)
+                );
+                view.slot.classList.toggle('seat-action', enabled);
                 if (enabled) {
-                    element.setAttribute('role', 'button');
-                    element.setAttribute('tabindex', '0');
-                    if (label) element.setAttribute('aria-label', label);
+                    view.slot.setAttribute('role', 'button');
+                    view.slot.setAttribute('tabindex', '0');
+                    view.slot.setAttribute(
+                        'aria-label',
+                        participant
+                            ? i18n(state.readyByPeerId?.[localPeerId] ? 'readyAriaCancel' : 'readyAriaTitle')
+                            : i18n(getTeamForSeat(view.seat) === 'black' ? 'seatLeftAria' : 'seatRightAria')
+                    );
                 } else {
-                    element.removeAttribute('role');
-                    element.removeAttribute('tabindex');
-                    element.removeAttribute('aria-label');
+                    view.slot.removeAttribute('role');
+                    view.slot.removeAttribute('tabindex');
+                    view.slot.removeAttribute('aria-label');
                 }
             });
+
+            for (const [card, seat] of [[elements.blackPlayerCard, 'black'], [elements.whitePlayerCard, 'white']]) {
+                const participant = state ? getSeatOccupant(seat) : null;
+                const enabled = Boolean(
+                    state &&
+                    !pairEnabled &&
+                    state.status !== 'playing' &&
+                    (!participant || participant.id === localPeerId)
+                );
+                card.classList.toggle('seat-action', enabled);
+                if (enabled) {
+                    card.setAttribute('role', 'button');
+                    card.setAttribute('tabindex', '0');
+                    card.setAttribute(
+                        'aria-label',
+                        participant
+                            ? i18n(state.readyByPeerId?.[localPeerId] ? 'readyAriaCancel' : 'readyAriaTitle')
+                            : i18n(seat === 'black' ? 'seatLeftAria' : 'seatRightAria')
+                    );
+                } else {
+                    card.removeAttribute('role');
+                    card.removeAttribute('tabindex');
+                    card.removeAttribute('aria-label');
+                }
+            }
+
+            const canUseSpectatorCard = Boolean(state && state.status !== 'playing'
+                && localParticipant
+                && localParticipant.seat !== 'spectator');
+            elements.spectatorCard.classList.toggle('seat-action', canUseSpectatorCard);
+            if (canUseSpectatorCard) {
+                elements.spectatorCard.setAttribute('role', 'button');
+                elements.spectatorCard.setAttribute('tabindex', '0');
+                elements.spectatorCard.setAttribute('aria-label', i18n('spectatorTitle'));
+            } else {
+                elements.spectatorCard.removeAttribute('role');
+                elements.spectatorCard.removeAttribute('tabindex');
+                elements.spectatorCard.removeAttribute('aria-label');
+            }
             scheduleMobilePlayerNameSize();
         }
 
@@ -5989,15 +6353,18 @@
         function renderControls() {
             const localParticipant = getParticipantById(localPeerId);
             const isPlaying = Boolean(state && state.status === 'playing');
-            const canManageResult = Boolean(state && state.status === 'playing' && !hasDisconnectedSeatedPlayer() && localParticipant && (localParticipant.seat === 'black' || localParticipant.seat === 'white'));
+            const canManageResult = Boolean(state && state.status === 'playing' && !hasDisconnectedSeatedPlayer() && isSeatedParticipant(localParticipant));
             
             elements.menuSwapSeatColorsBtn.hidden = isPlaying;
             elements.menuTimeSettingsBtn.hidden = isPlaying;
+            elements.menuPairRenjuBtn.hidden = isPlaying;
             elements.menuResignBtn.hidden = !isPlaying;
             elements.menuDrawBtn.hidden = !isPlaying;
             elements.menuTakebackBtn.hidden = !isPlaying;
             elements.menuSwapSeatColorsBtn.disabled = localMode !== 'host';
             elements.menuTimeSettingsBtn.disabled = localMode !== 'host';
+            elements.menuPairRenjuBtn.disabled = localMode !== 'host';
+            elements.menuPairRenjuBtn.classList.toggle('active', Boolean(state?.pairRenjuEnabled));
             elements.menuMoveConfirmBtn.classList.toggle('active', moveConfirmEnabled);
             elements.menuDrawBtn.disabled = !canManageResult || Boolean(state?.drawOfferByPeerId);
             elements.menuResignBtn.disabled = !canManageResult;
@@ -6111,6 +6478,7 @@
         }
 
         function render() {
+            ensurePairRenjuState();
             updateNetworkHeartbeat();
             if (state) rebuildColors();
             setScreen(state || localMode !== 'idle' ? 'game' : 'lobby');
@@ -6137,11 +6505,11 @@
             if (!state) return;
 
             if (localMode === 'host' && state.status === 'playing') {
-                const expired = [state.seats.black, state.seats.white]
+                const expired = getActiveSeatKeys().map((seat) => state.seats[seat])
                     .map((peerId) => getParticipantById(peerId))
                     .find((participant) => isParticipantDisconnected(participant) && getDisconnectedRemainingSeconds(participant) <= 0);
                 if (expired) {
-                    const winnerId = getOpponentPeerId(expired.id);
+                    const winnerId = state.pairRenjuEnabled ? '' : getOpponentPeerId(expired.id);
                     finishGame(winnerId, messageSpec('msgDisconnectTimeout', expired.name), messageSpec('msgAgreedEndLog'));
                     broadcastState();
                     render();
@@ -6167,7 +6535,7 @@
                 if (remaining <= 0) {
                     applyElapsedTime();
                     const loserId = state.clocks.activePeerId;
-                    const winnerId = getOpponentPeerId(loserId);
+                    const winnerId = state.pairRenjuEnabled ? '' : getOpponentPeerId(loserId);
                     finishGame(winnerId, messageSpec('msgTimeout', getPeerName(loserId)), messageSpec('msgTimeoutLog'));
                     broadcastState();
                 } else {
@@ -6262,6 +6630,12 @@
         function swapSeatColorsFromMenu() {
             closeControlMenus();
             sendAction({ kind: 'swap-seat-colors' });
+        }
+
+        function togglePairRenjuFromMenu() {
+            closeControlMenus();
+            if (!state || localMode !== 'host' || state.status === 'playing') return;
+            sendAction({ kind: 'pair-renju', enabled: !state.pairRenjuEnabled });
         }
 
         function cycleLanguage() {
@@ -6375,8 +6749,20 @@
             });
         }
 
-        bindSeatSurface(elements.blackPlayerCard, () => handlePlayerCardClick('black'));
-        bindSeatSurface(elements.whitePlayerCard, () => handlePlayerCardClick('white'));
+        bindSeatSurface(elements.blackPlayerCard, () => {
+            if (!state?.pairRenjuEnabled) handlePlayerCardClick('black');
+        });
+        bindSeatSurface(elements.whitePlayerCard, () => {
+            if (!state?.pairRenjuEnabled) handlePlayerCardClick('white');
+        });
+        bindSeatSurface(elements.blackPlayerSlot, () => {
+            if (state?.pairRenjuEnabled) handlePlayerCardClick('black');
+        });
+        bindSeatSurface(elements.whitePlayerSlot, () => {
+            if (state?.pairRenjuEnabled) handlePlayerCardClick('white');
+        });
+        bindSeatSurface(elements.blackBottomPlayerSlot, () => handlePlayerCardClick('blackBottom'));
+        bindSeatSurface(elements.whiteBottomPlayerSlot, () => handlePlayerCardClick('whiteBottom'));
         bindSeatSurface(elements.spectatorCard, handleSpectatorCardClick);
         elements.timeHandicapInput.addEventListener('change', () => {
             syncTimeSettingsDialogMode();
@@ -6415,6 +6801,7 @@
         bindPointerPress(elements.menuTakebackBtn, requestTakebackFromMenu);
         bindPointerPress(elements.menuMoveConfirmBtn, toggleMoveConfirm);
         bindPointerPress(elements.menuSwapSeatColorsBtn, swapSeatColorsFromMenu);
+        bindPointerPress(elements.menuPairRenjuBtn, togglePairRenjuFromMenu);
         bindPointerPress(elements.menuTimeSettingsBtn, openTimeSettingsDialog);
         bindPointerPress(document.getElementById('langBtn'), cycleLanguage);
         bindPointerPress(document.getElementById('soundBtn'), toggleSound);
