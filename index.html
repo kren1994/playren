@@ -3123,7 +3123,11 @@
 
             state.reviewMoves = currentMoves;
             if (state.reviewBranchBaseCursor == null) {
-                state.reviewBranchBaseCursor = cursor;
+                const baseMoves = getReviewBaseMoves();
+                const isOnMainLine = baseMoves[cursor]?.x === x && baseMoves[cursor]?.y === y;
+                if (!isOnMainLine) {
+                    state.reviewBranchBaseCursor = cursor;
+                }
             }
             const nextColor = state.reviewMoves.length % 2 === 0 ? 'black' : 'white';
             state.reviewMoves.push({
