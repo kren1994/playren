@@ -544,6 +544,7 @@
             grid-template-columns: max-content max-content max-content;
             align-items: center;
             gap: 10px 12px;
+            position: relative;
         }
 
         .time-seat-grid.single {
@@ -562,6 +563,21 @@
         .time-seat-grid.single .time-increment-label,
         .time-seat-grid.single .time-increment-control {
             grid-row: 2;
+        }
+
+        .time-seat-divider {
+            position: absolute;
+            left: var(--time-divider-x, 50%);
+            top: 0;
+            bottom: 0;
+            width: 1px;
+            transform: translateX(-0.5px);
+            background: rgba(74, 54, 34, 0.14);
+            pointer-events: none;
+        }
+
+        .time-seat-grid.single .time-seat-divider {
+            display: none;
         }
 
         .time-seat-title {
@@ -1442,7 +1458,7 @@
                                 <div id="actionMenu" class="control-menu-popup" hidden>
                                     <button id="menuMoveConfirmBtn" class="control-menu-item" type="button">着手確認</button>
                                     <button id="menuSwapSeatColorsBtn" class="control-menu-item" type="button">色を交換</button>
-                                    <button id="menuTimeSettingsBtn" class="control-menu-item" type="button">持ち時間設定</button>
+                                    <button id="menuTimeSettingsBtn" class="control-menu-item" type="button">時間設定</button>
                                     <button id="menuResignBtn" class="control-menu-item" type="button">終局</button>
                                     <button id="menuDrawBtn" class="control-menu-item" type="button">満局提案</button>
                                     <button id="menuTakebackBtn" class="control-menu-item" type="button">待った</button>
@@ -1558,6 +1574,7 @@
                 <div id="timeSeatGrid" class="time-seat-grid">
                     <div id="uiTimeLeftLabel" class="time-seat-title">左</div>
                     <div id="uiTimeRightLabel" class="time-seat-title">右</div>
+                    <div class="time-seat-divider" aria-hidden="true"></div>
 
                     <label id="uiTimeLeftBaseLabel" class="time-row-label time-base-label" for="timeLeftBaseInput">持ち時間</label>
                     <div class="time-control-cell time-left-control time-base-control">
@@ -2309,7 +2326,7 @@
         };
 
         translations.ja.menuSwapSeatColors = '色を交換';
-        translations.ja.menuTimeSettings = '持ち時間設定';
+        translations.ja.menuTimeSettings = '時間設定';
         translations.ja.timeHandicap = '時間ハンデ';
         translations.ja.timeLeft = '左';
         translations.ja.timeRight = '右';
@@ -2422,6 +2439,7 @@
             
             refreshLocalizedResultText();
             render();
+            requestAnimationFrame(updateTimeSeatDividerPosition);
         }
 
         function setScreen(name) {
@@ -4806,10 +4824,29 @@
             elements.timeRightIncrementInput.value = String(state.seatClockSettings.white.incrementSeconds);
             syncTimeSettingsDialogMode();
             elements.timeSettingsDialog.hidden = false;
+            requestAnimationFrame(updateTimeSeatDividerPosition);
         }
 
         function closeTimeSettingsDialog() {
             elements.timeSettingsDialog.hidden = true;
+        }
+
+        function updateTimeSeatDividerPosition() {
+            if (elements.timeSettingsDialog.hidden || !elements.timeHandicapInput.checked) return;
+
+            const rightMinusButton = document.querySelector(
+                '.time-right-control.time-base-control .time-step-button[data-step="-1"]'
+            );
+            if (!rightMinusButton) return;
+
+            const textRange = document.createRange();
+            textRange.selectNodeContents(elements.uiTimeLeftMinute);
+            const leftMinuteRect = textRange.getBoundingClientRect();
+            const rightButtonRect = rightMinusButton.getBoundingClientRect();
+            const gridRect = elements.timeSeatGrid.getBoundingClientRect();
+            const dividerX = (leftMinuteRect.right + rightButtonRect.left) / 2 - gridRect.left;
+
+            elements.timeSeatGrid.style.setProperty('--time-divider-x', `${dividerX}px`);
         }
 
         function syncTimeSettingsDialogMode() {
@@ -6342,7 +6379,10 @@
         bindSeatSurface(elements.blackPlayerCard, () => handlePlayerCardClick('black'));
         bindSeatSurface(elements.whitePlayerCard, () => handlePlayerCardClick('white'));
         bindSeatSurface(elements.spectatorCard, handleSpectatorCardClick);
-        elements.timeHandicapInput.addEventListener('change', syncTimeSettingsDialogMode);
+        elements.timeHandicapInput.addEventListener('change', () => {
+            syncTimeSettingsDialogMode();
+            requestAnimationFrame(updateTimeSeatDividerPosition);
+        });
         elements.timeLeftBaseInput.addEventListener('input', syncTimeSettingsDialogMode);
         elements.timeLeftIncrementInput.addEventListener('input', syncTimeSettingsDialogMode);
         [
@@ -6395,6 +6435,7 @@
             cancelAnimationFrame(resizeFrame);
             resizeFrame = requestAnimationFrame(resizeBoard);
             scheduleMobilePlayerNameSize();
+            requestAnimationFrame(updateTimeSeatDividerPosition);
         });
 
         window.addEventListener('pagehide', () => {
