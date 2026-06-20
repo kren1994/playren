@@ -1456,7 +1456,6 @@
                                     </span>
                                 </button>
                                 <div id="actionMenu" class="control-menu-popup" hidden>
-                                    <button id="menuMoveConfirmBtn" class="control-menu-item" type="button">着手確認</button>
                                     <button id="menuSwapSeatColorsBtn" class="control-menu-item" type="button">色を交換</button>
                                     <button id="menuTimeSettingsBtn" class="control-menu-item" type="button">時間設定</button>
                                     <button id="menuResignBtn" class="control-menu-item" type="button">終局</button>
@@ -1497,6 +1496,7 @@
                                         </span>
                                     </button>
                                     <button id="soundBtn" class="control-menu-item active" type="button">効果音</button>
+                                    <button id="menuMoveConfirmBtn" class="control-menu-item" type="button">着手確認</button>
                                     <button id="coordsBtn" class="control-menu-item active" type="button">座標</button>
                                     <button id="themeBtn" class="control-menu-item board-theme-item" type="button" data-value="茶">盤面色</button>
                                     <button id="moveNumBtn" class="control-menu-item active" type="button">手数</button>
@@ -5991,7 +5991,6 @@
             const isPlaying = Boolean(state && state.status === 'playing');
             const canManageResult = Boolean(state && state.status === 'playing' && !hasDisconnectedSeatedPlayer() && localParticipant && (localParticipant.seat === 'black' || localParticipant.seat === 'white'));
             
-            elements.menuMoveConfirmBtn.hidden = isPlaying;
             elements.menuSwapSeatColorsBtn.hidden = isPlaying;
             elements.menuTimeSettingsBtn.hidden = isPlaying;
             elements.menuResignBtn.hidden = !isPlaying;
