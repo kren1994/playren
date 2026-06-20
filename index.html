@@ -614,15 +614,14 @@
             grid-template-columns: 30px 4em 30px auto;
             align-items: center;
             justify-content: start;
-            gap: 0;
+            column-gap: 3px;
         }
 
         .time-stepper input {
-            width: 4em;
-            max-width: 4em;
+            width: 100%;
+            max-width: none;
             min-height: 34px;
-            margin-left: 3px;
-            padding: 6px 6px 6px 7px;
+            padding: 6px 10px 6px 3px;
             border-radius: 10px;
             border: 1px solid rgba(74, 54, 34, 0.14);
             background: rgba(255, 255, 255, 0.9);
@@ -665,7 +664,7 @@
         }
 
         .time-unit {
-            margin-left: 9px;
+            margin-left: 6px;
             color: var(--muted);
             font-size: 12px;
             font-weight: 700;
@@ -742,8 +741,8 @@
             }
 
             .time-stepper input {
-                width: 3.6em;
-                max-width: 3.6em;
+                width: 100%;
+                max-width: none;
             }
 
             .time-step-button {
