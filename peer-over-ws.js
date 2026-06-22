@@ -2,7 +2,7 @@
     'use strict';
 
     const HEARTBEAT_INTERVAL_MS = 45 * 1000;
-    const PONG_TIMEOUT_MS = 10 * 1000;
+    const PONG_TIMEOUT_MS = 30 * 1000;
 
     function createEmitter() {
         const listeners = new Map();
