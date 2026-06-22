@@ -2,6 +2,7 @@
     'use strict';
 
     const HEARTBEAT_INTERVAL_MS = 45 * 1000;
+    const PONG_TIMEOUT_MS = 10 * 1000;
 
     function createEmitter() {
         const listeners = new Map();
@@ -103,6 +104,7 @@
             this._ready = false;
             this._heartbeatEnabled = false;
             this._heartbeatTimer = 0;
+            this._pongTimeoutTimer = 0;
 
             if (!this._roomId) {
                 queueMicrotask(() => {
@@ -214,13 +216,24 @@
             this._stopHeartbeat();
             this._heartbeatTimer = window.setInterval(() => {
                 this._send({ type: 'ping', timestamp: Date.now() });
+                this._pongTimeoutTimer = window.setTimeout(() => {
+                    this._pongTimeoutTimer = 0;
+                    if (this._socket && this._socket.readyState === 1) {
+                        try { this._socket.close(); } catch (error) { }
+                    }
+                }, PONG_TIMEOUT_MS);
             }, HEARTBEAT_INTERVAL_MS);
         }
 
         _stopHeartbeat() {
-            if (!this._heartbeatTimer) return;
-            window.clearInterval(this._heartbeatTimer);
-            this._heartbeatTimer = 0;
+            if (this._heartbeatTimer) {
+                window.clearInterval(this._heartbeatTimer);
+                this._heartbeatTimer = 0;
+            }
+            if (this._pongTimeoutTimer) {
+                window.clearTimeout(this._pongTimeoutTimer);
+                this._pongTimeoutTimer = 0;
+            }
         }
 
         _send(payload) {
@@ -253,6 +266,10 @@
             if (!message || typeof message !== 'object') return;
 
             if (message.type === 'pong') {
+                if (this._pongTimeoutTimer) {
+                    window.clearTimeout(this._pongTimeoutTimer);
+                    this._pongTimeoutTimer = 0;
+                }
                 return;
             }
 
