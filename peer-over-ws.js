@@ -2,7 +2,9 @@
     'use strict';
 
     const HEARTBEAT_INTERVAL_MS = 45 * 1000;
-    const PONG_TIMEOUT_MS = 30 * 1000;
+    const PONG_TIMEOUT_MS = 15 * 1000;
+    const HEARTBEAT_RETRY_DELAY_MS = 1000;
+    const MAX_MISSED_PONGS = 2;
 
     function createEmitter() {
         const listeners = new Map();
@@ -105,6 +107,8 @@
             this._heartbeatEnabled = false;
             this._heartbeatTimer = 0;
             this._pongTimeoutTimer = 0;
+            this._heartbeatRetryTimer = 0;
+            this._missedPongs = 0;
 
             if (!this._roomId) {
                 queueMicrotask(() => {
@@ -188,7 +192,7 @@
                 this._stopHeartbeat();
                 return;
             }
-            if (this._socket && this._socket.readyState === 1) {
+            if (this._socket && this._socket.readyState === WebSocket.OPEN) {
                 this._startHeartbeat();
             }
         }
@@ -199,7 +203,7 @@
             this.disconnected = true;
             this._stopHeartbeat();
             this._closeAllConnections();
-            if (this._socket && this._socket.readyState <= 1) {
+            if (this._socket && this._socket.readyState <= WebSocket.OPEN) {
                 try {
                     this._socket.close();
                 } catch (error) {
@@ -215,14 +219,50 @@
         _startHeartbeat() {
             this._stopHeartbeat();
             this._heartbeatTimer = window.setInterval(() => {
-                this._send({ type: 'ping', timestamp: Date.now() });
-                this._pongTimeoutTimer = window.setTimeout(() => {
-                    this._pongTimeoutTimer = 0;
-                    if (this._socket && this._socket.readyState === 1) {
-                        try { this._socket.close(); } catch (error) { }
-                    }
-                }, PONG_TIMEOUT_MS);
+                this._sendHeartbeatProbe();
             }, HEARTBEAT_INTERVAL_MS);
+        }
+
+        _sendHeartbeatProbe() {
+            if (!this._heartbeatEnabled || this.destroyed) return;
+            if (!this._socket || this._socket.readyState !== WebSocket.OPEN) return;
+            if (this._pongTimeoutTimer) return;
+
+            this._send({ type: 'ping', timestamp: Date.now() });
+            this._pongTimeoutTimer = window.setTimeout(() => {
+                this._handlePongTimeout();
+            }, PONG_TIMEOUT_MS);
+        }
+
+        _handlePongTimeout() {
+            this._pongTimeoutTimer = 0;
+            this._missedPongs += 1;
+
+            if (this._missedPongs >= MAX_MISSED_PONGS) {
+                if (this._socket && this._socket.readyState === WebSocket.OPEN) {
+                    try { this._socket.close(); } catch (error) { }
+                }
+                return;
+            }
+
+            this._heartbeatRetryTimer = window.setTimeout(() => {
+                this._heartbeatRetryTimer = 0;
+                this._sendHeartbeatProbe();
+            }, HEARTBEAT_RETRY_DELAY_MS);
+        }
+
+        _markHeartbeatAlive() {
+            this._missedPongs = 0;
+
+            if (this._pongTimeoutTimer) {
+                window.clearTimeout(this._pongTimeoutTimer);
+                this._pongTimeoutTimer = 0;
+            }
+
+            if (this._heartbeatRetryTimer) {
+                window.clearTimeout(this._heartbeatRetryTimer);
+                this._heartbeatRetryTimer = 0;
+            }
         }
 
         _stopHeartbeat() {
@@ -234,10 +274,15 @@
                 window.clearTimeout(this._pongTimeoutTimer);
                 this._pongTimeoutTimer = 0;
             }
+            if (this._heartbeatRetryTimer) {
+                window.clearTimeout(this._heartbeatRetryTimer);
+                this._heartbeatRetryTimer = 0;
+            }
+            this._missedPongs = 0;
         }
 
         _send(payload) {
-            if (!this._socket || this._socket.readyState !== 1) return;
+            if (!this._socket || this._socket.readyState !== WebSocket.OPEN) return;
             try {
                 this._socket.send(JSON.stringify(payload));
             } catch (error) {
@@ -265,11 +310,9 @@
             }
             if (!message || typeof message !== 'object') return;
 
+            this._markHeartbeatAlive();
+
             if (message.type === 'pong') {
-                if (this._pongTimeoutTimer) {
-                    window.clearTimeout(this._pongTimeoutTimer);
-                    this._pongTimeoutTimer = 0;
-                }
                 return;
             }
 
