@@ -6835,6 +6835,14 @@
         window.addEventListener('beforeunload', () => {
             notifyHostLeaving();
         });
+        document.addEventListener('visibilitychange', () => {
+            if (document.visibilityState !== 'visible') return;
+            if (localMode === 'guest' && (!hostConnection || !hostConnection.open)) {
+                scheduleGuestReconnect(0);
+            } else if (localMode === 'host' && (!peer || peer.disconnected || peer.destroyed)) {
+                attemptHostReconnect();
+            }
+        });
 
         window.setInterval(periodicClockWork, 250);
 
