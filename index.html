@@ -1850,6 +1850,7 @@
         let boardGeometry = null;
         let resizeFrame = 0;
         let lastClockBroadcastBucket = null;
+        let lastActivityAt = 0;
         let resignConfirmOpen = false;
         const guestConnections = new Map();
 
@@ -5634,6 +5635,7 @@
 
             connection.on('data', (message) => {
                 if (!message || typeof message !== 'object') return;
+                lastActivityAt = Date.now();
 
                 if (message.type === 'hello' && localMode === 'host') {
                     const nextName = sanitizeName(message.name || 'Player');
@@ -6582,7 +6584,10 @@
 
         function updateNetworkHeartbeat() {
             if (!peer || typeof peer.setHeartbeatEnabled !== 'function') return;
-            peer.setHeartbeatEnabled(Boolean(state && state.status === 'playing'));
+            const IDLE_HEARTBEAT_TIMEOUT_MS = 10 * 60 * 1000;
+            const isPlaying = Boolean(state && state.status === 'playing');
+            const isRecentlyActive = lastActivityAt > 0 && (Date.now() - lastActivityAt) < IDLE_HEARTBEAT_TIMEOUT_MS;
+            peer.setHeartbeatEnabled(Boolean(state) && (isPlaying || isRecentlyActive));
         }
 
         function periodicClockWork() {
