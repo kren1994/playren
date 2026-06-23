@@ -5561,7 +5561,7 @@
                     const token = String(message.token || connection.metadata?.token || '');
                     const nameMatchedParticipant = findParticipantForReconnect(nextName, token, connection.peer);
                     const existing = getParticipantById(connection.peer);
-                    if (nameMatchedParticipant && isHostParticipant(nameMatchedParticipant)) {
+                    if (nameMatchedParticipant && (isHostParticipant(nameMatchedParticipant) || !nameMatchedParticipant.disconnectedAt)) {
                         connection.send({ type: 'reject', message: 'Display name is already in this room.' });
                         window.setTimeout(() => {
                             try { connection.close(); } catch (error) { }
