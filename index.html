@@ -5642,7 +5642,9 @@
                     const token = String(message.token || connection.metadata?.token || '');
                     const nameMatchedParticipant = findParticipantForReconnect(nextName, token, connection.peer);
                     const existing = getParticipantById(connection.peer);
-                    if (nameMatchedParticipant && (isHostParticipant(nameMatchedParticipant) || !nameMatchedParticipant.disconnectedAt)) {
+                    const isTokenReconnect = nameMatchedParticipant && token && nameMatchedParticipant.token === token;
+                    // 同じ token なら通信切替後の本人復帰なので、表示名重複として拒否しない。
+                    if (!isTokenReconnect && nameMatchedParticipant && (isHostParticipant(nameMatchedParticipant) || !nameMatchedParticipant.disconnectedAt)) {
                         connection.send({ type: 'reject', message: 'Display name is already in this room.' });
                         window.setTimeout(() => {
                             try { connection.close(); } catch (error) { }
