@@ -5789,9 +5789,9 @@
                 baseMargin = horizontalMargin;
             }
 
-            const playableWidth = size - horizontalMargin - rightMargin;
-            const playableHeight = size - topMargin - bottomMargin;
-            const cell = Math.min(playableWidth, playableHeight) / (BOARD_SIZE - 1);
+            const playableWidth = Math.max(1, size - horizontalMargin - rightMargin);
+            const playableHeight = Math.max(1, size - topMargin - bottomMargin);
+            const cell = Math.max(1, Math.min(playableWidth, playableHeight) / (BOARD_SIZE - 1));
             const coordinateGap = Math.max(18, Math.round(baseMargin * 0.82));
             
             boardGeometry = {
