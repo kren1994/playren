@@ -3231,6 +3231,43 @@
             });
         }
 
+        function forceGuestPeerReconnect(delayMs = 0) {
+            if (localMode !== 'guest' || !roomId) return;
+
+            clearHostReconnectTimer();
+
+            if (hostConnection) {
+                try { hostConnection.close(); } catch (error) { }
+                hostConnection = null;
+            }
+
+            if (peer) {
+                suppressLocalPeerClose = true;
+                try { peer.destroy(); } catch (error) { }
+                peer = null;
+                window.setTimeout(() => {
+                    suppressLocalPeerClose = false;
+                }, 0);
+            }
+
+            localPeerId = '';
+            setConnectionLabel(i18n('msgRoomSyncing'));
+            scheduleGuestReconnect(delayMs);
+            render();
+        }
+
+        function hasDisconnectedOtherSeatedParticipantInView() {
+            if (!state || !state.participantsById || !state.seats) return false;
+
+            return getActiveSeatKeys().some((seat) => {
+                const peerId = state.seats[seat];
+                if (!peerId || peerId === localPeerId) return false;
+
+                const participant = state.participantsById[peerId];
+                return Boolean(participant && participant.disconnectedAt);
+            });
+        }
+
         function findParticipantByName(name, exceptPeerId = '') {
             if (!state || !name) return null;
             const participants = Object.values(state.participantsById || {});
@@ -6852,10 +6889,8 @@
                     return;
                 }
 
-                if (hasDisconnectedParticipantInView()) {
-                    try { hostConnection.close(); } catch (error) { }
-                    hostConnection = null;
-                    scheduleGuestReconnect(0);
+                if (hasDisconnectedOtherSeatedParticipantInView()) {
+                    forceGuestPeerReconnect(0);
                     return;
                 }
 
