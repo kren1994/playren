@@ -3960,6 +3960,40 @@
             }, delayMs);
         }
 
+        function handleVisibleResync() {
+            if (localMode === 'guest') {
+                if (!hostConnection || !hostConnection.open) {
+                    scheduleGuestReconnect(0);
+                    return;
+                }
+
+                hostConnection.send({ type: 'snapshot-request' });
+                return;
+            }
+
+            if (localMode === 'host') {
+                if (!peer || peer.disconnected || peer.destroyed) {
+                    attemptHostReconnect();
+                    return;
+                }
+
+                broadcastState();
+                render();
+            }
+        }
+
+        function scheduleVisibleResyncChecks() {
+            handleVisibleResync();
+
+            window.setTimeout(() => {
+                if (document.visibilityState === 'visible') handleVisibleResync();
+            }, 1000);
+
+            window.setTimeout(() => {
+                if (document.visibilityState === 'visible') handleVisibleResync();
+            }, 3000);
+        }
+
         function beginHostTakeover(previousHostId) {
             if (!state || hostTakeoverInProgress) return;
             hostTakeoverInProgress = true;
@@ -6882,31 +6916,7 @@
         });
         document.addEventListener('visibilitychange', () => {
             if (document.visibilityState !== 'visible') return;
-
-            if (localMode === 'guest') {
-                if (!hostConnection || !hostConnection.open) {
-                    scheduleGuestReconnect(0);
-                    return;
-                }
-
-                if (hasDisconnectedOtherSeatedParticipantInView()) {
-                    forceGuestPeerReconnect(0);
-                    return;
-                }
-
-                hostConnection.send({ type: 'snapshot-request' });
-                return;
-            }
-
-            if (localMode === 'host') {
-                if (!peer || peer.disconnected || peer.destroyed) {
-                    attemptHostReconnect();
-                    return;
-                }
-
-                broadcastState();
-                render();
-            }
+            scheduleVisibleResyncChecks();
         });
 
         window.setInterval(periodicClockWork, 250);
