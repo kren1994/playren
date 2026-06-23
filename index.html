@@ -6839,8 +6839,13 @@
             if (document.visibilityState !== 'visible') return;
             if (localMode === 'guest' && (!hostConnection || !hostConnection.open)) {
                 scheduleGuestReconnect(0);
+            } else if (localMode === 'guest' && hostConnection?.open) {
+                hostConnection.send({ type: 'snapshot-request' });
             } else if (localMode === 'host' && (!peer || peer.disconnected || peer.destroyed)) {
                 attemptHostReconnect();
+            } else if (localMode === 'host') {
+                broadcastState();
+                render();
             }
         });
 
