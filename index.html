@@ -3892,6 +3892,12 @@
         function attemptHostReconnect() {
             if (!state || !roomId) return;
             if (peer) {
+                // peer.destroy() で既存 guest connection の close が発火する。
+                // ホスト自身の再接続中にゲストを切断扱いにしないよう抑制する。
+                guestConnections.forEach((_, peerId) => {
+                    suppressedConnectionClosePeers.add(peerId);
+                });
+
                 suppressLocalPeerClose = true;
                 try { peer.destroy(); } catch (error) { }
                 peer = null;
