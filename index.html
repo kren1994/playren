@@ -3223,6 +3223,13 @@
             });
         }
 
+        function hasDisconnectedParticipantInView() {
+            if (!state || !state.participantsById) return false;
+            return Object.values(state.participantsById).some((participant) => {
+                return participant && participant.disconnectedAt;
+            });
+        }
+
         function findParticipantByName(name, exceptPeerId = '') {
             if (!state || !name) return null;
             const participants = Object.values(state.participantsById || {});
@@ -6837,13 +6844,30 @@
         });
         document.addEventListener('visibilitychange', () => {
             if (document.visibilityState !== 'visible') return;
-            if (localMode === 'guest' && (!hostConnection || !hostConnection.open)) {
-                scheduleGuestReconnect(0);
-            } else if (localMode === 'guest' && hostConnection?.open) {
+
+            if (localMode === 'guest') {
+                if (!hostConnection || !hostConnection.open) {
+                    scheduleGuestReconnect(0);
+                    return;
+                }
+
+                if (hasDisconnectedParticipantInView()) {
+                    try { hostConnection.close(); } catch (error) { }
+                    hostConnection = null;
+                    scheduleGuestReconnect(0);
+                    return;
+                }
+
                 hostConnection.send({ type: 'snapshot-request' });
-            } else if (localMode === 'host' && (!peer || peer.disconnected || peer.destroyed)) {
-                attemptHostReconnect();
-            } else if (localMode === 'host') {
+                return;
+            }
+
+            if (localMode === 'host') {
+                if (!peer || peer.disconnected || peer.destroyed) {
+                    attemptHostReconnect();
+                    return;
+                }
+
                 broadcastState();
                 render();
             }
