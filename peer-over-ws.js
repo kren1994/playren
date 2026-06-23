@@ -218,6 +218,7 @@
 
         _startHeartbeat() {
             this._stopHeartbeat();
+            this._sendHeartbeatProbe();
             this._heartbeatTimer = window.setInterval(() => {
                 this._sendHeartbeatProbe();
             }, HEARTBEAT_INTERVAL_MS);
@@ -228,7 +229,7 @@
             if (!this._socket || this._socket.readyState !== WebSocket.OPEN) return;
             if (this._pongTimeoutTimer) return;
 
-            this._send({ type: 'ping', timestamp: Date.now() });
+            this._sendRaw('ping');
             this._pongTimeoutTimer = window.setTimeout(() => {
                 this._handlePongTimeout();
             }, PONG_TIMEOUT_MS);
@@ -290,6 +291,15 @@
             }
         }
 
+        _sendRaw(data) {
+            if (!this._socket || this._socket.readyState !== WebSocket.OPEN) return;
+            try {
+                this._socket.send(data);
+            } catch (error) {
+                // no-op
+            }
+        }
+
         _dropConnection(connectionId) {
             this._connections.delete(connectionId);
         }
@@ -302,6 +312,11 @@
         }
 
         _onMessage(raw) {
+            if (raw === 'pong') {
+                this._markHeartbeatAlive();
+                return;
+            }
+
             let message;
             try {
                 message = JSON.parse(raw);
@@ -311,10 +326,6 @@
             if (!message || typeof message !== 'object') return;
 
             this._markHeartbeatAlive();
-
-            if (message.type === 'pong') {
-                return;
-            }
 
             if (message.type === 'peer-opened') {
                 this.id = message.peerId;

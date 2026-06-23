@@ -28,6 +28,10 @@ export class RoomRelay {
   constructor(state, env) {
     this.state = state;
     this.env = env;
+
+    this.state.setWebSocketAutoResponse(
+      new WebSocketRequestResponsePair('ping', 'pong')
+    );
   }
 
   async fetch(request) {
@@ -62,6 +66,9 @@ export class RoomRelay {
   }
 
   handleMessage(socket, rawData) {
+    if (rawData === 'ping' || rawData === 'pong') return;
+    if (typeof rawData !== 'string') return;
+
     let message;
     try {
       message = JSON.parse(rawData);
@@ -69,14 +76,6 @@ export class RoomRelay {
       return;
     }
     if (!message || typeof message !== 'object') return;
-
-    if (message.type === 'ping') {
-      this.send(socket, {
-        type: 'pong',
-        timestamp: message.timestamp || null,
-      });
-      return;
-    }
 
     if (message.type === 'peer-open') {
       this.handlePeerOpen(socket, message);
