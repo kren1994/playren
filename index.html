@@ -3279,6 +3279,17 @@
             }) || null;
         }
 
+        function findParticipantByToken(token, exceptPeerId = '') {
+            const normalizedToken = String(token || '').trim();
+            if (!state || !normalizedToken) return null;
+            return Object.values(state.participantsById || {}).find((participant) => {
+                return participant
+                    && participant.id
+                    && participant.id !== exceptPeerId
+                    && String(participant.token || '').trim() === normalizedToken;
+            }) || null;
+        }
+
         function findParticipantForReconnect(name, token, exceptPeerId = '') {
             if (!state) return null;
             const participants = Object.values(state.participantsById || {});
@@ -3305,6 +3316,10 @@
             }
 
             if (state.hostPeerId === oldPeerId) state.hostPeerId = nextPeerId;
+            // nextPeerId が既に別席に入っている場合は先に除去して重複を防ぐ。
+            Object.keys(state.seats || {}).forEach((seat) => {
+                if (state.seats[seat] === nextPeerId) state.seats[seat] = null;
+            });
             Object.keys(state.seats || {}).forEach((seat) => {
                 if (state.seats[seat] === oldPeerId) state.seats[seat] = nextPeerId;
             });
@@ -3782,12 +3797,15 @@
             if (!participant) return null;
             participant.name = nextName || participant.name;
             participant.token = token || participant.token;
+            const wasDisconnected = Boolean(participant.disconnectedAt);
             delete participant.disconnectedAt;
             delete participant.disconnectedUntil;
             ensureClockEntry(nextPeerId);
             rebuildColors();
-            resumeMatchAfterReconnect();
-            addLog('presence', i18n('msgReconnected', participant.name));
+            if (wasDisconnected) {
+                resumeMatchAfterReconnect();
+                addLog('presence', i18n('msgReconnected', participant.name));
+            }
             return participant;
         }
 
@@ -5640,11 +5658,17 @@
                 if (message.type === 'hello' && localMode === 'host') {
                     const nextName = sanitizeName(message.name || 'Player');
                     const token = String(message.token || connection.metadata?.token || '');
+                    // token 一致を最優先で判定する。表示名が変わっていても同一人物の復帰として扱う。
+                    const tokenMatchedParticipant = findParticipantByToken(token, connection.peer);
+                    if (tokenMatchedParticipant) {
+                        replaceParticipantConnection(tokenMatchedParticipant.id, connection.peer, nextName, token);
+                        broadcastState();
+                        render();
+                        return;
+                    }
                     const nameMatchedParticipant = findParticipantForReconnect(nextName, token, connection.peer);
                     const existing = getParticipantById(connection.peer);
-                    const isTokenReconnect = nameMatchedParticipant && token && nameMatchedParticipant.token === token;
-                    // 同じ token なら通信切替後の本人復帰なので、表示名重複として拒否しない。
-                    if (!isTokenReconnect && nameMatchedParticipant && (isHostParticipant(nameMatchedParticipant) || !nameMatchedParticipant.disconnectedAt)) {
+                    if (nameMatchedParticipant && (isHostParticipant(nameMatchedParticipant) || !nameMatchedParticipant.disconnectedAt)) {
                         connection.send({ type: 'reject', message: 'Display name is already in this room.' });
                         window.setTimeout(() => {
                             try { connection.close(); } catch (error) { }
