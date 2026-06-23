@@ -1,8 +1,8 @@
 (function () {
     'use strict';
 
-    const HEARTBEAT_INTERVAL_MS = 45 * 1000;
-    const PONG_TIMEOUT_MS = 15 * 1000;
+    const HEARTBEAT_INTERVAL_MS = 30 * 1000;
+    const PONG_TIMEOUT_MS = 10 * 1000;
     const HEARTBEAT_RETRY_DELAY_MS = 1000;
     const MAX_MISSED_PONGS = 2;
 
