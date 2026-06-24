@@ -1,6 +1,13 @@
 (function () {
     'use strict';
 
+    // Must match PROTOCOL_VERSION in ws-worker/src/index.js.
+    const PROTOCOL_VERSION = 1;
+
+    // Self-heal keepalive. The Durable Object auto-responds to 'ping' with
+    // 'pong' (setWebSocketAutoResponse), so this only ever closes OUR OWN
+    // socket when the server is unreachable. Peer presence is decided by the
+    // server's roster, never by these probes.
     const HEARTBEAT_INTERVAL_MS = 30 * 1000;
     const PONG_TIMEOUT_MS = 10 * 1000;
     const HEARTBEAT_RETRY_DELAY_MS = 1000;
@@ -26,12 +33,15 @@
         };
     }
 
+    // DataConnection-shaped facade over the star relay. There is no real
+    // peer-to-peer link: send() routes a payload through the Durable Object to
+    // a target token ('host' resolves to whoever is host right now).
     class WsDataConnection {
-        constructor(peerRef, connectionId, remotePeerId, metadata) {
+        constructor(peerRef, remoteToken, metadata, route) {
             this._peerRef = peerRef;
-            this._connectionId = connectionId;
-            this.peer = remotePeerId;
+            this.peer = String(remoteToken || '');
             this.metadata = metadata || {};
+            this._route = String(route || this.peer || '');
             this.open = false;
             this._closed = false;
             this._emitter = createEmitter();
@@ -53,21 +63,13 @@
 
         send(data) {
             if (this._closed || !this.open) return;
-            this._peerRef._send({
-                type: 'connection-data',
-                connectionId: this._connectionId,
-                data,
-            });
+            this._peerRef._relay(this._route, data);
         }
 
-        close(reason) {
-            if (this._closed) return;
-            this._peerRef._send({
-                type: 'connection-close',
-                connectionId: this._connectionId,
-                closeReason: reason || '',
-            });
-            this._handleRemoteClose(reason || '');
+        close() {
+            // Local teardown only, and silent: an explicit close is not a peer
+            // departure. Genuine departures arrive via the server roster.
+            this._handleRemoteClose('', true);
         }
 
         _handleData(data) {
@@ -75,12 +77,15 @@
             this._emit('data', data);
         }
 
-        _handleRemoteClose(reason) {
+        // silent=true tears down without a 'close' event. Used when OUR socket
+        // dropped (the peer-level 'close' already covers it) so the app does not
+        // mistake our own disconnect for every remote peer leaving.
+        _handleRemoteClose(reason, silent) {
             if (this._closed) return;
             this._closed = true;
             this.open = false;
-            this._emit('close', reason || '');
-            this._peerRef._dropConnection(this._connectionId);
+            if (!silent) this._emit('close', reason || '');
+            this._peerRef._dropRemote(this.peer, this);
         }
 
         _handleError(err) {
@@ -90,29 +95,37 @@
     }
 
     class Peer {
-        constructor(requestedId, options) {
+        constructor(roomId, options) {
             this.id = '';
             this.destroyed = false;
             this.disconnected = false;
-            this._requestedId = requestedId || '';
+
+            const opts = options || {};
             this._roomId = String(
-                (options && options.roomId) ||
-                this._requestedId ||
+                roomId ||
+                opts.roomId ||
                 window.__WULIN_ROOM_ID ||
                 ''
             ).trim();
+            this._token = String(opts.token || '').trim();
+            this._name = String(opts.name || '');
+
             this._emitter = createEmitter();
-            this._connections = new Map();
             this._ready = false;
-            this._heartbeatEnabled = false;
+            this._role = '';
+            this._hostToken = '';
+            this._roster = new Map();
+            this._remotes = new Map();
+
+            this._terminal = false; // displaced / protocol-mismatch: do not reconnect
             this._heartbeatTimer = 0;
             this._pongTimeoutTimer = 0;
             this._heartbeatRetryTimer = 0;
             this._missedPongs = 0;
 
-            if (!this._roomId) {
+            if (!this._roomId || !this._token) {
                 queueMicrotask(() => {
-                    this._emitter.emit('error', { type: 'invalid-id', message: 'Room id is required.' });
+                    this._emitter.emit('error', { type: 'invalid-id', message: 'Room id and token are required.' });
                 });
                 return;
             }
@@ -135,11 +148,12 @@
 
             this._socket.addEventListener('open', () => {
                 this._send({
-                    type: 'peer-open',
-                    roomId: this._roomId,
-                    requestedPeerId: this._requestedId || '',
+                    type: 'hello',
+                    protocol: PROTOCOL_VERSION,
+                    token: this._token,
+                    name: this._name,
                 });
-                if (this._heartbeatEnabled) this._startHeartbeat();
+                this._startHeartbeat();
             });
 
             this._socket.addEventListener('message', (event) => {
@@ -149,7 +163,8 @@
             this._socket.addEventListener('close', () => {
                 this._stopHeartbeat();
                 this.disconnected = true;
-                this._closeAllConnections();
+                this._closeAllRemotes();
+                if (this._terminal) return;
                 this._emitter.emit('close');
             });
 
@@ -162,39 +177,29 @@
             this._emitter.on(event, handler);
         }
 
-        connect(targetPeerId, options) {
-            if (this.destroyed || !this._ready) {
-                const pending = new WsDataConnection(this, this._createConnectionId(), String(targetPeerId || ''), options && options.metadata);
-                queueMicrotask(() => pending._handleError({ type: 'network', message: 'Peer is not ready.' }));
-                return pending;
-            }
-
-            const connectionId = this._createConnectionId();
+        // Guest -> host. Routes to whoever is host now, so a host migration
+        // mid-flight still lands on the right socket.
+        connect(targetToken, options) {
+            const remoteToken = String(targetToken || '');
             const connection = new WsDataConnection(
                 this,
-                connectionId,
-                String(targetPeerId || ''),
-                (options && options.metadata) || {}
+                remoteToken,
+                (options && options.metadata) || {},
+                'host'
             );
-            this._connections.set(connectionId, connection);
-            this._send({
-                type: 'connect-request',
-                connectionId,
-                targetPeerId: String(targetPeerId || ''),
-                metadata: connection.metadata,
-            });
+            this._remotes.set(remoteToken, connection);
+            queueMicrotask(() => connection._markOpen());
             return connection;
         }
 
-        setHeartbeatEnabled(enabled) {
-            this._heartbeatEnabled = Boolean(enabled);
-            if (!this._heartbeatEnabled) {
-                this._stopHeartbeat();
-                return;
-            }
-            if (this._socket && this._socket.readyState === WebSocket.OPEN) {
-                this._startHeartbeat();
-            }
+        // Host -> all members in one relay (saves inbound traffic vs N sends).
+        broadcast(data) {
+            this._relay('*', data);
+        }
+
+        setHeartbeatEnabled() {
+            // Heartbeat is always on as a self-heal probe; kept for call-site
+            // compatibility. Peer presence is server-driven.
         }
 
         destroy() {
@@ -202,7 +207,7 @@
             this.destroyed = true;
             this.disconnected = true;
             this._stopHeartbeat();
-            this._closeAllConnections();
+            this._closeAllRemotes();
             if (this._socket && this._socket.readyState <= WebSocket.OPEN) {
                 try {
                     this._socket.close();
@@ -212,9 +217,7 @@
             }
         }
 
-        _createConnectionId() {
-            return 'c-' + Date.now() + '-' + Math.random().toString(36).slice(2, 10);
-        }
+        // ---- heartbeat (self-heal only) -----------------------------------
 
         _startHeartbeat() {
             this._stopHeartbeat();
@@ -225,7 +228,7 @@
         }
 
         _sendHeartbeatProbe() {
-            if (!this._heartbeatEnabled || this.destroyed) return;
+            if (this.destroyed) return;
             if (!this._socket || this._socket.readyState !== WebSocket.OPEN) return;
             if (this._pongTimeoutTimer) return;
 
@@ -240,6 +243,7 @@
             this._missedPongs += 1;
 
             if (this._missedPongs >= MAX_MISSED_PONGS) {
+                // Server unreachable: drop our own socket so the app reconnects.
                 if (this._socket && this._socket.readyState === WebSocket.OPEN) {
                     try { this._socket.close(); } catch (error) { }
                 }
@@ -254,12 +258,10 @@
 
         _markHeartbeatAlive() {
             this._missedPongs = 0;
-
             if (this._pongTimeoutTimer) {
                 window.clearTimeout(this._pongTimeoutTimer);
                 this._pongTimeoutTimer = 0;
             }
-
             if (this._heartbeatRetryTimer) {
                 window.clearTimeout(this._heartbeatRetryTimer);
                 this._heartbeatRetryTimer = 0;
@@ -282,6 +284,8 @@
             this._missedPongs = 0;
         }
 
+        // ---- transport ----------------------------------------------------
+
         _send(payload) {
             if (!this._socket || this._socket.readyState !== WebSocket.OPEN) return;
             try {
@@ -300,16 +304,23 @@
             }
         }
 
-        _dropConnection(connectionId) {
-            this._connections.delete(connectionId);
+        _relay(to, data) {
+            this._send({ type: 'relay', to: String(to || ''), data });
         }
 
-        _closeAllConnections() {
-            this._connections.forEach((connection) => {
-                connection._handleRemoteClose();
-            });
-            this._connections.clear();
+        _dropRemote(token, connection) {
+            if (this._remotes.get(token) === connection) {
+                this._remotes.delete(token);
+            }
         }
+
+        _closeAllRemotes() {
+            const remotes = Array.from(this._remotes.values());
+            this._remotes.clear();
+            remotes.forEach((connection) => connection._handleRemoteClose('', true));
+        }
+
+        // ---- inbound ------------------------------------------------------
 
         _onMessage(raw) {
             if (raw === 'pong') {
@@ -327,63 +338,110 @@
 
             this._markHeartbeatAlive();
 
-            if (message.type === 'peer-opened') {
-                this.id = message.peerId;
+            switch (message.type) {
+                case 'welcome':
+                    this._handleWelcome(message);
+                    return;
+                case 'roster':
+                    this._applyRoster(message.roster);
+                    return;
+                case 'message':
+                    this._handleRelayedMessage(message);
+                    return;
+                case 'displaced':
+                    this._terminal = true;
+                    this._emitter.emit('displaced');
+                    return;
+                case 'protocol-mismatch':
+                    this._terminal = true;
+                    this._emitter.emit('protocol-mismatch', { server: message.server || 0 });
+                    return;
+                default:
+                    return;
+            }
+        }
+
+        _handleWelcome(message) {
+            if (Number(message.protocol) !== PROTOCOL_VERSION) {
+                this._terminal = true;
+                this._emitter.emit('protocol-mismatch', { server: message.protocol || 0 });
+                return;
+            }
+            this.id = this._token;
+            if (!this._ready) {
                 this._ready = true;
                 this._emitter.emit('open', this.id);
-                return;
+            }
+            this._applyRoster(message.roster);
+        }
+
+        _applyRoster(roster) {
+            if (!roster || typeof roster !== 'object') return;
+
+            const prevHostToken = this._hostToken;
+            this._hostToken = String(roster.hostToken || '');
+
+            const members = Array.isArray(roster.members) ? roster.members : [];
+            this._roster = new Map(
+                members.map((m) => [String(m.token || ''), String(m.name || '')])
+            );
+
+            const wasHost = this._role === 'host';
+            this._role = this._hostToken === this._token ? 'host' : 'member';
+
+            if (this._hostToken !== prevHostToken) {
+                this._emitter.emit('host-changed', this._hostToken);
             }
 
-            if (message.type === 'peer-error') {
-                this._emitter.emit('error', {
-                    type: message.errorType || 'server-error',
-                    message: message.message || 'Peer error',
+            this._reconcileRemotes(wasHost);
+        }
+
+        _reconcileRemotes(wasHost) {
+            if (this._role === 'host') {
+                // Ensure one connection per other member; close vanished ones.
+                this._roster.forEach((name, token) => {
+                    if (token === this._token) return;
+                    if (this._remotes.has(token)) return;
+                    this._createIncoming(token, name);
                 });
-                return;
+                Array.from(this._remotes.keys()).forEach((token) => {
+                    if (!this._roster.has(token)) {
+                        const connection = this._remotes.get(token);
+                        if (connection) connection._handleRemoteClose();
+                    }
+                });
+            } else {
+                // Member: only the host link matters. The app (re)connects to
+                // the host on 'host-changed'; drop any other synthesized links.
+                Array.from(this._remotes.keys()).forEach((token) => {
+                    if (token !== this._hostToken) {
+                        const connection = this._remotes.get(token);
+                        if (connection) connection._handleRemoteClose();
+                    }
+                });
             }
+        }
 
-            if (message.type === 'incoming-connection') {
-                const connectionId = String(message.connectionId || '');
-                if (!connectionId) return;
-                const incoming = new WsDataConnection(
-                    this,
-                    connectionId,
-                    String(message.peerId || ''),
-                    message.metadata || {}
-                );
-                this._connections.set(connectionId, incoming);
-                this._emitter.emit('connection', incoming);
-                queueMicrotask(() => incoming._markOpen());
-                return;
-            }
+        _createIncoming(token, name) {
+            const connection = new WsDataConnection(this, token, { name }, token);
+            this._remotes.set(token, connection);
+            this._emitter.emit('connection', connection);
+            queueMicrotask(() => connection._markOpen());
+            return connection;
+        }
 
-            if (message.type === 'connect-opened') {
-                const connection = this._connections.get(String(message.connectionId || ''));
-                if (!connection) return;
+        _handleRelayedMessage(message) {
+            const from = String(message.from || '');
+            if (!from) return;
+
+            let connection = this._remotes.get(from);
+            if (!connection && this._role === 'host') {
+                // Data arrived before the roster created the link (race).
+                connection = this._createIncoming(from, this._roster.get(from) || '');
                 connection._markOpen();
-                return;
             }
-
-            if (message.type === 'connect-rejected') {
-                const connection = this._connections.get(String(message.connectionId || ''));
-                if (!connection) return;
-                connection._handleError({ type: message.errorType || 'peer-unavailable', message: message.message || 'Connection rejected.' });
-                connection._handleRemoteClose();
-                return;
-            }
-
-            if (message.type === 'connection-data') {
-                const connection = this._connections.get(String(message.connectionId || ''));
-                if (!connection) return;
-                connection._handleData(message.data);
-                return;
-            }
-
-            if (message.type === 'connection-close') {
-                const connection = this._connections.get(String(message.connectionId || ''));
-                if (!connection) return;
-                connection._handleRemoteClose(message.closeReason || '');
-            }
+            if (!connection) return;
+            connection._handleData(message.data);
         }
     }
 

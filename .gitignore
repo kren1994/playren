@@ -7,3 +7,5 @@ build/
 .DS_Store
 *.log
 .wrangler/
+.claude/
+/memo.txt

@@ -1742,6 +1742,9 @@
         const ROOM_PREFIX = 'playren-room-';
         const PLAYER_TOKEN_PREFIX = 'playren-player-token:';
         const ROOM_STATE_PREFIX = 'playren-room-state:';
+        // Bumped when participant ids switched from ephemeral peer ids to stable
+        // tokens. Older snapshots use the legacy id scheme and are discarded.
+        const ROOM_STATE_VERSION = 2;
         const USER_SETTINGS_STORAGE_KEY = 'playren:user-settings';
         const DEFAULT_BASE_MINUTES = 5;
         const DEFAULT_INCREMENT_SECONDS = 3;
@@ -1870,10 +1873,8 @@
         let dismissedActionDialogPhase = '';
         let localPlayerToken = '';
         let hasNotifiedHostLeaving = false;
-        let hostReconnectTimer = 0;
-        let hostTakeoverInProgress = false;
-        let suppressLocalPeerClose = false;
-        const suppressedConnectionClosePeers = new Set();
+        let reconnectTimer = 0;
+        let sessionTerminated = false;
         
         let soundEnabled = true;
         let audioCtx = null;
@@ -2158,6 +2159,7 @@
                 msgRoomGuestConnecting: '観戦者接続中',
                 msgRoomConnected: '接続中',
                 msgRoomClosed: '接続終了',
+                msgSessionReplaced: '別の場所で接続したため、この画面は切断されました。',
                 msgLeftRoom: '接続を閉じました。',
                 chatNoMessages: 'チャットはまだありません。',
                 msgDrawOffered: '満局提案しました。',
@@ -2280,6 +2282,7 @@
                 msgRoomGuestConnecting: '观战者连接中',
                 msgRoomConnected: '已连接',
                 msgRoomClosed: '连接结束',
+                msgSessionReplaced: '已在其他位置连接，此页面已断开。',
                 msgLeftRoom: '已关闭连接。',
                 chatNoMessages: '还没有聊天记录。',
                 msgDrawOffered: '已提出和棋。',
@@ -2402,6 +2405,7 @@
                 msgRoomGuestConnecting: 'Spectator connecting',
                 msgRoomConnected: 'Connected',
                 msgRoomClosed: 'Connection closed',
+                msgSessionReplaced: 'Disconnected because you connected from another place.',
                 msgLeftRoom: 'Left the room.',
                 chatNoMessages: 'No chat messages yet.',
                 msgDrawOffered: 'Draw offered.',
@@ -2614,6 +2618,7 @@
             if (!state || !state.roomId) return;
             try {
                 window.localStorage.setItem(getRoomStateStorageKey(state.roomId), JSON.stringify({
+                    v: ROOM_STATE_VERSION,
                     savedAt: Date.now(),
                     state,
                 }));
@@ -2637,7 +2642,11 @@
                 const raw = window.localStorage.getItem(getRoomStateStorageKey(nextRoomId));
                 if (!raw) return null;
                 const parsed = JSON.parse(raw);
-                if (!parsed || parsed.state?.roomId !== nextRoomId) return null;
+                if (!parsed || parsed.v !== ROOM_STATE_VERSION) {
+                    clearRoomStateSnapshot(nextRoomId);
+                    return null;
+                }
+                if (parsed.state?.roomId !== nextRoomId) return null;
                 if (Date.now() - Number(parsed.savedAt || 0) > ROOM_STATE_MAX_AGE_MS) {
                     clearRoomStateSnapshot(nextRoomId);
                     return null;
@@ -3187,26 +3196,6 @@
             state.joinOrder = state.joinOrder.filter((id) => id !== peerId);
         }
 
-        function getNextHostCandidatePeerId(fromPeerId) {
-            if (!state) return '';
-            const order = Array.isArray(state.joinOrder) && state.joinOrder.length
-                ? state.joinOrder.slice()
-                : Object.keys(state.participantsById || {});
-            if (!order.length) return '';
-            const hostIndex = order.indexOf(fromPeerId);
-            const startIndex = hostIndex >= 0 ? hostIndex : -1;
-            for (let step = 1; step <= order.length; step += 1) {
-                const idx = (startIndex + step + order.length) % order.length;
-                const candidateId = order[idx];
-                if (!candidateId || candidateId === fromPeerId) continue;
-                const participant = getParticipantById(candidateId);
-                if (!participant) continue;
-                if (isParticipantDisconnected(participant)) continue;
-                return candidateId;
-            }
-            return '';
-        }
-
         function isParticipantDisconnected(participant) {
             return Boolean(participant && participant.disconnectedAt);
         }
@@ -3232,31 +3221,6 @@
             });
         }
 
-        function forceGuestPeerReconnect(delayMs = 0) {
-            if (localMode !== 'guest' || !roomId) return;
-
-            clearHostReconnectTimer();
-
-            if (hostConnection) {
-                try { hostConnection.close(); } catch (error) { }
-                hostConnection = null;
-            }
-
-            if (peer) {
-                suppressLocalPeerClose = true;
-                try { peer.destroy(); } catch (error) { }
-                peer = null;
-                window.setTimeout(() => {
-                    suppressLocalPeerClose = false;
-                }, 0);
-            }
-
-            localPeerId = '';
-            setConnectionLabel(i18n('msgRoomSyncing'));
-            scheduleGuestReconnect(delayMs);
-            render();
-        }
-
         function hasDisconnectedOtherSeatedParticipantInView() {
             if (!state || !state.participantsById || !state.seats) return false;
 
@@ -3269,136 +3233,31 @@
             });
         }
 
-        function findParticipantByName(name, exceptPeerId = '') {
-            if (!state || !name) return null;
-            const participants = Object.values(state.participantsById || {});
-            return participants.find((participant) => {
-                return participant
-                    && participant.id !== exceptPeerId
-                    && participant.name === name;
-            }) || null;
-        }
-
-        function findParticipantByToken(token, exceptPeerId = '') {
-            const normalizedToken = String(token || '').trim();
-            if (!state || !normalizedToken) return null;
-            return Object.values(state.participantsById || {}).find((participant) => {
-                return participant
-                    && participant.id
-                    && participant.id !== exceptPeerId
-                    && String(participant.token || '').trim() === normalizedToken;
-            }) || null;
-        }
-
-        function findParticipantForReconnect(name, token, exceptPeerId = '') {
-            if (!state) return null;
-            const participants = Object.values(state.participantsById || {});
-            if (token) {
-                const tokenMatch = participants.find((participant) => {
-                    return participant
-                        && participant.id !== exceptPeerId
-                        && participant.token === token
-                        && participant.name === name;
-                });
-                if (tokenMatch) return tokenMatch;
-            }
-            return findParticipantByName(name, exceptPeerId);
-        }
-
-        function replacePeerIdReferences(oldPeerId, nextPeerId) {
-            if (!state || !oldPeerId || !nextPeerId || oldPeerId === nextPeerId) return;
-
-            const participant = state.participantsById[oldPeerId];
-            if (participant) {
-                delete state.participantsById[oldPeerId];
-                participant.id = nextPeerId;
-                state.participantsById[nextPeerId] = participant;
-            }
-
-            if (state.hostPeerId === oldPeerId) state.hostPeerId = nextPeerId;
-            // nextPeerId が既に別席に入っている場合は先に除去して重複を防ぐ。
-            Object.keys(state.seats || {}).forEach((seat) => {
-                if (state.seats[seat] === nextPeerId) state.seats[seat] = null;
-            });
-            Object.keys(state.seats || {}).forEach((seat) => {
-                if (state.seats[seat] === oldPeerId) state.seats[seat] = nextPeerId;
-            });
-            if (state.clocks.activePeerId === oldPeerId) state.clocks.activePeerId = nextPeerId;
-            if (state.drawOfferByPeerId === oldPeerId) state.drawOfferByPeerId = nextPeerId;
-            if (state.takebackOfferByPeerId === oldPeerId) state.takebackOfferByPeerId = nextPeerId;
-            if (state.drawResponderPeerId === oldPeerId) state.drawResponderPeerId = nextPeerId;
-            if (state.takebackResponderPeerId === oldPeerId) state.takebackResponderPeerId = nextPeerId;
-            if (Array.isArray(state.pairTurnOrder)) {
-                state.pairTurnOrder = state.pairTurnOrder.map((peerId) => peerId === oldPeerId ? nextPeerId : peerId);
-            }
-            if (state.connectionPause?.peerId === oldPeerId) state.connectionPause.peerId = nextPeerId;
-            if (state.connectionPause?.activePeerId === oldPeerId) state.connectionPause.activePeerId = nextPeerId;
-
-            for (const collectionName of ['colorsByPeerId', 'readyByPeerId']) {
-                const collection = state[collectionName];
-                if (collection && Object.prototype.hasOwnProperty.call(collection, oldPeerId)) {
-                    collection[nextPeerId] = collection[oldPeerId];
-                    delete collection[oldPeerId];
-                }
-            }
-
-            if (state.clocks.remainingMsByPeerId && Object.prototype.hasOwnProperty.call(state.clocks.remainingMsByPeerId, oldPeerId)) {
-                state.clocks.remainingMsByPeerId[nextPeerId] = state.clocks.remainingMsByPeerId[oldPeerId];
-                delete state.clocks.remainingMsByPeerId[oldPeerId];
-            }
-
-            for (const move of state.moves || []) {
-                if (move.peerId === oldPeerId) move.peerId = nextPeerId;
-            }
-            for (const move of state.reviewMoves || []) {
-                if (move.peerId === oldPeerId) move.peerId = nextPeerId;
-            }
-            if (Array.isArray(state.joinOrder)) {
-                state.joinOrder = state.joinOrder.map((peerId) => (peerId === oldPeerId ? nextPeerId : peerId));
-            }
-        }
-
-        function restoreLocalHostFromSnapshot(nextRoomId, nextHostId, nextHostName, settings, hostToken) {
-            const restored = loadRoomStateSnapshot(nextRoomId, nextHostName, hostToken);
+        // The participant id IS the token now, so a returning host finds itself
+        // directly — no id reconciliation or placeholder juggling needed.
+        function restoreLocalHostFromSnapshot(nextRoomId, hostToken, hostName, settings) {
+            const restored = loadRoomStateSnapshot(nextRoomId, hostName, hostToken);
             if (!restored) {
-                return createInitialState(nextRoomId, nextHostId, nextHostName, settings, hostToken);
+                return createInitialState(nextRoomId, hostToken, hostName, settings, hostToken);
             }
 
             state = restored;
             ensurePairRenjuState();
-            const localParticipant = findParticipantForReconnect(nextHostName, hostToken);
 
-            if (localParticipant && localParticipant.id !== nextHostId) {
-                const previousHost = getParticipantById(nextHostId);
-                if (previousHost && previousHost !== localParticipant) {
-                    const placeholderId = `host-disconnected-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-                    replacePeerIdReferences(nextHostId, placeholderId);
-                    const placeholder = getParticipantById(placeholderId);
-                    if (placeholder) {
-                        placeholder.isHost = false;
-                        if (!placeholder.disconnectedAt) {
-                            placeholder.disconnectedAt = Date.now();
-                            placeholder.disconnectedUntil = placeholder.disconnectedAt + DISCONNECT_GRACE_MS;
-                        }
-                    }
-                }
-                replacePeerIdReferences(localParticipant.id, nextHostId);
+            if (!state.participantsById[hostToken]) {
+                state.participantsById[hostToken] = { id: hostToken, name: hostName, seat: 'spectator', isHost: true, token: hostToken };
+                ensureJoinOrderContains(hostToken);
             }
 
-            if (!state.participantsById[nextHostId]) {
-                state.participantsById[nextHostId] = { id: nextHostId, name: nextHostName, seat: 'spectator', isHost: true, token: hostToken };
-                ensureJoinOrderContains(nextHostId);
-            }
-
-            const participant = state.participantsById[nextHostId];
-            participant.name = nextHostName;
-            participant.token = hostToken || participant.token;
+            const participant = state.participantsById[hostToken];
+            participant.name = hostName;
+            participant.token = hostToken;
             delete participant.disconnectedAt;
             delete participant.disconnectedUntil;
 
             state.config = state.config || settings;
-            setHostPeerId(nextHostId);
-            ensureClockEntry(nextHostId);
+            setHostPeerId(hostToken);
+            ensureClockEntry(hostToken);
             rebuildColors();
             resumeMatchAfterReconnect();
             persistRoomStateSnapshot();
@@ -3780,27 +3639,17 @@
             return true;
         }
 
-        function replaceParticipantConnection(oldPeerId, nextPeerId, nextName, token) {
-            const oldConnection = guestConnections.get(oldPeerId);
-            if (oldConnection) {
-                try { oldConnection.send({ type: 'takeover' }); } catch (error) { }
-                suppressedConnectionClosePeers.add(oldPeerId);
-                if (guestConnections.get(oldPeerId) === oldConnection) {
-                    guestConnections.delete(oldPeerId);
-                }
-                window.setTimeout(() => {
-                    try { oldConnection.close('takeover'); } catch (error) { }
-                }, 250);
-            }
-            replacePeerIdReferences(oldPeerId, nextPeerId);
-            const participant = getParticipantById(nextPeerId);
+        // Mark an existing participant (found by its stable token id) as
+        // reconnected: update display name, clear disconnect flags, resume.
+        function markParticipantReconnected(token, nextName) {
+            const participant = getParticipantById(token);
             if (!participant) return null;
             participant.name = nextName || participant.name;
-            participant.token = token || participant.token;
+            participant.token = token;
             const wasDisconnected = Boolean(participant.disconnectedAt);
             delete participant.disconnectedAt;
             delete participant.disconnectedUntil;
-            ensureClockEntry(nextPeerId);
+            ensureClockEntry(token);
             rebuildColors();
             if (wasDisconnected) {
                 resumeMatchAfterReconnect();
@@ -3835,175 +3684,201 @@
             }
         }
 
-        function clearHostReconnectTimer() {
-            if (!hostReconnectTimer) return;
-            window.clearTimeout(hostReconnectTimer);
-            hostReconnectTimer = 0;
+        function clearReconnectTimer() {
+            if (!reconnectTimer) return;
+            window.clearTimeout(reconnectTimer);
+            reconnectTimer = 0;
         }
 
-        function attemptGuestReconnectToHost() {
-            if (localMode !== 'guest' || !roomId) return;
-            if (hostConnection && hostConnection.open) return;
-            if (!peer || peer.disconnected || peer.destroyed) {
-                if (peer) {
-                    try { peer.destroy(); } catch (error) { }
-                }
-                peer = new Peer(undefined, { roomId });
-                peer.on('open', (id) => {
-                    if (localMode !== 'guest') return;
-                    localPeerId = id;
-                    attemptGuestReconnectToHost();
-                });
-                peer.on('error', () => {
-                    if (localMode === 'guest') scheduleGuestReconnect(1200);
-                });
-                attachLocalPeerClose(peer);
-                return;
-            }
-            try {
-                hostConnection = peer.connect(roomId, {
-                    reliable: true,
-                    metadata: {
-                        name: sanitizeName(elements.nameInput.value || 'Player'),
-                        token: localPlayerToken,
-                    },
-                });
-                wireConnectionHandlers(hostConnection);
-            } catch (error) {
-                scheduleGuestReconnect();
-            }
+        function scheduleReconnect(delayMs = 800) {
+            if (sessionTerminated) return;
+            clearReconnectTimer();
+            reconnectTimer = window.setTimeout(() => {
+                reconnectTimer = 0;
+                if (!sessionTerminated && roomId) connectToRoom();
+            }, delayMs);
         }
 
-        function becomeGuestAndReconnect(delayMs = 650) {
+        // Single entry point for joining/reconnecting. The server (Durable
+        // Object) decides who is host and reports presence; this client just
+        // reacts to 'host-changed' and relayed messages.
+        function connectToRoom() {
+            if (!roomId || !localPlayerToken) return;
+            clearReconnectTimer();
+            sessionTerminated = false;
+
             if (peer) {
-                suppressLocalPeerClose = true;
                 try { peer.destroy(); } catch (error) { }
                 peer = null;
-                window.setTimeout(() => { suppressLocalPeerClose = false; }, 0);
             }
-            localMode = 'guest';
-            localPeerId = '';
-            hostConnection = null;
-            setConnectionLabel(i18n('msgRoomSyncing'));
-            scheduleGuestReconnect(delayMs);
-            render();
-        }
 
-        function attemptHostReconnect() {
-            if (!state || !roomId) return;
-            if (peer) {
-                // peer.destroy() で既存 guest connection の close が発火する。
-                // ホスト自身の再接続中にゲストを切断扱いにしないよう抑制する。
-                guestConnections.forEach((_, peerId) => {
-                    suppressedConnectionClosePeers.add(peerId);
-                });
+            const name = sanitizeName(elements.nameInput.value || 'Player');
+            const thisPeer = new Peer(roomId, { token: localPlayerToken, name });
+            peer = thisPeer;
 
-                suppressLocalPeerClose = true;
-                try { peer.destroy(); } catch (error) { }
-                peer = null;
-                window.setTimeout(() => { suppressLocalPeerClose = false; }, 0);
-            }
-            peer = new Peer(roomId);
-            peer.on('open', (id) => {
-                if (!state) return;
-                localMode = 'host';
+            thisPeer.on('open', (id) => {
+                if (peer !== thisPeer) return;
                 localPeerId = id;
-                setHostPeerId(id);
-                const participant = getParticipantById(id);
-                if (participant) {
-                    delete participant.disconnectedAt;
-                    delete participant.disconnectedUntil;
-                }
-                setConnectionLabel(i18n('msgRoomCreated'));
                 elements.leaveRoomBtn.disabled = false;
-                broadcastState();
-                render();
             });
-            peer.on('connection', (incoming) => {
-                if (localMode !== 'host') return;
-                if (!state) {
-                    incoming.on('open', () => incoming.send({ type: 'reject', message: 'Not initialized.' }));
-                    incoming.on('open', () => incoming.close());
-                    return;
+
+            thisPeer.on('host-changed', (hostToken) => {
+                if (peer !== thisPeer) return;
+                if (hostToken && hostToken === localPeerId) {
+                    applyHostRole();
+                } else if (hostToken) {
+                    applyGuestRole(hostToken);
                 }
-                const previousConnection = guestConnections.get(incoming.peer);
-                if (previousConnection && previousConnection !== incoming) {
-                    try { previousConnection.close(); } catch (error) { }
+                // hostToken === '' means the room has no host yet; wait.
+            });
+
+            thisPeer.on('connection', (incoming) => {
+                if (peer !== thisPeer) return;
+                if (localMode !== 'host' || !state) return;
+                const previous = guestConnections.get(incoming.peer);
+                if (previous && previous !== incoming) {
+                    try { previous.close(); } catch (error) { }
                 }
                 guestConnections.set(incoming.peer, incoming);
                 wireConnectionHandlers(incoming);
             });
-            attachLocalPeerClose(peer);
-            peer.on('error', (error) => {
-                if (error.type === 'unavailable-id') {
-                    becomeGuestAndReconnect(650);
-                    return;
+
+            thisPeer.on('close', () => {
+                if (peer !== thisPeer) return;
+                if (sessionTerminated) return;
+                if (localMode === 'host') {
+                    persistRoomStateSnapshot();
+                    stopClock();
                 }
-                if (error.type === 'network') {
-                    showToast(i18n('errCommError'));
-                    window.setTimeout(() => {
-                        if (localMode === 'host') attemptHostReconnect();
-                    }, 1200);
-                    return;
+                hostConnection = null;
+                setConnectionLabel(i18n('msgRoomSyncing'));
+                scheduleReconnect(800);
+                render();
+            });
+
+            thisPeer.on('error', (error) => {
+                if (peer !== thisPeer) return;
+                if (error && error.type === 'network') {
+                    setConnectionLabel(i18n('msgRoomSyncing'));
+                    return; // the 'close' event will drive the reconnect.
                 }
-                showToast(`Error: ${error.type || error.message}`);
+                showToast(`Error: ${(error && (error.type || error.message)) || 'unknown'}`);
+            });
+
+            thisPeer.on('displaced', () => {
+                if (peer !== thisPeer) return;
+                sessionTerminated = true;
+                clearReconnectTimer();
+                showToast(i18n('msgSessionReplaced'));
+                closeLocalSessionWithoutSnapshot();
+            });
+
+            thisPeer.on('protocol-mismatch', () => {
+                if (peer !== thisPeer) return;
+                sessionTerminated = true;
+                clearReconnectTimer();
+                window.location.reload();
             });
         }
 
-        function handleLocalPeerClose() {
-            if (suppressLocalPeerClose) return;
-            if (localMode === 'host' && state) {
-                persistRoomStateSnapshot();
+        function applyHostRole() {
+            localMode = 'host';
+            setConnectionLabel(i18n('msgRoomCreated'));
+            elements.leaveRoomBtn.disabled = false;
+
+            if (hostConnection) {
+                try { hostConnection.close(); } catch (error) { }
                 hostConnection = null;
-                stopClock();
-                setConnectionLabel(i18n('msgRoomSyncing'));
-                window.setTimeout(() => {
-                    if (localMode === 'host') attemptHostReconnect();
-                }, 650);
+            }
+
+            if (!state) {
+                // First host of the room, or a returning host after a reload.
+                const settings = buildSettings();
+                const name = sanitizeName(elements.nameInput.value || 'Player');
+                state = restoreLocalHostFromSnapshot(roomId, localPeerId, name, settings);
+                broadcastState();
                 render();
                 return;
             }
-            if (localMode === 'guest') {
-                hostConnection = null;
-                scheduleGuestReconnect(1200);
+
+            // Promoted from guest (host migration) or host reconnect with live
+            // state. Demote the previous host and claim the role.
+            const previousHostId = state.hostPeerId;
+            setHostPeerId(localPeerId);
+
+            let participant = getParticipantById(localPeerId);
+            if (!participant) {
+                participant = { id: localPeerId, name: sanitizeName(elements.nameInput.value || 'Player'), seat: 'spectator', isHost: true, token: localPlayerToken };
+                state.participantsById[localPeerId] = participant;
+                ensureJoinOrderContains(localPeerId);
+                ensureClockEntry(localPeerId);
+                rebuildColors();
             }
+            participant.name = sanitizeName(elements.nameInput.value || participant.name || 'Player');
+            participant.token = localPlayerToken;
+            participant.isHost = true;
+            delete participant.disconnectedAt;
+            delete participant.disconnectedUntil;
+
+            if (previousHostId && previousHostId !== localPeerId) {
+                const previousHost = getParticipantById(previousHostId);
+                if (previousHost) {
+                    const seatedPlaying = isSeatedParticipant(previousHost)
+                        && state.status === 'playing'
+                        && (state.moves || []).length > 0;
+                    if (seatedPlaying) {
+                        if (!previousHost.disconnectedAt) {
+                            previousHost.disconnectedAt = Date.now();
+                            previousHost.disconnectedUntil = previousHost.disconnectedAt + DISCONNECT_GRACE_MS;
+                            pauseMatchForDisconnect(previousHost.id);
+                            addLog('presence', i18n('msgDisconnected', previousHost.name));
+                        }
+                    } else {
+                        removeParticipant(previousHost.id, i18n('msgLeft', previousHost.name));
+                    }
+                }
+            }
+
+            resumeMatchAfterReconnect();
+            broadcastState();
+            render();
         }
 
-        function attachLocalPeerClose(peerInstance) {
-            if (!peerInstance) return;
-            peerInstance.on('close', () => {
-                if (peer !== peerInstance) return;
-                handleLocalPeerClose();
-            });
-        }
+        function applyGuestRole(hostToken) {
+            localMode = 'guest';
+            if (state) setHostPeerId(hostToken);
 
-        function scheduleGuestReconnect(delayMs = 650) {
-            clearHostReconnectTimer();
-            hostReconnectTimer = window.setTimeout(() => {
-                hostReconnectTimer = 0;
-                attemptGuestReconnectToHost();
-            }, delayMs);
+            const needsConnect = !hostConnection
+                || !hostConnection.open
+                || hostConnection.peer !== hostToken;
+            if (needsConnect) {
+                if (hostConnection) {
+                    try { hostConnection.close(); } catch (error) { }
+                    hostConnection = null;
+                }
+                const name = sanitizeName(elements.nameInput.value || 'Player');
+                hostConnection = peer.connect(hostToken, {
+                    reliable: true,
+                    metadata: { name, token: localPlayerToken },
+                });
+                wireConnectionHandlers(hostConnection);
+            }
+
+            setConnectionLabel(i18n('msgRoomSyncing'));
+            render();
         }
 
         function handleVisibleResync() {
-            if (localMode === 'guest') {
-                if (!hostConnection || !hostConnection.open) {
-                    scheduleGuestReconnect(0);
-                    return;
-                }
-
-                hostConnection.send({ type: 'snapshot-request' });
+            if (!roomId) return;
+            if (!peer || peer.disconnected || peer.destroyed) {
+                connectToRoom();
                 return;
             }
-
             if (localMode === 'host') {
-                if (!peer || peer.disconnected || peer.destroyed) {
-                    attemptHostReconnect();
-                    return;
-                }
-
                 broadcastState();
                 render();
+            } else if (localMode === 'guest' && hostConnection && hostConnection.open) {
+                hostConnection.send({ type: 'snapshot-request' });
             }
         }
 
@@ -4017,143 +3892,6 @@
             window.setTimeout(() => {
                 if (document.visibilityState === 'visible') handleVisibleResync();
             }, 3000);
-        }
-
-        function beginHostTakeover(previousHostId) {
-            if (!state || hostTakeoverInProgress) return;
-            hostTakeoverInProgress = true;
-            clearHostReconnectTimer();
-            const localCandidateId = localPeerId;
-            const previousHost = getParticipantById(previousHostId);
-
-            if (previousHost) {
-                const placeholderId = `host-disconnected-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-                replacePeerIdReferences(previousHostId, placeholderId);
-                const placeholder = getParticipantById(placeholderId);
-                if (placeholder) {
-                    placeholder.isHost = false;
-                    if (!placeholder.disconnectedAt) {
-                        placeholder.disconnectedAt = Date.now();
-                        placeholder.disconnectedUntil = placeholder.disconnectedAt + DISCONNECT_GRACE_MS;
-                    }
-                }
-            }
-
-            replacePeerIdReferences(localCandidateId, roomId);
-            setHostPeerId(roomId);
-            const localParticipant = getParticipantById(roomId);
-            if (localParticipant) {
-                localParticipant.name = sanitizeName(elements.nameInput.value || localParticipant.name || 'Player');
-                localParticipant.token = localPlayerToken || localParticipant.token;
-                delete localParticipant.disconnectedAt;
-                delete localParticipant.disconnectedUntil;
-            }
-
-            localMode = 'host';
-            localPeerId = roomId;
-
-            if (hostConnection) {
-                try { hostConnection.close(); } catch (error) { }
-                hostConnection = null;
-            }
-            if (peer) {
-                suppressLocalPeerClose = true;
-                try { peer.destroy(); } catch (error) { }
-                peer = null;
-                window.setTimeout(() => { suppressLocalPeerClose = false; }, 0);
-            }
-            const startHostTakeoverPeer = () => {
-                if (localMode !== 'host') return;
-                peer = new Peer(roomId);
-                peer.on('open', (id) => {
-                    localMode = 'host';
-                    localPeerId = id;
-                    setConnectionLabel(i18n('msgRoomCreated'));
-                    elements.leaveRoomBtn.disabled = false;
-                    hostTakeoverInProgress = false;
-                    broadcastState();
-                    render();
-                });
-                attachLocalPeerClose(peer);
-                peer.on('connection', (incoming) => {
-                    if (localMode !== 'host') return;
-                    if (!state) {
-                        incoming.on('open', () => incoming.send({ type: 'reject', message: 'Not initialized.' }));
-                        incoming.on('open', () => incoming.close());
-                        return;
-                    }
-                    const previousConnection = guestConnections.get(incoming.peer);
-                    if (previousConnection && previousConnection !== incoming) {
-                        try { previousConnection.close(); } catch (error) { }
-                    }
-                    guestConnections.set(incoming.peer, incoming);
-                    wireConnectionHandlers(incoming);
-                });
-                peer.on('error', (error) => {
-                    if (error.type === 'unavailable-id') {
-                        suppressLocalPeerClose = true;
-                        try { peer.destroy(); } catch (destroyError) { }
-                        peer = null;
-                        window.setTimeout(() => { suppressLocalPeerClose = false; }, 0);
-                        setConnectionLabel(i18n('msgRoomSyncing'));
-                        window.setTimeout(() => {
-                            if (localMode === 'host' && hostTakeoverInProgress) {
-                                startHostTakeoverPeer();
-                            }
-                        }, 900);
-                        return;
-                    }
-                    hostTakeoverInProgress = false;
-                    showToast(`Error: ${error.type || error.message}`);
-                });
-            };
-
-            startHostTakeoverPeer();
-        }
-
-        function handleGuestHostDisconnect() {
-            if (localMode !== 'guest') return;
-            if (!state) {
-                setConnectionLabel(i18n('msgRoomSyncing'));
-                scheduleGuestReconnect(1200);
-                return;
-            }
-
-            const lostHostId = (state && state.hostPeerId) || roomId;
-            const lostHost = getParticipantById(lostHostId);
-            const isHostSeated = isSeatedParticipant(lostHost);
-            const shouldPreserveHost = Boolean(
-                lostHost && isHostSeated && state.status === 'playing' && (state.moves || []).length > 0
-            );
-
-            if (lostHost && shouldPreserveHost) {
-                if (!lostHost.disconnectedAt) {
-                    lostHost.disconnectedAt = Date.now();
-                    lostHost.disconnectedUntil = lostHost.disconnectedAt + DISCONNECT_GRACE_MS;
-                    pauseMatchForDisconnect(lostHost.id);
-                    addLog('presence', i18n('msgDisconnected', lostHost.name));
-                }
-            } else if (lostHost) {
-                removeParticipant(lostHost.id, i18n('msgLeft', lostHost.name));
-            }
-
-            const nextHostPeerId = getNextHostCandidatePeerId(lostHostId);
-            if (!nextHostPeerId) {
-                setConnectionLabel(i18n('msgRoomSyncing'));
-                scheduleGuestReconnect(1200);
-                render();
-                return;
-            }
-
-            setHostPeerId(nextHostPeerId);
-
-            if (nextHostPeerId === localPeerId) {
-                beginHostTakeover(lostHostId);
-            } else {
-                setConnectionLabel(i18n('msgRoomSyncing'));
-                scheduleGuestReconnect();
-            }
-            render();
         }
 
         function formatTime(ms) {
@@ -5473,7 +5211,8 @@
         }
 
         function destroyNetworkState() {
-            clearHostReconnectTimer();
+            sessionTerminated = true;
+            clearReconnectTimer();
             clearConfirmMovePoint();
             clearLastMoveHighlight();
             clearBoardAlertHighlight();
@@ -5494,13 +5233,12 @@
             localMode = 'idle';
             localPlayerToken = '';
             hasNotifiedHostLeaving = false;
-            hostTakeoverInProgress = false;
-            suppressLocalPeerClose = false;
             lastClockBroadcastBucket = null;
         }
 
         function closeLocalSessionWithoutSnapshot() {
-            clearHostReconnectTimer();
+            sessionTerminated = true;
+            clearReconnectTimer();
             clearConfirmMovePoint();
             const previousHostConnection = hostConnection;
             const previousPeer = peer;
@@ -5514,8 +5252,6 @@
             localMode = 'idle';
             localPlayerToken = '';
             hasNotifiedHostLeaving = true;
-            hostTakeoverInProgress = false;
-            suppressLocalPeerClose = false;
             lastClockBroadcastBucket = null;
 
             previousGuestConnections.forEach((connection) => {
@@ -5580,68 +5316,15 @@
 
             if (peer) resetAppState();
             persistLobbySettings();
-            const settings = buildSettings();
             roomId = `${ROOM_PREFIX}${roomCode}`;
             localPlayerToken = getLocalPlayerToken(roomCode);
-            
+            sessionTerminated = false;
+
             setConnectionLabel(i18n('msgRoomConnecting'));
             setScreen('game');
 
-            peer = new Peer(roomId);
-
-            peer.on('open', (id) => {
-                localMode = 'host';
-                localPeerId = id;
-                state = restoreLocalHostFromSnapshot(roomId, id, hostName, settings, localPlayerToken);
-                elements.leaveRoomBtn.disabled = false;
-                setConnectionLabel(i18n('msgRoomCreated'));
-                render();
-            });
-            attachLocalPeerClose(peer);
-
-            peer.on('connection', (incoming) => {
-                if (localMode !== 'host') return;
-                if (!state) {
-                    incoming.on('open', () => incoming.send({ type: 'reject', message: 'Not initialized.' }));
-                    incoming.on('open', () => incoming.close());
-                    return;
-                }
-                const previousConnection = guestConnections.get(incoming.peer);
-                if (previousConnection && previousConnection !== incoming) {
-                    try { previousConnection.close(); } catch (error) { }
-                }
-                guestConnections.set(incoming.peer, incoming);
-                wireConnectionHandlers(incoming);
-            });
-
-            peer.on('error', (error) => {
-                if (error.type === 'unavailable-id') {
-                    peer.destroy();
-                    
-                    peer = new Peer(undefined, { roomId });
-                    peer.on('open', (id) => {
-                        localMode = 'guest';
-                        localPeerId = id;
-                        hostConnection = peer.connect(roomId, { reliable: true, metadata: { name: hostName, token: localPlayerToken } });
-                        wireConnectionHandlers(hostConnection);
-                    });
-                    attachLocalPeerClose(peer);
-                    peer.on('error', (err) => {
-                        if (err.type === 'network') {
-                            showToast(i18n('errCommError'));
-                            scheduleGuestReconnect(1200);
-                            return;
-                        }
-                        showToast(`Error: ${err.type || err.message}`);
-                        resetAppState();
-                    });
-                } else if (error.type === 'network') {
-                    showToast(i18n('errCommError'));
-                } else {
-                    showToast(`Error: ${error.type || error.message}`);
-                    resetAppState();
-                }
-            });
+            // The server assigns host/guest; connectToRoom reacts to it.
+            connectToRoom();
         }
 
         function wireConnectionHandlers(connection) {
@@ -5654,6 +5337,9 @@
                     connection.send({ type: 'hello', name: sanitizeName(elements.nameInput.value || 'Player'), token: localPlayerToken });
                 } else {
                     setConnectionLabel(i18n('msgRoomGuestConnecting'));
+                    // Push current state so a (re)connected guest syncs even when
+                    // it does not re-send hello (e.g. after a host reconnect).
+                    if (state && connection.open) connection.send({ type: 'state', state });
                 }
             });
 
@@ -5662,35 +5348,19 @@
                 lastActivityAt = Date.now();
 
                 if (message.type === 'hello' && localMode === 'host') {
+                    // connection.peer is the guest's stable token: identity is
+                    // the token, so a returning guest matches its participant
+                    // directly with no name/peer reconciliation.
+                    const token = connection.peer;
                     const nextName = sanitizeName(message.name || 'Player');
-                    const token = String(message.token || connection.metadata?.token || '');
-                    // token 一致を最優先で判定する。表示名が変わっていても同一人物の復帰として扱う。
-                    const tokenMatchedParticipant = findParticipantByToken(token, connection.peer);
-                    if (tokenMatchedParticipant) {
-                        replaceParticipantConnection(tokenMatchedParticipant.id, connection.peer, nextName, token);
-                        broadcastState();
-                        render();
-                        return;
-                    }
-                    const nameMatchedParticipant = findParticipantForReconnect(nextName, token, connection.peer);
-                    const existing = getParticipantById(connection.peer);
-                    if (nameMatchedParticipant && (isHostParticipant(nameMatchedParticipant) || !nameMatchedParticipant.disconnectedAt)) {
-                        connection.send({ type: 'reject', message: 'Display name is already in this room.' });
-                        window.setTimeout(() => {
-                            try { connection.close(); } catch (error) { }
-                        }, 250);
-                        return;
-                    }
-                    if (nameMatchedParticipant) {
-                        replaceParticipantConnection(nameMatchedParticipant.id, connection.peer, nextName, token);
-                    } else if (!existing) {
-                        state.participantsById[connection.peer] = { id: connection.peer, name: nextName, seat: 'spectator', isHost: false, token };
-                        ensureJoinOrderContains(connection.peer);
-                        ensureClockEntry(connection.peer);
+                    const existing = getParticipantById(token);
+                    if (existing) {
+                        markParticipantReconnected(token, nextName);
+                    } else {
+                        state.participantsById[token] = { id: token, name: nextName, seat: 'spectator', isHost: false, token };
+                        ensureJoinOrderContains(token);
+                        ensureClockEntry(token);
                         addLog('presence', i18n('msgJoined', nextName));
-                    } else if (existing.name !== nextName) {
-                        existing.name = nextName;
-                        if (token) existing.token = token;
                     }
 
                     broadcastState();
@@ -5782,29 +5452,18 @@
                     return;
                 }
 
-                if (message.type === 'takeover') {
-                    closeLocalSessionWithoutSnapshot();
-                    return;
-                }
-
                 if (message.type === 'reject') {
                     showToast(message.message);
                     resetAppState();
                 }
             });
 
-            connection.on('close', (reason) => {
-                if (reason === 'takeover') {
-                    closeLocalSessionWithoutSnapshot();
-                    return;
-                }
+            connection.on('close', () => {
                 if (localMode === 'host') {
-                    setConnectionLabel(i18n('msgRoomClosed'));
+                    // The server reports a guest gone only after its presence
+                    // grace expires, so this close is already debounced.
                     if (guestConnections.get(connection.peer) === connection) {
                         guestConnections.delete(connection.peer);
-                    }
-                    if (suppressedConnectionClosePeers.delete(connection.peer)) {
-                        return;
                     }
                     const participant = getParticipantById(connection.peer);
                     if (participant) {
@@ -5820,22 +5479,24 @@
                         render();
                     }
                 } else if (localMode === 'guest' && connection === hostConnection) {
-                    setConnectionLabel(i18n('msgRoomClosed'));
+                    // Host link dropped. A real socket loss is handled by the
+                    // peer 'close' (reconnect); a host migration is handled by
+                    // 'host-changed'. Here we only drop the stale reference.
                     hostConnection = null;
-                    handleGuestHostDisconnect();
                 }
             });
 
             connection.on('error', () => {
-                showToast(i18n('errCommError'));
-                if (localMode === 'guest' && connection === hostConnection) {
-                    scheduleGuestReconnect();
-                }
+                // Transport errors surface through the peer-level 'error'/'close'
+                // events, which drive reconnection. Nothing to do per-connection.
             });
         }
 
         function leaveRoom() {
             const leavingRoomId = state?.roomId || roomId;
+            // Tell the host immediately so it does not wait out the presence
+            // grace before removing us.
+            notifyHostLeaving();
             resetAppState();
             clearRoomStateSnapshot(leavingRoomId);
             showToast(i18n('msgLeftRoom'));

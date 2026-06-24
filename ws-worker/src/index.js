@@ -1,3 +1,6 @@
+const PROTOCOL_VERSION = 1;
+const PRESENCE_GRACE_MS = 4000;
+
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
@@ -28,11 +31,47 @@ export class RoomRelay {
   constructor(state, env) {
     this.state = state;
     this.env = env;
+    this.loaded = false;
+    this.model = null;
 
+    // Infra-level keepalive: the client pings, we auto-reply pong.
+    // Used only for each client to self-heal its own socket; peer presence
+    // is decided here in the Durable Object, never by client heartbeats.
     this.state.setWebSocketAutoResponse(
       new WebSocketRequestResponsePair('ping', 'pong')
     );
   }
+
+  // ---- model (durable) ---------------------------------------------------
+  // members:    { [token]: { name, joinSeq } }   connected OR within grace
+  // hostToken:  string
+  // seqCounter: number
+  // pendingDrop:{ [token]: deadlineMs }          sockets gone, awaiting grace
+
+  async ensureLoaded() {
+    if (this.loaded) return;
+    const stored = await this.state.storage.get([
+      'members',
+      'hostToken',
+      'seqCounter',
+      'pendingDrop',
+    ]);
+    this.model = {
+      members: stored.get('members') || {},
+      hostToken: stored.get('hostToken') || '',
+      seqCounter: stored.get('seqCounter') || 0,
+      pendingDrop: stored.get('pendingDrop') || {},
+    };
+    this.loaded = true;
+  }
+
+  async persist(keys) {
+    const entries = {};
+    for (const key of keys) entries[key] = this.model[key];
+    await this.state.storage.put(entries);
+  }
+
+  // ---- websocket lifecycle ----------------------------------------------
 
   async fetch(request) {
     if (request.headers.get('Upgrade') !== 'websocket') {
@@ -43,7 +82,7 @@ export class RoomRelay {
     const client = pair[0];
     const server = pair[1];
 
-    server.serializeAttachment(this.createSocketMeta());
+    server.serializeAttachment({ token: '' });
     this.state.acceptWebSocket(server);
 
     return new Response(null, {
@@ -53,19 +92,6 @@ export class RoomRelay {
   }
 
   async webSocketMessage(socket, rawData) {
-    this.handleMessage(socket, rawData);
-  }
-
-  async webSocketClose(socket, code, reason) {
-    this.handleClose(socket, String(reason || ''));
-    socket.close(code, reason);
-  }
-
-  async webSocketError(socket) {
-    this.handleClose(socket);
-  }
-
-  handleMessage(socket, rawData) {
     if (rawData === 'ping' || rawData === 'pong') return;
     if (typeof rawData !== 'string') return;
 
@@ -77,177 +103,248 @@ export class RoomRelay {
     }
     if (!message || typeof message !== 'object') return;
 
-    if (message.type === 'peer-open') {
-      this.handlePeerOpen(socket, message);
+    await this.ensureLoaded();
+
+    if (message.type === 'hello') {
+      await this.handleHello(socket, message);
       return;
     }
 
-    const meta = this.getSocketMeta(socket);
-    if (!meta.peerId) {
-      this.send(socket, {
-        type: 'peer-error',
-        errorType: 'not-opened',
-        message: 'Peer is not opened yet.',
-      });
+    const meta = socket.deserializeAttachment() || {};
+    if (!meta.token) {
       return;
     }
 
-    if (message.type === 'connect-request') {
-      this.handleConnectRequest(socket, message);
+    if (message.type === 'relay') {
+      this.handleRelay(meta.token, message);
       return;
     }
 
-    if (message.type === 'connection-data') {
-      this.forwardConnectionData(socket, message);
-      return;
-    }
-
-    if (message.type === 'connection-close') {
-      this.closeConnection(socket, String(message.connectionId || ''), true, String(message.closeReason || ''));
+    if (message.type === 'bye') {
+      await this.handleBye(socket, meta.token);
     }
   }
 
-  handlePeerOpen(socket, message) {
-    const meta = this.getSocketMeta(socket);
-    if (meta.peerId) return;
-
-    const requested = String(message.requestedPeerId || '').trim();
-    let peerId = requested;
-    if (!peerId) {
-      peerId = this.generatePeerId();
-    }
-
-    if (this.findPeerSocket(peerId)) {
-      this.send(socket, {
-        type: 'peer-error',
-        errorType: 'unavailable-id',
-        message: 'Requested peer id is already used.',
-      });
-      return;
-    }
-
-    meta.peerId = peerId;
-    meta.roomId = String(message.roomId || '');
-    this.setSocketMeta(socket, meta);
-
-    this.send(socket, {
-      type: 'peer-opened',
-      peerId,
-    });
+  async webSocketClose(socket) {
+    await this.ensureLoaded();
+    await this.handleSocketGone(socket);
   }
 
-  handleConnectRequest(socket, message) {
-    const sourceMeta = this.getSocketMeta(socket);
-    if (!sourceMeta.peerId) return;
-
-    const sourcePeerId = sourceMeta.peerId;
-    const targetPeerId = String(message.targetPeerId || '').trim();
-    const connectionId = String(message.connectionId || '').trim();
-
-    if (!targetPeerId || !connectionId) {
-      this.send(socket, {
-        type: 'connect-rejected',
-        connectionId,
-        errorType: 'invalid-connection',
-        message: 'Missing target peer or connection id.',
-      });
-      return;
-    }
-
-    const targetSocket = this.findPeerSocket(targetPeerId);
-    if (!targetSocket) {
-      this.send(socket, {
-        type: 'connect-rejected',
-        connectionId,
-        errorType: 'peer-unavailable',
-        message: 'Target peer is unavailable.',
-      });
-      return;
-    }
-
-    const targetMeta = this.getSocketMeta(targetSocket);
-    sourceMeta.connections[connectionId] = targetPeerId;
-    targetMeta.connections[connectionId] = sourcePeerId;
-    this.setSocketMeta(socket, sourceMeta);
-    this.setSocketMeta(targetSocket, targetMeta);
-
-    this.send(targetSocket, {
-      type: 'incoming-connection',
-      connectionId,
-      peerId: sourcePeerId,
-      metadata: message.metadata || {},
-    });
-
-    this.send(socket, {
-      type: 'connect-opened',
-      connectionId,
-      peerId: targetPeerId,
-    });
+  async webSocketError(socket) {
+    await this.ensureLoaded();
+    await this.handleSocketGone(socket);
   }
 
-  forwardConnectionData(socket, message) {
-    const meta = this.getSocketMeta(socket);
-    const connectionId = String(message.connectionId || '').trim();
-    if (!connectionId) return;
+  async alarm() {
+    await this.ensureLoaded();
+    const now = Date.now();
+    let rosterChanged = false;
 
-    const targetPeerId = meta.connections[connectionId] || '';
-    if (!targetPeerId) return;
-
-    const targetSocket = this.findPeerSocket(targetPeerId);
-    if (!targetSocket) {
-      this.closeConnection(socket, connectionId, true);
-      return;
-    }
-
-    this.send(targetSocket, {
-      type: 'connection-data',
-      connectionId,
-      data: message.data,
-    });
-  }
-
-  closeConnection(socket, connectionId, notifyPeer, closeReason = '') {
-    if (!connectionId) return;
-    const meta = this.getSocketMeta(socket);
-    const targetPeerId = meta.connections[connectionId] || '';
-    if (!targetPeerId) return;
-
-    delete meta.connections[connectionId];
-    this.setSocketMeta(socket, meta);
-
-    const targetSocket = this.findPeerSocket(targetPeerId);
-    if (!targetSocket) return;
-
-    const targetMeta = this.getSocketMeta(targetSocket);
-    delete targetMeta.connections[connectionId];
-    this.setSocketMeta(targetSocket, targetMeta);
-
-    if (!notifyPeer) return;
-    this.send(targetSocket, {
-      type: 'connection-close',
-      connectionId,
-      closeReason,
-    });
-  }
-
-  handleClose(socket) {
-    const meta = this.getSocketMeta(socket);
-    if (!meta.peerId) return;
-
-    for (const [connectionId, otherPeerId] of Object.entries(meta.connections)) {
-      const otherSocket = this.findPeerSocket(otherPeerId);
-      if (otherSocket) {
-        const otherMeta = this.getSocketMeta(otherSocket);
-        delete otherMeta.connections[connectionId];
-        this.setSocketMeta(otherSocket, otherMeta);
-        this.send(otherSocket, {
-          type: 'connection-close',
-          connectionId,
-        });
+    for (const [token, deadline] of Object.entries(this.model.pendingDrop)) {
+      if (deadline > now) continue;
+      delete this.model.pendingDrop[token];
+      if (this.model.members[token]) {
+        delete this.model.members[token];
+        rosterChanged = true;
+      }
+      if (this.model.hostToken === token) {
+        this.electHost();
+        rosterChanged = true;
       }
     }
 
-    this.setSocketMeta(socket, this.createSocketMeta());
+    await this.persist(['pendingDrop', 'members', 'hostToken']);
+    await this.rescheduleAlarm();
+    if (rosterChanged) this.broadcastRoster(null);
+  }
+
+  // ---- handlers ----------------------------------------------------------
+
+  async handleHello(socket, message) {
+    if (Number(message.protocol) !== PROTOCOL_VERSION) {
+      this.send(socket, { type: 'protocol-mismatch', server: PROTOCOL_VERSION });
+      return;
+    }
+
+    const token = String(message.token || '').trim();
+    if (!token) {
+      this.send(socket, { type: 'protocol-mismatch', server: PROTOCOL_VERSION });
+      return;
+    }
+    const name = String(message.name || '').slice(0, 64);
+
+    // Token is the sole identity: a new socket with the same token displaces
+    // the old one (e.g. a duplicate tab). The old tab is told to stand down.
+    for (const other of this.state.getWebSockets()) {
+      if (other === socket) continue;
+      const otherMeta = other.deserializeAttachment() || {};
+      if (otherMeta.token === token) {
+        this.send(other, { type: 'displaced' });
+        try { other.close(1000, 'displaced'); } catch { /* no-op */ }
+      }
+    }
+
+    socket.serializeAttachment({ token });
+
+    const membershipChanged = this.upsertMember(token, name);
+
+    // Reconnected within grace: cancel the pending drop. No roster change,
+    // so guests never see a blip (this is the whole point of the grace).
+    if (this.model.pendingDrop[token] != null) {
+      delete this.model.pendingDrop[token];
+      await this.rescheduleAlarm();
+    }
+
+    let hostAssigned = false;
+    if (!this.model.hostToken) {
+      this.model.hostToken = token;
+      hostAssigned = true;
+    }
+
+    await this.persist(['members', 'seqCounter', 'pendingDrop', 'hostToken']);
+
+    this.send(socket, {
+      type: 'welcome',
+      protocol: PROTOCOL_VERSION,
+      you: { token, role: this.model.hostToken === token ? 'host' : 'member' },
+      roster: this.roster(),
+    });
+
+    if (membershipChanged || hostAssigned) {
+      this.broadcastRoster(socket);
+    }
+  }
+
+  handleRelay(fromToken, message) {
+    const to = String(message.to || '');
+    if (!to) return;
+    const data = message.data;
+
+    if (to === '*') {
+      for (const socket of this.state.getWebSockets()) {
+        const meta = socket.deserializeAttachment() || {};
+        if (!meta.token || meta.token === fromToken) continue;
+        this.send(socket, { type: 'message', from: fromToken, data });
+      }
+      return;
+    }
+
+    const targetToken = to === 'host' ? this.model.hostToken : to;
+    if (!targetToken) return;
+
+    const target = this.findSocketByToken(targetToken);
+    if (!target) return;
+
+    this.send(target, { type: 'message', from: fromToken, data });
+  }
+
+  async handleBye(socket, token) {
+    let rosterChanged = false;
+    if (this.model.members[token]) {
+      delete this.model.members[token];
+      rosterChanged = true;
+    }
+    if (this.model.pendingDrop[token] != null) {
+      delete this.model.pendingDrop[token];
+    }
+    if (this.model.hostToken === token) {
+      this.electHost();
+      rosterChanged = true;
+    }
+    await this.persist(['members', 'pendingDrop', 'hostToken']);
+    await this.rescheduleAlarm();
+    if (rosterChanged) this.broadcastRoster(socket);
+    try { socket.close(1000, 'bye'); } catch { /* no-op */ }
+  }
+
+  async handleSocketGone(socket) {
+    const meta = socket.deserializeAttachment() || {};
+    const token = meta.token;
+    if (!token) return;
+
+    // A still-open OTHER socket with this token means a displacement just
+    // happened; the old socket's close should not start a drop. The closing
+    // socket itself may still appear in getWebSockets(), so exclude it.
+    if (this.findSocketByToken(token, socket)) return;
+    if (!this.model.members[token]) return;
+
+    this.model.pendingDrop[token] = Date.now() + PRESENCE_GRACE_MS;
+    await this.persist(['pendingDrop']);
+    await this.rescheduleAlarm();
+    // No roster broadcast: the member stays listed during the grace window.
+  }
+
+  // ---- helpers -----------------------------------------------------------
+
+  upsertMember(token, name) {
+    const existing = this.model.members[token];
+    if (existing) {
+      const changed = existing.name !== name;
+      existing.name = name;
+      return changed;
+    }
+    this.model.seqCounter += 1;
+    this.model.members[token] = { name, joinSeq: this.model.seqCounter };
+    return true;
+  }
+
+  electHost() {
+    let best = '';
+    let bestSeq = Infinity;
+    for (const socket of this.state.getWebSockets()) {
+      const meta = socket.deserializeAttachment() || {};
+      const token = meta.token;
+      if (!token) continue;
+      const member = this.model.members[token];
+      if (!member) continue;
+      if (this.model.pendingDrop[token] != null) continue;
+      const seq = member.joinSeq ?? Infinity;
+      if (seq < bestSeq) {
+        bestSeq = seq;
+        best = token;
+      }
+    }
+    this.model.hostToken = best;
+  }
+
+  async rescheduleAlarm() {
+    const deadlines = Object.values(this.model.pendingDrop);
+    if (deadlines.length === 0) {
+      await this.state.storage.deleteAlarm();
+      return;
+    }
+    await this.state.storage.setAlarm(Math.min(...deadlines));
+  }
+
+  roster() {
+    return {
+      hostToken: this.model.hostToken,
+      members: Object.entries(this.model.members).map(([token, member]) => ({
+        token,
+        name: member.name,
+      })),
+    };
+  }
+
+  broadcastRoster(excludeSocket) {
+    const payload = { type: 'roster', roster: this.roster() };
+    for (const socket of this.state.getWebSockets()) {
+      if (socket === excludeSocket) continue;
+      const meta = socket.deserializeAttachment() || {};
+      if (!meta.token) continue;
+      this.send(socket, payload);
+    }
+  }
+
+  findSocketByToken(token, excludeSocket) {
+    const normalized = String(token || '').trim();
+    if (!normalized) return null;
+    for (const socket of this.state.getWebSockets()) {
+      if (socket === excludeSocket) continue;
+      const meta = socket.deserializeAttachment() || {};
+      if (meta.token === normalized) return socket;
+    }
+    return null;
   }
 
   send(socket, payload) {
@@ -256,56 +353,5 @@ export class RoomRelay {
     } catch {
       // no-op
     }
-  }
-
-  generatePeerId() {
-    return 'p-' + crypto.randomUUID().slice(0, 12);
-  }
-
-  createSocketMeta() {
-    return {
-      peerId: '',
-      roomId: '',
-      connections: {},
-    };
-  }
-
-  getSocketMeta(socket) {
-    const meta = socket.deserializeAttachment();
-    if (!meta || typeof meta !== 'object') return this.createSocketMeta();
-    return {
-      peerId: String(meta.peerId || ''),
-      roomId: String(meta.roomId || ''),
-      connections: this.normalizeConnections(meta.connections),
-    };
-  }
-
-  setSocketMeta(socket, meta) {
-    socket.serializeAttachment({
-      peerId: String(meta.peerId || ''),
-      roomId: String(meta.roomId || ''),
-      connections: this.normalizeConnections(meta.connections),
-    });
-  }
-
-  normalizeConnections(connections) {
-    if (!connections || typeof connections !== 'object') return {};
-    return Object.fromEntries(
-      Object.entries(connections)
-        .map(([connectionId, peerId]) => [String(connectionId || '').trim(), String(peerId || '').trim()])
-        .filter(([connectionId, peerId]) => connectionId && peerId)
-    );
-  }
-
-  findPeerSocket(peerId) {
-    const normalizedPeerId = String(peerId || '').trim();
-    if (!normalizedPeerId) return null;
-
-    for (const socket of this.state.getWebSockets()) {
-      const meta = this.getSocketMeta(socket);
-      if (meta.peerId === normalizedPeerId) return socket;
-    }
-
-    return null;
   }
 }
