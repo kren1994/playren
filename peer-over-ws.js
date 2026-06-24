@@ -116,6 +116,7 @@
             this._hostToken = '';
             this._roster = new Map();
             this._remotes = new Map();
+            this.snapshotVersion = 0; // latest authoritative version the server holds
 
             this._terminal = false; // displaced / protocol-mismatch: do not reconnect
             this._heartbeatTimer = 0;
@@ -195,6 +196,25 @@
         // Host -> all members in one relay (saves inbound traffic vs N sends).
         broadcast(data) {
             this._relay('*', data);
+        }
+
+        // Host pushes its authoritative state to the server (debounced by the
+        // caller). The server keeps only newer versions.
+        pushSnapshot(version, state) {
+            this._send({ type: 'snapshot', version, state });
+        }
+
+        // Host pulls the server snapshot (used when its own copy is missing or
+        // older than serverSnapshotVersion).
+        requestSnapshot() {
+            this._send({ type: 'snapshot-request' });
+        }
+
+        // Is this token currently present (connected, or within presence grace)
+        // per the server roster? Used to reconcile seated-player presence after
+        // adopting a snapshot.
+        isMember(token) {
+            return this._roster.has(String(token || ''));
         }
 
         setHeartbeatEnabled() {
@@ -348,6 +368,9 @@
                 case 'message':
                     this._handleRelayedMessage(message);
                     return;
+                case 'snapshot':
+                    this._emitter.emit('snapshot', { version: Number(message.version || 0), state: message.state });
+                    return;
                 case 'displaced':
                     this._terminal = true;
                     this._emitter.emit('displaced');
@@ -380,6 +403,7 @@
 
             const prevHostToken = this._hostToken;
             this._hostToken = String(roster.hostToken || '');
+            this.snapshotVersion = Number(roster.snapshotVersion || 0);
 
             const members = Array.isArray(roster.members) ? roster.members : [];
             this._roster = new Map(

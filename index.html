@@ -1745,6 +1745,9 @@
         // Bumped when participant ids switched from ephemeral peer ids to stable
         // tokens. Older snapshots use the legacy id scheme and are discarded.
         const ROOM_STATE_VERSION = 2;
+        // Debounce for pushing the authoritative state to the server. Renju is
+        // slow, so this collapses any burst into ~1 write per meaningful change.
+        const SNAPSHOT_PUSH_DEBOUNCE_MS = 1000;
         const USER_SETTINGS_STORAGE_KEY = 'playren:user-settings';
         const DEFAULT_BASE_MINUTES = 5;
         const DEFAULT_INCREMENT_SECONDS = 3;
@@ -1875,6 +1878,8 @@
         let hasNotifiedHostLeaving = false;
         let reconnectTimer = 0;
         let sessionTerminated = false;
+        let snapshotPushTimer = 0;
+        let lastPushedSnapshotVersion = -1;
         
         let soundEnabled = true;
         let audioCtx = null;
@@ -3779,6 +3784,11 @@
                 clearReconnectTimer();
                 window.location.reload();
             });
+
+            thisPeer.on('snapshot', (snap) => {
+                if (peer !== thisPeer) return;
+                if (snap && snap.state) adoptHostSnapshot(snap.state);
+            });
         }
 
         function applyHostRole() {
@@ -3793,11 +3803,15 @@
 
             if (!state) {
                 // First host of the room, or a returning host after a reload.
+                // Restore instantly from local cache, then upgrade from the
+                // server snapshot if it is newer (covers all-disconnect revival).
                 const settings = buildSettings();
                 const name = sanitizeName(elements.nameInput.value || 'Player');
                 state = restoreLocalHostFromSnapshot(roomId, localPeerId, name, settings);
+                reconcileSeatedPresence();
                 broadcastState();
                 render();
+                maybeRequestServerSnapshot();
                 return;
             }
 
@@ -3839,9 +3853,44 @@
                 }
             }
 
-            resumeMatchAfterReconnect();
+            reconcileSeatedPresence();
             broadcastState();
             render();
+            maybeRequestServerSnapshot();
+        }
+
+        // After claiming host / adopting a snapshot, align seated players with
+        // who the server actually reports as present: clear stale disconnect
+        // flags for the connected, mark the absent disconnected (and pause).
+        function reconcileSeatedPresence() {
+            if (!state || !peer) return;
+            if (state.status !== 'playing' || (state.moves || []).length === 0) return;
+            let pausedFor = null;
+            getActiveSeatKeys().forEach((seat) => {
+                const pid = state.seats?.[seat];
+                if (!pid || pid === localPeerId) return;
+                const participant = getParticipantById(pid);
+                if (!participant) return;
+                if (peer.isMember(pid)) {
+                    delete participant.disconnectedAt;
+                    delete participant.disconnectedUntil;
+                } else if (!participant.disconnectedAt) {
+                    participant.disconnectedAt = Date.now();
+                    participant.disconnectedUntil = participant.disconnectedAt + DISCONNECT_GRACE_MS;
+                    pausedFor = pid;
+                }
+            });
+            if (pausedFor) pauseMatchForDisconnect(pausedFor);
+            else resumeMatchAfterReconnect();
+        }
+
+        // Fetch the server snapshot only when it is newer than our copy, so a
+        // routine host reconnect with live state costs no extra traffic.
+        function maybeRequestServerSnapshot() {
+            if (localMode !== 'host' || !peer) return;
+            const serverVersion = peer.snapshotVersion || 0;
+            const currentVersion = state ? (state.version || 0) : -1;
+            if (serverVersion > currentVersion) peer.requestSnapshot();
         }
 
         function applyGuestRole(hostToken) {
@@ -4740,9 +4789,59 @@
             if (visible) updateConfirmDialogPosition();
         }
 
+        // Push the authoritative state to the server on meaningful changes only
+        // (moves / seats / status / time-setting), debounced. Per-second clock
+        // ticks are intentionally NOT a trigger.
+        function scheduleSnapshotPush() {
+            if (localMode !== 'host') return;
+            if (snapshotPushTimer) return;
+            snapshotPushTimer = window.setTimeout(() => {
+                snapshotPushTimer = 0;
+                pushSnapshotToServer();
+            }, SNAPSHOT_PUSH_DEBOUNCE_MS);
+        }
+
+        function pushSnapshotToServer() {
+            if (localMode !== 'host' || !state || !peer) return;
+            const version = state.version || 0;
+            if (version === lastPushedSnapshotVersion) return;
+            lastPushedSnapshotVersion = version;
+            peer.pushSnapshot(version, state);
+        }
+
+        // A host (reload-recovery or migration) adopts the server's snapshot when
+        // it is newer than whatever the host currently holds, then re-broadcasts.
+        function adoptHostSnapshot(snapshotState) {
+            if (localMode !== 'host' || !snapshotState) return;
+            const incomingVersion = snapshotState.version || 0;
+            const currentVersion = state ? (state.version || 0) : -1;
+            if (incomingVersion <= currentVersion) return;
+
+            state = snapshotState;
+            ensurePairRenjuState();
+            refreshLocalizedResultText();
+            setHostPeerId(localPeerId);
+            const participant = getParticipantById(localPeerId);
+            if (participant) {
+                participant.name = sanitizeName(elements.nameInput.value || participant.name || 'Player');
+                participant.token = localPlayerToken;
+                participant.isHost = true;
+                delete participant.disconnectedAt;
+                delete participant.disconnectedUntil;
+            }
+            ensureClockEntry(localPeerId);
+            rebuildColors();
+            reconcileSeatedPresence();
+            lastPushedSnapshotVersion = incomingVersion;
+            persistRoomStateSnapshot();
+            broadcastState();
+            render();
+        }
+
         function broadcastState() {
             if (localMode !== 'host' || !state) return;
             persistRoomStateSnapshot();
+            scheduleSnapshotPush();
             guestConnections.forEach((connection) => {
                 if (connection && connection.open) {
                     connection.send({ type: 'state', state });
@@ -4806,6 +4905,7 @@
 
         function broadcastMoveEvent(action) {
             if (localMode !== 'host' || !state) return;
+            scheduleSnapshotPush();
             const event = createMoveAppliedEvent(action);
             guestConnections.forEach((connection) => {
                 if (connection && connection.open) {
@@ -4826,6 +4926,7 @@
 
         function broadcastTakebackEvent(actorPeerId, action) {
             if (localMode !== 'host' || !state) return;
+            scheduleSnapshotPush();
             const event = createTakebackUpdatedEvent(actorPeerId, action);
             guestConnections.forEach((connection) => {
                 if (connection && connection.open) {
@@ -5210,9 +5311,18 @@
             if (isResponder) updateConfirmDialogPosition();
         }
 
+        function clearSnapshotPush() {
+            if (snapshotPushTimer) {
+                window.clearTimeout(snapshotPushTimer);
+                snapshotPushTimer = 0;
+            }
+            lastPushedSnapshotVersion = -1;
+        }
+
         function destroyNetworkState() {
             sessionTerminated = true;
             clearReconnectTimer();
+            clearSnapshotPush();
             clearConfirmMovePoint();
             clearLastMoveHighlight();
             clearBoardAlertHighlight();
@@ -5239,6 +5349,7 @@
         function closeLocalSessionWithoutSnapshot() {
             sessionTerminated = true;
             clearReconnectTimer();
+            clearSnapshotPush();
             clearConfirmMovePoint();
             const previousHostConnection = hostConnection;
             const previousPeer = peer;

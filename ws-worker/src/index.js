@@ -1,5 +1,8 @@
 const PROTOCOL_VERSION = 1;
 const PRESENCE_GRACE_MS = 4000;
+// Authoritative state snapshot kept so a room survives all participants
+// briefly leaving: the first returner (elected host) restores from it.
+const SNAPSHOT_MAX_AGE_MS = 30 * 60 * 1000;
 
 export default {
   async fetch(request, env) {
@@ -55,12 +58,18 @@ export class RoomRelay {
       'hostToken',
       'seqCounter',
       'pendingDrop',
+      'snapshot',
+      'snapshotVersion',
+      'snapshotSavedAt',
     ]);
     this.model = {
       members: stored.get('members') || {},
       hostToken: stored.get('hostToken') || '',
       seqCounter: stored.get('seqCounter') || 0,
       pendingDrop: stored.get('pendingDrop') || {},
+      snapshot: stored.get('snapshot') || null,
+      snapshotVersion: stored.get('snapshotVersion') || 0,
+      snapshotSavedAt: stored.get('snapshotSavedAt') || 0,
     };
     this.loaded = true;
   }
@@ -117,6 +126,16 @@ export class RoomRelay {
 
     if (message.type === 'relay') {
       this.handleRelay(meta.token, message);
+      return;
+    }
+
+    if (message.type === 'snapshot') {
+      await this.handleSnapshot(meta.token, message);
+      return;
+    }
+
+    if (message.type === 'snapshot-request') {
+      this.handleSnapshotRequest(socket, meta.token);
       return;
     }
 
@@ -238,6 +257,38 @@ export class RoomRelay {
     this.send(target, { type: 'message', from: fromToken, data });
   }
 
+  // Only the current host owns the authoritative state. Store newer versions
+  // (older or duplicate versions are ignored). No fan-out, debounced by the
+  // client, so this is a low-rate write path.
+  async handleSnapshot(token, message) {
+    if (!token || token !== this.model.hostToken) return;
+    const version = Number(message.version || 0);
+    if (!version || version <= this.model.snapshotVersion) return;
+    if (!message.state || typeof message.state !== 'object') return;
+
+    this.model.snapshot = message.state;
+    this.model.snapshotVersion = version;
+    this.model.snapshotSavedAt = Date.now();
+    await this.persist(['snapshot', 'snapshotVersion', 'snapshotSavedAt']);
+  }
+
+  // Host-only recovery: a (re)connecting or promoted host pulls the latest
+  // authoritative state when its own copy is missing or stale.
+  handleSnapshotRequest(socket, token) {
+    if (!token || token !== this.model.hostToken) return;
+    if (!this.snapshotFresh()) return;
+    this.send(socket, {
+      type: 'snapshot',
+      version: this.model.snapshotVersion,
+      state: this.model.snapshot,
+    });
+  }
+
+  snapshotFresh() {
+    if (!this.model.snapshot || !this.model.snapshotVersion) return false;
+    return Date.now() - this.model.snapshotSavedAt <= SNAPSHOT_MAX_AGE_MS;
+  }
+
   async handleBye(socket, token) {
     let rosterChanged = false;
     if (this.model.members[token]) {
@@ -319,6 +370,7 @@ export class RoomRelay {
   roster() {
     return {
       hostToken: this.model.hostToken,
+      snapshotVersion: this.snapshotFresh() ? this.model.snapshotVersion : 0,
       members: Object.entries(this.model.members).map(([token, member]) => ({
         token,
         name: member.name,
