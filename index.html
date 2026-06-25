@@ -6453,6 +6453,8 @@
                     const winnerId = state.pairRenjuEnabled ? '' : getOpponentPeerId(loserId);
                     finishGame(winnerId, messageSpec('msgTimeout', getPeerName(loserId)), messageSpec('msgTimeoutLog'));
                     broadcastState();
+                    render();
+                    return;
                 } else {
                     const bucket = Math.floor(remaining / 1000);
                     if (bucket !== lastClockBroadcastBucket) {
