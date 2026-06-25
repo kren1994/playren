@@ -3752,8 +3752,12 @@
                 if (peer !== thisPeer) return;
                 if (sessionTerminated) return;
                 if (localMode === 'host') {
+                    // Keep the clock running off activeStartedAt. Calling
+                    // stopClock() here would drop the elapsed time (rewind the
+                    // display) and leave it frozen until the next move, since
+                    // there is no connectionPause for resumeMatchAfterReconnect
+                    // to clear. A brief host blip/background must be seamless.
                     persistRoomStateSnapshot();
-                    stopClock();
                 }
                 hostConnection = null;
                 setConnectionLabel(i18n('msgRoomSyncing'));
