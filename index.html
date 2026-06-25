@@ -1880,6 +1880,10 @@
         let sessionTerminated = false;
         let snapshotPushTimer = 0;
         let lastPushedSnapshotVersion = -1;
+        // Guest-only: estimated (hostClock - localClock) offset so the display
+        // interpolates clocks against host time, not the local wall clock.
+        // Always 0 on the host (it is the time authority).
+        let clockOffsetMs = 0;
         
         let soundEnabled = true;
         let audioCtx = null;
@@ -3797,6 +3801,7 @@
 
         function applyHostRole() {
             localMode = 'host';
+            clockOffsetMs = 0; // host is the time authority
             setConnectionLabel(i18n('msgRoomCreated'));
             elements.leaveRoomBtn.disabled = false;
 
@@ -3962,7 +3967,9 @@
             if (state.status !== 'playing' || !sameActiveClock || !state.clocks.activeStartedAt) {
                 return base;
             }
-            return Math.max(0, base - (Date.now() - state.clocks.activeStartedAt));
+            // activeStartedAt is in host time; align our clock to it. On the host
+            // clockOffsetMs is 0, so this is a no-op there.
+            return Math.max(0, base - ((Date.now() + clockOffsetMs) - state.clocks.activeStartedAt));
         }
 
         function applyElapsedTime(timestamp = Date.now()) {
@@ -4846,9 +4853,10 @@
             if (localMode !== 'host' || !state) return;
             persistRoomStateSnapshot();
             scheduleSnapshotPush();
+            const hostNow = Date.now();
             guestConnections.forEach((connection) => {
                 if (connection && connection.open) {
-                    connection.send({ type: 'state', state });
+                    connection.send({ type: 'state', state, hostNow });
                 }
             });
         }
@@ -4911,9 +4919,10 @@
             if (localMode !== 'host' || !state) return;
             scheduleSnapshotPush();
             const event = createMoveAppliedEvent(action);
+            const hostNow = Date.now();
             guestConnections.forEach((connection) => {
                 if (connection && connection.open) {
-                    connection.send({ type: 'event', event });
+                    connection.send({ type: 'event', event, hostNow });
                 }
             });
         }
@@ -4932,9 +4941,10 @@
             if (localMode !== 'host' || !state) return;
             scheduleSnapshotPush();
             const event = createTakebackUpdatedEvent(actorPeerId, action);
+            const hostNow = Date.now();
             guestConnections.forEach((connection) => {
                 if (connection && connection.open) {
-                    connection.send({ type: 'event', event });
+                    connection.send({ type: 'event', event, hostNow });
                 }
             });
         }
@@ -5097,9 +5107,10 @@
         function broadcastClocks() {
             if (localMode !== 'host' || !state) return;
             persistRoomStateSnapshot();
+            const hostNow = Date.now();
             guestConnections.forEach((connection) => {
                 if (connection && connection.open) {
-                    connection.send({ type: 'clock', clocks: state.clocks });
+                    connection.send({ type: 'clock', clocks: state.clocks, hostNow });
                 }
             });
         }
@@ -5321,6 +5332,7 @@
                 snapshotPushTimer = 0;
             }
             lastPushedSnapshotVersion = -1;
+            clockOffsetMs = 0;
         }
 
         function destroyNetworkState() {
@@ -5461,6 +5473,12 @@
             connection.on('data', (message) => {
                 if (!message || typeof message !== 'object') return;
                 lastActivityAt = Date.now();
+
+                // Track the host clock offset from any host->guest message that
+                // carries hostNow, so clock interpolation uses host time.
+                if (localMode === 'guest' && typeof message.hostNow === 'number') {
+                    clockOffsetMs = message.hostNow - Date.now();
+                }
 
                 if (message.type === 'hello' && localMode === 'host') {
                     // connection.peer is the guest's stable token: identity is
