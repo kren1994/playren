@@ -287,6 +287,150 @@
         });
     }
 
+    // ---- seat colors / seat-clock config / board reset (Step 2.0) ----------
+    // Pure state logic that swap / match-start depend on. Clock bounds and
+    // defaults are baked here as game rules (must match the index constants).
+
+    const GC_DEFAULT_BASE_S = 5 * 60;   // DEFAULT_BASE_MINUTES * 60
+    const GC_DEFAULT_INC_S = 3;         // DEFAULT_INCREMENT_SECONDS
+
+    function clamp(value, min, max) {
+        return Math.min(max, Math.max(min, value));
+    }
+
+    function normalizeClockSetting(setting) {
+        const s = setting || {};
+        const baseSeconds = Number(s.baseSeconds);
+        const incrementSeconds = Number(s.incrementSeconds);
+        return {
+            baseSeconds: clamp(Number.isFinite(baseSeconds) && baseSeconds > 0 ? baseSeconds : GC_DEFAULT_BASE_S, 60, 180 * 60),
+            incrementSeconds: clamp(Number.isFinite(incrementSeconds) ? incrementSeconds : GC_DEFAULT_INC_S, 0, 60),
+        };
+    }
+
+    function ensureSeatColors(ctx) {
+        const state = ctx.state;
+        if (!state) return;
+        if (!state.seatColors || typeof state.seatColors !== 'object') {
+            const blackSeatPeerId = state.seats?.black || '';
+            const whiteSeatPeerId = state.seats?.white || '';
+            state.seatColors = {
+                black: state.colorsByPeerId?.[blackSeatPeerId] || 'black',
+                white: state.colorsByPeerId?.[whiteSeatPeerId] || 'white',
+            };
+        }
+        const blackColor = state.seatColors.black === 'white' ? 'white' : 'black';
+        state.seatColors.black = blackColor;
+        state.seatColors.white = blackColor === 'black' ? 'white' : 'black';
+    }
+
+    function rebuildColors(ctx) {
+        const state = ctx.state;
+        if (!state) return;
+        ensureSeatColors(ctx);
+        const nextColors = {};
+        getActiveSeatKeys(ctx).forEach((seat) => {
+            const peerId = state.seats?.[seat];
+            const color = state.seatColors?.[getTeamForSeat(seat)];
+            if (peerId && (color === 'black' || color === 'white')) {
+                nextColors[peerId] = color;
+            }
+        });
+        state.colorsByPeerId = nextColors;
+    }
+
+    function ensureSeatClockSettings(ctx) {
+        const state = ctx.state;
+        if (!state) return;
+        const fallback = normalizeClockSetting({
+            baseSeconds: state.config?.baseSeconds ?? GC_DEFAULT_BASE_S,
+            incrementSeconds: state.config?.incrementSeconds ?? GC_DEFAULT_INC_S,
+        });
+        if (!state.seatClockSettings || typeof state.seatClockSettings !== 'object') {
+            state.seatClockSettings = { black: { ...fallback }, white: { ...fallback } };
+        }
+        state.seatClockSettings.black = normalizeClockSetting(state.seatClockSettings.black || fallback);
+        state.seatClockSettings.white = normalizeClockSetting(state.seatClockSettings.white || fallback);
+        state.timeHandicapEnabled = Boolean(state.timeHandicapEnabled);
+        if (!state.timeHandicapEnabled) {
+            state.seatClockSettings.white = { ...state.seatClockSettings.black };
+        }
+        state.config.baseSeconds = state.seatClockSettings.black.baseSeconds;
+        state.config.incrementSeconds = state.seatClockSettings.black.incrementSeconds;
+    }
+
+    function syncSeatClockToParticipant(ctx, seat) {
+        const state = ctx.state;
+        if (!state || !state.clocks) return;
+        ensureSeatClockSettings(ctx);
+        const peerId = state.seats?.[seat];
+        if (!peerId) return;
+        const team = getTeamForSeat(seat);
+        const clockKey = state.pairRenjuEnabled ? `team:${team}` : peerId;
+        state.clocks.remainingMsByPeerId[clockKey] = state.seatClockSettings[team].baseSeconds * 1000;
+    }
+
+    function syncSeatClocksToParticipants(ctx) {
+        syncSeatClockToParticipant(ctx, 'black');
+        syncSeatClockToParticipant(ctx, 'white');
+    }
+
+    function swapSeatColors(ctx) {
+        const state = ctx.state;
+        if (!state) return;
+        ensureSeatColors(ctx);
+        const previousBlack = state.seatColors.black;
+        state.seatColors.black = state.seatColors.white;
+        state.seatColors.white = previousBlack;
+        rebuildColors(ctx);
+    }
+
+    function swapColors(ctx) {
+        swapSeatColors(ctx);
+    }
+
+    function clearBoardForNewMatch(ctx) {
+        const state = ctx.state;
+        if (!state) return;
+        state.moves = [];
+        state.reviewMoves = [];
+        state.reviewCursor = 0;
+        state.reviewBranchBaseCursor = null;
+        state.opening = { variant: null, offeredMoves: [] };
+        state.winnerId = null;
+        state.resultText = '';
+        state.resultMessage = null;
+        state.drawOfferByPeerId = '';
+        state.drawResponderPeerId = '';
+        state.takebackOfferByPeerId = '';
+        state.takebackResponderPeerId = '';
+        state.takebackMoveCount = 0;
+        state.connectionPause = null;
+        state.clocks.remainingMsByPeerId = {};
+        ensureSeatClockSettings(ctx);
+        syncSeatClocksToParticipants(ctx);
+        ctx.stopClock();
+    }
+
+    function initializePairTurnOrder(ctx) {
+        const state = ctx.state;
+        if (!state?.pairRenjuEnabled) {
+            state.pairTurnOrder = [];
+            state.pairTurnIndex = 0;
+            return;
+        }
+        ensureSeatColors(ctx);
+        const blackTeam = state.seatColors.black === 'black' ? 'black' : 'white';
+        const whiteTeam = getOpponentTeam(blackTeam);
+        state.pairTurnOrder = [
+            state.seats[blackTeam],
+            state.seats[whiteTeam],
+            state.seats[`${blackTeam}Bottom`],
+            state.seats[`${whiteTeam}Bottom`],
+        ];
+        state.pairTurnIndex = 0;
+    }
+
     // ---- board / opening / takeback transitions (Step 1.2) -----------------
     // All take the injected ctx so they can run host-side (parity) or in the
     // worker later. Error returns are i18n keys via ctx.i18n.
@@ -404,7 +548,7 @@
 
         ctx.applyElapsedTime(timestamp);
         const previousActorPeerId = descriptor.actorPeerId;
-        if (shouldSwap) ctx.swapColors();
+        if (shouldSwap) swapColors(ctx);
         advancePairTurn(ctx);
 
         if (state.phase === 'swap-after-1') setPhase(ctx, 'opening-move-2', timestamp);
@@ -598,9 +742,9 @@
         const state = ctx.state;
         if (!state || !['waiting-guest', 'finished'].includes(state.phase)
             || !allRequiredSeatsOccupied(ctx) || !allSeatedPlayersReady(ctx)) return;
-        ctx.clearBoardForNewMatch();
+        clearBoardForNewMatch(ctx);
         resetReadyFlags(ctx);
-        ctx.initializePairTurnOrder();
+        initializePairTurnOrder(ctx);
         setPhase(ctx, 'opening-move-1');
     }
 
@@ -706,6 +850,17 @@
         allRequiredSeatsOccupied,
         allSeatedPlayersReady,
         resetReadyFlags,
+        // seat colors / seat-clock config / board reset
+        normalizeClockSetting,
+        ensureSeatColors,
+        rebuildColors,
+        ensureSeatClockSettings,
+        syncSeatClockToParticipant,
+        syncSeatClocksToParticipants,
+        swapSeatColors,
+        swapColors,
+        clearBoardForNewMatch,
+        initializePairTurnOrder,
         isOccupied,
         validateOfferMove,
         setPhase,
