@@ -3,6 +3,8 @@ const PRESENCE_GRACE_MS = 4000;
 // Authoritative state snapshot kept so a room survives all participants
 // briefly leaving: the first returner (elected host) restores from it.
 const SNAPSHOT_MAX_AGE_MS = 30 * 60 * 1000;
+// Slack before declaring a clock timeout, to absorb in-flight moves / latency.
+const CLOCK_LATENCY_GRACE_MS = 800;
 
 export default {
   async fetch(request, env) {
@@ -61,6 +63,13 @@ export class RoomRelay {
       'snapshot',
       'snapshotVersion',
       'snapshotSavedAt',
+      'clockEpoch',
+      'clockArmed',
+      'clockBudgetMs',
+      'clockConsumedMs',
+      'clockActiveSince',
+      'clockGate',
+      'clockTimedOutEpoch',
     ]);
     this.model = {
       members: stored.get('members') || {},
@@ -70,6 +79,20 @@ export class RoomRelay {
       snapshot: stored.get('snapshot') || null,
       snapshotVersion: stored.get('snapshotVersion') || 0,
       snapshotSavedAt: stored.get('snapshotSavedAt') || 0,
+      // ---- authoritative clock (C.1: deadline timer only) ----
+      // epoch:        monotonic; arm/disarm/timeout tagged so stale ones drop
+      // budgetMs:     remaining at the last arm
+      // consumedMs:   active time accumulated across pauses
+      // activeSince:  DO time the clock is currently counting from (null=paused)
+      // gate:         seated tokens whose absence pauses the clock
+      // timedOutEpoch:epoch that already fired a timeout (0 = none)
+      clockEpoch: stored.get('clockEpoch') || 0,
+      clockArmed: stored.get('clockArmed') || false,
+      clockBudgetMs: stored.get('clockBudgetMs') || 0,
+      clockConsumedMs: stored.get('clockConsumedMs') || 0,
+      clockActiveSince: stored.get('clockActiveSince') ?? null,
+      clockGate: stored.get('clockGate') || [],
+      clockTimedOutEpoch: stored.get('clockTimedOutEpoch') || 0,
     };
     this.loaded = true;
   }
@@ -139,6 +162,21 @@ export class RoomRelay {
       return;
     }
 
+    if (message.type === 'clock-arm') {
+      await this.handleClockArm(meta.token, message);
+      return;
+    }
+
+    if (message.type === 'clock-disarm') {
+      await this.handleClockDisarm(meta.token, message);
+      return;
+    }
+
+    if (message.type === 'clock-gate') {
+      await this.handleClockGate(meta.token, message);
+      return;
+    }
+
     if (message.type === 'bye') {
       await this.handleBye(socket, meta.token);
     }
@@ -172,9 +210,24 @@ export class RoomRelay {
       }
     }
 
+    // A finalized drop of a seated (gate) player pauses the clock.
+    this.reevaluateClockPause();
+
+    // Clock timeout: armed, counting, present, and past the deadline.
+    let timedOut = false;
+    if (this.model.clockArmed && !this.model.clockTimedOutEpoch
+        && this.model.clockActiveSince != null
+        && now >= this.clockDeadline()) {
+      this.model.clockTimedOutEpoch = this.model.clockEpoch;
+      this.model.clockActiveSince = null;
+      timedOut = true;
+    }
+
     await this.persist(['pendingDrop', 'members', 'hostToken']);
+    await this.persistClock();
     await this.rescheduleAlarm();
     if (rosterChanged) this.broadcastRoster(null);
+    if (timedOut) this.broadcastClockTimeout();
   }
 
   // ---- handlers ----------------------------------------------------------
@@ -220,7 +273,12 @@ export class RoomRelay {
       hostAssigned = true;
     }
 
+    // A returning seated player may let the clock resume.
+    this.reevaluateClockPause();
+
     await this.persist(['members', 'seqCounter', 'pendingDrop', 'hostToken']);
+    await this.persistClock();
+    await this.rescheduleAlarm();
 
     this.send(socket, {
       type: 'welcome',
@@ -228,6 +286,12 @@ export class RoomRelay {
       you: { token, role: this.model.hostToken === token ? 'host' : 'member' },
       roster: this.roster(),
     });
+
+    // If the clock already timed out while no host was around to finalize it,
+    // hand the fact to whoever is host now so it is never dropped.
+    if (this.model.hostToken === token && this.model.clockTimedOutEpoch) {
+      this.send(socket, { type: 'clock-timeout', epoch: this.model.clockTimedOutEpoch });
+    }
 
     if (membershipChanged || hostAssigned) {
       this.broadcastRoster(socket);
@@ -302,7 +366,9 @@ export class RoomRelay {
       this.electHost();
       rosterChanged = true;
     }
+    this.reevaluateClockPause(); // a leaving seated player pauses the clock
     await this.persist(['members', 'pendingDrop', 'hostToken']);
+    await this.persistClock();
     await this.rescheduleAlarm();
     if (rosterChanged) this.broadcastRoster(socket);
     try { socket.close(1000, 'bye'); } catch { /* no-op */ }
@@ -360,6 +426,8 @@ export class RoomRelay {
 
   async rescheduleAlarm() {
     const deadlines = Object.values(this.model.pendingDrop);
+    const clockAt = this.clockDeadline();
+    if (clockAt !== Infinity) deadlines.push(clockAt);
     if (deadlines.length === 0) {
       await this.state.storage.deleteAlarm();
       return;
@@ -371,6 +439,7 @@ export class RoomRelay {
     return {
       hostToken: this.model.hostToken,
       snapshotVersion: this.snapshotFresh() ? this.model.snapshotVersion : 0,
+      clockEpoch: this.model.clockEpoch,
       members: Object.entries(this.model.members).map(([token, member]) => ({
         token,
         name: member.name,
@@ -382,6 +451,84 @@ export class RoomRelay {
     const payload = { type: 'roster', roster: this.roster() };
     for (const socket of this.state.getWebSockets()) {
       if (socket === excludeSocket) continue;
+      const meta = socket.deserializeAttachment() || {};
+      if (!meta.token) continue;
+      this.send(socket, payload);
+    }
+  }
+
+  // ---- clock (host-driven, DO is the authoritative deadline timer) -------
+
+  async handleClockArm(token, message) {
+    if (!token || token !== this.model.hostToken) return;
+    const epoch = Number(message.epoch || 0);
+    if (epoch < this.model.clockEpoch) return; // stale / reordered
+    this.model.clockEpoch = epoch;
+    this.model.clockArmed = true;
+    this.model.clockBudgetMs = Math.max(0, Number(message.remainingMs || 0));
+    this.model.clockConsumedMs = 0;
+    this.model.clockGate = Array.isArray(message.gateTokens) ? message.gateTokens.map(String) : [];
+    this.model.clockTimedOutEpoch = 0;
+    this.model.clockActiveSince = this.clockGatePresent() ? Date.now() : null;
+    await this.persistClock();
+    await this.rescheduleAlarm();
+  }
+
+  async handleClockDisarm(token, message) {
+    if (!token || token !== this.model.hostToken) return;
+    const epoch = Number(message.epoch || 0);
+    if (epoch < this.model.clockEpoch) return;
+    this.model.clockEpoch = epoch;
+    this.model.clockArmed = false;
+    this.model.clockActiveSince = null;
+    this.model.clockTimedOutEpoch = 0;
+    await this.persistClock();
+    await this.rescheduleAlarm();
+  }
+
+  async handleClockGate(token, message) {
+    if (!token || token !== this.model.hostToken) return;
+    this.model.clockGate = Array.isArray(message.gateTokens) ? message.gateTokens.map(String) : [];
+    this.reevaluateClockPause();
+    await this.persistClock();
+    await this.rescheduleAlarm();
+  }
+
+  clockGatePresent() {
+    return this.model.clockGate.every((token) => !!this.model.members[token]);
+  }
+
+  clockDeadline() {
+    if (!this.model.clockArmed || this.model.clockTimedOutEpoch) return Infinity;
+    if (this.model.clockActiveSince == null) return Infinity; // paused
+    const remaining = this.model.clockBudgetMs - this.model.clockConsumedMs;
+    return this.model.clockActiveSince + remaining + CLOCK_LATENCY_GRACE_MS;
+  }
+
+  // Resume when every gate player is present, pause when any is absent. Caller
+  // persists + reschedules.
+  reevaluateClockPause() {
+    if (!this.model.clockArmed || this.model.clockTimedOutEpoch) return;
+    const present = this.clockGatePresent();
+    const counting = this.model.clockActiveSince != null;
+    if (present && !counting) {
+      this.model.clockActiveSince = Date.now();
+    } else if (!present && counting) {
+      this.model.clockConsumedMs += Date.now() - this.model.clockActiveSince;
+      this.model.clockActiveSince = null;
+    }
+  }
+
+  async persistClock() {
+    await this.persist([
+      'clockEpoch', 'clockArmed', 'clockBudgetMs', 'clockConsumedMs',
+      'clockActiveSince', 'clockGate', 'clockTimedOutEpoch',
+    ]);
+  }
+
+  broadcastClockTimeout() {
+    const payload = { type: 'clock-timeout', epoch: this.model.clockEpoch };
+    for (const socket of this.state.getWebSockets()) {
       const meta = socket.deserializeAttachment() || {};
       if (!meta.token) continue;
       this.send(socket, payload);

@@ -117,6 +117,7 @@
             this._roster = new Map();
             this._remotes = new Map();
             this.snapshotVersion = 0; // latest authoritative version the server holds
+            this.clockEpoch = 0;      // latest clock epoch the server knows
 
             this._terminal = false; // displaced / protocol-mismatch: do not reconnect
             this._heartbeatTimer = 0;
@@ -215,6 +216,21 @@
         // adopting a snapshot.
         isMember(token) {
             return this._roster.has(String(token || ''));
+        }
+
+        // ---- authoritative clock (host -> server) ----
+        // The server runs the deadline timer and pauses on gate-player absence;
+        // it emits 'clock-timeout' (tagged with epoch) when the budget is spent.
+        clockArm(epoch, remainingMs, gateTokens) {
+            this._send({ type: 'clock-arm', epoch, remainingMs, gateTokens });
+        }
+
+        clockDisarm(epoch) {
+            this._send({ type: 'clock-disarm', epoch });
+        }
+
+        clockGate(gateTokens) {
+            this._send({ type: 'clock-gate', gateTokens });
         }
 
         setHeartbeatEnabled() {
@@ -371,6 +387,9 @@
                 case 'snapshot':
                     this._emitter.emit('snapshot', { version: Number(message.version || 0), state: message.state });
                     return;
+                case 'clock-timeout':
+                    this._emitter.emit('clock-timeout', { epoch: Number(message.epoch || 0) });
+                    return;
                 case 'displaced':
                     this._terminal = true;
                     this._emitter.emit('displaced');
@@ -404,6 +423,7 @@
             const prevHostToken = this._hostToken;
             this._hostToken = String(roster.hostToken || '');
             this.snapshotVersion = Number(roster.snapshotVersion || 0);
+            this.clockEpoch = Number(roster.clockEpoch || 0);
 
             const members = Array.isArray(roster.members) ? roster.members : [];
             this._roster = new Map(

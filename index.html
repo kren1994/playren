@@ -1880,6 +1880,7 @@
         let sessionTerminated = false;
         let snapshotPushTimer = 0;
         let lastPushedSnapshotVersion = -1;
+        let clockEpoch = 0; // host-only: monotonic tag for DO clock arm/timeout
         // Guest-only: estimated (hostClock - localClock) offset so the display
         // interpolates clocks against host time, not the local wall clock.
         // Always 0 on the host (it is the time authority).
@@ -3797,11 +3798,28 @@
                 if (peer !== thisPeer) return;
                 if (snap && snap.state) adoptHostSnapshot(snap.state);
             });
+
+            thisPeer.on('clock-timeout', ({ epoch }) => {
+                if (peer !== thisPeer) return;
+                if (localMode !== 'host' || !state) return;
+                if (epoch !== clockEpoch) return;          // stale: turn already advanced
+                if (state.status !== 'playing') return;
+                const loserId = state.clocks.activePeerId;
+                if (!loserId) return;
+                applyElapsedTime();
+                const winnerId = state.pairRenjuEnabled ? '' : getOpponentPeerId(loserId);
+                finishGame(winnerId, messageSpec('msgTimeout', getPeerName(loserId)), messageSpec('msgTimeoutLog'));
+                broadcastState();
+                render();
+            });
         }
 
         function applyHostRole() {
             localMode = 'host';
             clockOffsetMs = 0; // host is the time authority
+            // Continue the clock epoch monotonically across host changes so the
+            // server can drop stale arms/timeouts.
+            clockEpoch = Math.max(clockEpoch, peer?.clockEpoch || 0);
             setConnectionLabel(i18n('msgRoomCreated'));
             elements.leaveRoomBtn.disabled = false;
 
@@ -3818,6 +3836,7 @@
                 const name = sanitizeName(elements.nameInput.value || 'Player');
                 state = restoreLocalHostFromSnapshot(roomId, localPeerId, name, settings);
                 reconcileSeatedPresence();
+                syncServerClock();
                 broadcastState();
                 render();
                 maybeRequestServerSnapshot();
@@ -3863,6 +3882,7 @@
             }
 
             reconcileSeatedPresence();
+            syncServerClock();
             broadcastState();
             render();
             maybeRequestServerSnapshot();
@@ -3994,12 +4014,55 @@
             state.status = 'playing';
             state.clocks.activePeerId = peerId;
             state.clocks.activeStartedAt = timestamp;
+            armServerClock(peerId);
         }
 
         function stopClock() {
             if (!state) return;
             state.clocks.activePeerId = null;
             state.clocks.activeStartedAt = null;
+            disarmServerClock();
+        }
+
+        // ---- authoritative timeout (C.1): the DO runs the deadline timer ----
+        // The host display/arithmetic stays local; we only hand the DO the
+        // current budget so the always-on server decides the actual timeout.
+
+        function getGateTokens() {
+            if (!state) return [];
+            return getActiveSeatKeys()
+                .map((seat) => state.seats?.[seat])
+                .filter(Boolean);
+        }
+
+        function nextClockEpoch() {
+            clockEpoch = Math.max(clockEpoch + 1, (peer?.clockEpoch || 0) + 1);
+            return clockEpoch;
+        }
+
+        function armServerClock(peerId) {
+            if (localMode !== 'host' || !peer || !state) return;
+            // getDisplayRemainingMs accounts for time already elapsed this turn,
+            // so re-arming after a reconnect does not refund consumed time.
+            const remaining = Math.max(0, Math.round(getDisplayRemainingMs(peerId)));
+            peer.clockArm(nextClockEpoch(), remaining, getGateTokens());
+        }
+
+        function disarmServerClock() {
+            if (localMode !== 'host' || !peer) return;
+            peer.clockDisarm(nextClockEpoch());
+        }
+
+        // Re-sync the DO clock to our current authoritative state (used after
+        // becoming host, to override any stale arm left by a previous host).
+        function syncServerClock() {
+            if (localMode !== 'host' || !peer || !state) return;
+            const active = state.clocks.activePeerId;
+            if (state.status === 'playing' && active && state.clocks.activeStartedAt) {
+                armServerClock(active);
+            } else {
+                disarmServerClock();
+            }
         }
 
         function grantIncrement(peerId) {
@@ -4843,6 +4906,7 @@
             ensureClockEntry(localPeerId);
             rebuildColors();
             reconcileSeatedPresence();
+            syncServerClock();
             lastPushedSnapshotVersion = incomingVersion;
             persistRoomStateSnapshot();
             broadcastState();
@@ -5333,6 +5397,7 @@
             }
             lastPushedSnapshotVersion = -1;
             clockOffsetMs = 0;
+            clockEpoch = 0;
         }
 
         function destroyNetworkState() {
@@ -6445,24 +6510,10 @@
                 lastReportedSec = null;
             }
 
-            if (localMode === 'host' && state.status === 'playing' && state.clocks.activePeerId) {
-                const remaining = getDisplayRemainingMs(state.clocks.activePeerId);
-                if (remaining <= 0) {
-                    applyElapsedTime();
-                    const loserId = state.clocks.activePeerId;
-                    const winnerId = state.pairRenjuEnabled ? '' : getOpponentPeerId(loserId);
-                    finishGame(winnerId, messageSpec('msgTimeout', getPeerName(loserId)), messageSpec('msgTimeoutLog'));
-                    broadcastState();
-                    render();
-                    return;
-                } else {
-                    const bucket = Math.floor(remaining / 1000);
-                    if (bucket !== lastClockBroadcastBucket) {
-                        lastClockBroadcastBucket = bucket;
-                        broadcastClocks();
-                    }
-                }
-            }
+            // Timeout is judged authoritatively by the Durable Object (alarm +
+            // presence-pause + latency grace); the host finalizes on its
+            // 'clock-timeout'. No local timeout-finish or per-second clock
+            // broadcast here — guests interpolate locally from the last update.
 
             renderPlayers();
         }
