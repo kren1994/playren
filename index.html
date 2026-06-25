@@ -3174,8 +3174,7 @@
         }
 
         function getParticipantById(peerId) {
-            if (!state || !peerId) return null;
-            return state.participantsById?.[peerId] || null;
+            return GameCore.getParticipantById(gameCoreCtx(), peerId);
         }
 
         function isHostParticipant(participant) {
@@ -3208,7 +3207,7 @@
         }
 
         function isParticipantDisconnected(participant) {
-            return Boolean(participant && participant.disconnectedAt);
+            return GameCore.isParticipantDisconnected(participant);
         }
 
         function getDisconnectedRemainingSeconds(participant) {
@@ -3218,11 +3217,7 @@
         }
 
         function hasDisconnectedSeatedPlayer() {
-            if (!state) return false;
-            return getActiveSeatKeys().map((seat) => state.seats[seat]).some((peerId) => {
-                const participant = getParticipantById(peerId);
-                return isParticipantDisconnected(participant);
-            });
+            return GameCore.hasDisconnectedSeatedPlayer(gameCoreCtx());
         }
 
         function hasDisconnectedParticipantInView() {
@@ -3281,13 +3276,11 @@
         }
 
         function getBlackPeerId() {
-            if (!state) return '';
-            return Object.entries(state.colorsByPeerId || {}).find(([, color]) => color === 'black')?.[0] || state.seats?.black || '';
+            return GameCore.getBlackPeerId(gameCoreCtx());
         }
 
         function getWhitePeerId() {
-            if (!state) return '';
-            return Object.entries(state.colorsByPeerId || {}).find(([, color]) => color === 'white')?.[0] || state.seats?.white || '';
+            return GameCore.getWhitePeerId(gameCoreCtx());
         }
 
         function getSeatPeerId(seat) {
@@ -3295,27 +3288,23 @@
         }
 
         function getActiveSeatKeys() {
-            return state?.pairRenjuEnabled
-                ? ['black', 'white', 'blackBottom', 'whiteBottom']
-                : ['black', 'white'];
+            return GameCore.getActiveSeatKeys(gameCoreCtx());
         }
 
         function isPlayingSeat(seat) {
-            return getActiveSeatKeys().includes(seat);
+            return GameCore.isPlayingSeat(gameCoreCtx(), seat);
         }
 
         function getTeamForSeat(seat) {
-            if (seat === 'black' || seat === 'blackBottom') return 'black';
-            if (seat === 'white' || seat === 'whiteBottom') return 'white';
-            return '';
+            return GameCore.getTeamForSeat(seat);
         }
 
         function getTeamForPeer(peerId) {
-            return getTeamForSeat(getSeatForPeer(peerId));
+            return GameCore.getTeamForPeer(gameCoreCtx(), peerId);
         }
 
         function isSeatedParticipant(participant) {
-            return Boolean(participant && isPlayingSeat(participant.seat));
+            return GameCore.isSeatedParticipant(gameCoreCtx(), participant);
         }
 
         function getTeamPeerIds(team) {
@@ -3325,17 +3314,15 @@
         }
 
         function getOpponentTeam(team) {
-            return team === 'black' ? 'white' : team === 'white' ? 'black' : '';
+            return GameCore.getOpponentTeam(team);
         }
 
         function getPairTurnActor() {
-            if (!state?.pairRenjuEnabled || !state.pairTurnOrder?.length) return '';
-            return state.pairTurnOrder[state.pairTurnIndex % state.pairTurnOrder.length] || '';
+            return GameCore.getPairTurnActor(gameCoreCtx());
         }
 
         function advancePairTurn() {
-            if (!state?.pairRenjuEnabled || !state.pairTurnOrder?.length) return;
-            state.pairTurnIndex = (state.pairTurnIndex + 1) % state.pairTurnOrder.length;
+            return GameCore.advancePairTurn(gameCoreCtx());
         }
 
         function initializePairTurnOrder() {
@@ -3357,30 +3344,23 @@
         }
 
         function getColorForPeer(peerId) {
-            return state?.colorsByPeerId?.[peerId] || '';
+            return GameCore.getColorForPeer(gameCoreCtx(), peerId);
         }
 
         function getOpponentPeerId(peerId) {
-            if (!state || !peerId) return '';
-            const ids = [state.seats.black, state.seats.white].filter(Boolean);
-            return ids.find((id) => id !== peerId) || '';
+            return GameCore.getOpponentPeerId(gameCoreCtx(), peerId);
         }
 
         function allRequiredSeatsOccupied() {
-            const ids = getActiveSeatKeys().map((seat) => state?.seats?.[seat]).filter(Boolean);
-            return ids.length === getActiveSeatKeys().length && new Set(ids).size === ids.length;
+            return GameCore.allRequiredSeatsOccupied(gameCoreCtx());
         }
 
         function allSeatedPlayersReady() {
-            if (!allRequiredSeatsOccupied()) return false;
-            return getActiveSeatKeys().every((seat) => state.readyByPeerId?.[state.seats[seat]]);
+            return GameCore.allSeatedPlayersReady(gameCoreCtx());
         }
 
         function resetReadyFlags() {
-            if (!state) return;
-            getActiveSeatKeys().forEach((seat) => {
-                if (state.seats[seat]) state.readyByPeerId[state.seats[seat]] = false;
-            });
+            return GameCore.resetReadyFlags(gameCoreCtx());
         }
 
         function clearBoardForNewMatch() {
@@ -3469,8 +3449,7 @@
         }
 
         function getSeatForPeer(peerId) {
-            if (!state || !peerId) return '';
-            return getActiveSeatKeys().find((seat) => state.seats?.[seat] === peerId) || '';
+            return GameCore.getSeatForPeer(gameCoreCtx(), peerId);
         }
 
         function getClockSettingForPeer(peerId) {
@@ -4087,44 +4066,33 @@
 
         // Bundle of board/seat helpers game-core needs, so the rule logic can
         // live in the shared (UI-free) module while still reading live state.
+        // Only the environment-specific dependencies remain injected now that
+        // the pure state/seat/color/turn helpers live in game-core. These are
+        // what the worker will swap for its own implementations (DO clock,
+        // structured logs, identity i18n) in Step 2.
         function gameCoreCtx() {
             return {
                 state,
                 center: CENTER,
-                // seat / color / turn
-                getBlackPeerId,
-                getWhitePeerId,
-                getOpponentPeerId,
-                getColorForPeer,
-                getTeamForPeer,
-                getOpponentTeam,
-                getPairTurnActor,
-                advancePairTurn,
+                // color / seat config still coupled to clock+config (deferred)
                 swapColors,
-                // participants
-                getParticipantById,
-                isSeatedParticipant,
-                hasDisconnectedSeatedPlayer,
-                // clock
+                clearBoardForNewMatch,
+                initializePairTurnOrder,
+                // clock (host browser now; DO in Step 2)
                 applyElapsedTime,
                 grantIncrement,
                 grantIncrementIfTurnPasses,
                 startClockFor,
                 stopClock,
-                // match lifecycle / end
-                allRequiredSeatsOccupied,
-                allSeatedPlayersReady,
-                clearBoardForNewMatch,
-                initializePairTurnOrder,
-                resetReadyFlags,
+                // review / naming
                 resetReviewMoves,
                 getPeerName,
+                resetDisplayMoveCount: () => { displayMoveCount = -1; },
                 // ui / i18n (worker will swap these for codes / event collectors)
                 i18n,
                 messageSpec,
                 renderMessageSpec,
                 addLog,
-                resetDisplayMoveCount: () => { displayMoveCount = -1; },
             };
         }
 

@@ -91,12 +91,12 @@
                 constraint: null,
             };
         }
-        if (ctx.hasDisconnectedSeatedPlayer()) {
+        if (hasDisconnectedSeatedPlayer(ctx)) {
             return { actorPeerId: '', allowBoardAction: false, boardActionKind: '', constraint: null };
         }
 
-        const blackPeerId = ctx.getBlackPeerId();
-        const whitePeerId = ctx.getWhitePeerId();
+        const blackPeerId = getBlackPeerId(ctx);
+        const whitePeerId = getWhitePeerId(ctx);
         const lastMove = state.moves[state.moves.length - 1];
 
         switch (state.phase) {
@@ -109,12 +109,12 @@
             case 'swap-after-3':
             case 'swap-after-5': {
                 const implicitPhase = getImplicitMovePhase(state.phase);
-                const currentActorPeerId = lastMove ? ctx.getOpponentPeerId(lastMove.peerId) : '';
+                const currentActorPeerId = lastMove ? getOpponentPeerId(ctx,lastMove.peerId) : '';
                 const savedPhase = state.phase;
                 state.phase = implicitPhase;
                 const implicitDescriptor = phaseDescriptor(ctx);
                 state.phase = savedPhase;
-                const actorPeerId = lastMove ? ctx.getOpponentPeerId(lastMove.peerId) : '';
+                const actorPeerId = lastMove ? getOpponentPeerId(ctx,lastMove.peerId) : '';
                 return {
                     actorPeerId,
                     allowBoardAction: Boolean(currentActorPeerId && implicitPhase),
@@ -152,7 +152,7 @@
             case 'opening-move-6-choice2':
                 return { actorPeerId: whitePeerId, allowBoardAction: true, boardActionKind: 'move', constraint: { kind: 'anywhere' } };
             case 'regular': {
-                const actorPeerId = lastMove ? ctx.getOpponentPeerId(lastMove.peerId) : blackPeerId;
+                const actorPeerId = lastMove ? getOpponentPeerId(ctx,lastMove.peerId) : blackPeerId;
                 return { actorPeerId, allowBoardAction: true, boardActionKind: 'move', constraint: { kind: 'anywhere' } };
             }
             case 'finished':
@@ -170,9 +170,121 @@
             state.status === 'playing' &&
             descriptor.allowBoardAction
         ) {
-            descriptor.actorPeerId = ctx.getPairTurnActor();
+            descriptor.actorPeerId = getPairTurnActor(ctx);
         }
         return descriptor;
+    }
+
+    // ---- pure state / seat / color / turn helpers (Step 1.4) ---------------
+    // All read/write ctx.state only (no clock timing, i18n or DOM), so the
+    // worker and the browser share one implementation.
+
+    function getParticipantById(ctx, peerId) {
+        const state = ctx.state;
+        if (!state || !peerId) return null;
+        return state.participantsById?.[peerId] || null;
+    }
+
+    function isParticipantDisconnected(participant) {
+        return Boolean(participant && participant.disconnectedAt);
+    }
+
+    function getActiveSeatKeys(ctx) {
+        return ctx.state?.pairRenjuEnabled
+            ? ['black', 'white', 'blackBottom', 'whiteBottom']
+            : ['black', 'white'];
+    }
+
+    function isPlayingSeat(ctx, seat) {
+        return getActiveSeatKeys(ctx).includes(seat);
+    }
+
+    function hasDisconnectedSeatedPlayer(ctx) {
+        const state = ctx.state;
+        if (!state) return false;
+        return getActiveSeatKeys(ctx)
+            .map((seat) => state.seats[seat])
+            .some((peerId) => isParticipantDisconnected(getParticipantById(ctx, peerId)));
+    }
+
+    function getBlackPeerId(ctx) {
+        const state = ctx.state;
+        if (!state) return '';
+        return Object.entries(state.colorsByPeerId || {}).find(([, color]) => color === 'black')?.[0] || state.seats?.black || '';
+    }
+
+    function getWhitePeerId(ctx) {
+        const state = ctx.state;
+        if (!state) return '';
+        return Object.entries(state.colorsByPeerId || {}).find(([, color]) => color === 'white')?.[0] || state.seats?.white || '';
+    }
+
+    function getTeamForSeat(seat) {
+        if (seat === 'black' || seat === 'blackBottom') return 'black';
+        if (seat === 'white' || seat === 'whiteBottom') return 'white';
+        return '';
+    }
+
+    function getSeatForPeer(ctx, peerId) {
+        const state = ctx.state;
+        if (!state || !peerId) return '';
+        return getActiveSeatKeys(ctx).find((seat) => state.seats?.[seat] === peerId) || '';
+    }
+
+    function getTeamForPeer(ctx, peerId) {
+        return getTeamForSeat(getSeatForPeer(ctx, peerId));
+    }
+
+    function isSeatedParticipant(ctx, participant) {
+        return Boolean(participant && isPlayingSeat(ctx, participant.seat));
+    }
+
+    function getOpponentTeam(team) {
+        return team === 'black' ? 'white' : team === 'white' ? 'black' : '';
+    }
+
+    function getPairTurnActor(ctx) {
+        const state = ctx.state;
+        if (!state?.pairRenjuEnabled || !state.pairTurnOrder?.length) return '';
+        return state.pairTurnOrder[state.pairTurnIndex % state.pairTurnOrder.length] || '';
+    }
+
+    function advancePairTurn(ctx) {
+        const state = ctx.state;
+        if (!state?.pairRenjuEnabled || !state.pairTurnOrder?.length) return;
+        state.pairTurnIndex = (state.pairTurnIndex + 1) % state.pairTurnOrder.length;
+    }
+
+    function getColorForPeer(ctx, peerId) {
+        return ctx.state?.colorsByPeerId?.[peerId] || '';
+    }
+
+    function getOpponentPeerId(ctx, peerId) {
+        const state = ctx.state;
+        if (!state || !peerId) return '';
+        const ids = [state.seats.black, state.seats.white].filter(Boolean);
+        return ids.find((id) => id !== peerId) || '';
+    }
+
+    function allRequiredSeatsOccupied(ctx) {
+        const state = ctx.state;
+        const keys = getActiveSeatKeys(ctx);
+        const ids = keys.map((seat) => state?.seats?.[seat]).filter(Boolean);
+        return ids.length === keys.length && new Set(ids).size === ids.length;
+    }
+
+    function allSeatedPlayersReady(ctx) {
+        const state = ctx.state;
+        if (!allRequiredSeatsOccupied(ctx)) return false;
+        return getActiveSeatKeys(ctx).every((seat) => state.readyByPeerId?.[state.seats[seat]]);
+    }
+
+    function resetReadyFlags(ctx) {
+        const state = ctx.state;
+        if (!state) return;
+        getActiveSeatKeys(ctx).forEach((seat) => {
+            if (state.seats[seat]) state.readyByPeerId[state.seats[seat]] = false;
+        });
     }
 
     // ---- board / opening / takeback transitions (Step 1.2) -----------------
@@ -257,7 +369,7 @@
 
         ctx.applyElapsedTime(timestamp);
 
-        const color = ctx.getColorForPeer(peerId);
+        const color = getColorForPeer(ctx,peerId);
         const moveNumber = state.moves.length + 1;
         state.moves.push({
             x,
@@ -268,7 +380,7 @@
             ...(state.pairRenjuEnabled ? { pairTurnIndex: state.pairTurnIndex } : {}),
         });
         ctx.grantIncrement(peerId);
-        ctx.advancePairTurn();
+        advancePairTurn(ctx);
 
         switch (state.phase) {
             case 'opening-move-1': setPhase(ctx, 'swap-after-1', timestamp); break;
@@ -293,7 +405,7 @@
         ctx.applyElapsedTime(timestamp);
         const previousActorPeerId = descriptor.actorPeerId;
         if (shouldSwap) ctx.swapColors();
-        ctx.advancePairTurn();
+        advancePairTurn(ctx);
 
         if (state.phase === 'swap-after-1') setPhase(ctx, 'opening-move-2', timestamp);
         if (state.phase === 'swap-after-2') setPhase(ctx, 'opening-move-3', timestamp);
@@ -331,7 +443,7 @@
         state.opening.offeredMoves.push({ x, y });
 
         if (state.opening.offeredMoves.length >= 10) {
-            ctx.advancePairTurn();
+            advancePairTurn(ctx);
             setPhase(ctx, 'select-offer', timestamp);
         } else {
             setPhase(ctx, 'offering-choice2', timestamp);
@@ -350,7 +462,7 @@
         if (!selected) return ctx.i18n('errSelectFromOffers');
 
         ctx.applyElapsedTime(timestamp);
-        const blackPeerId = ctx.getBlackPeerId();
+        const blackPeerId = getBlackPeerId(ctx);
         const moveNumber = state.moves.length + 1;
         state.moves.push({
             x: selected.x,
@@ -370,10 +482,10 @@
     function getTakebackRequestError(ctx, peerId) {
         const state = ctx.state;
         if (!state || state.status !== 'playing') return ctx.i18n('errTakebackPlayingOnly');
-        const participant = ctx.getParticipantById(peerId);
-        if (!ctx.isSeatedParticipant(participant)) return ctx.i18n('errTakebackPlayerOnly');
+        const participant = getParticipantById(ctx,peerId);
+        if (!isSeatedParticipant(ctx,participant)) return ctx.i18n('errTakebackPlayerOnly');
         if ((state.moves || []).length <= 6) return ctx.i18n('errTakebackTooEarly');
-        const opponentPeerId = ctx.getOpponentPeerId(peerId);
+        const opponentPeerId = getOpponentPeerId(ctx,peerId);
         if (!opponentPeerId) return ctx.i18n('errTakebackNoOpponent');
         if (state.takebackOfferByPeerId) return ctx.i18n('errTakebackAlready');
         return '';
@@ -386,22 +498,22 @@
         state.takebackOfferByPeerId = peerId;
         if (state.pairRenjuEnabled) {
             const activePeerId = phaseDescriptor(ctx).actorPeerId;
-            const proposerTeam = ctx.getTeamForPeer(peerId);
-            const activeTeam = ctx.getTeamForPeer(activePeerId);
+            const proposerTeam = getTeamForPeer(ctx,peerId);
+            const activeTeam = getTeamForPeer(ctx,activePeerId);
             const isOwnTeamTurn = proposerTeam === activeTeam;
             state.takebackMoveCount = isOwnTeamTurn ? 2 : 1;
             if (isOwnTeamTurn) {
-                const opponentTeam = ctx.getOpponentTeam(proposerTeam);
+                const opponentTeam = getOpponentTeam(proposerTeam);
                 const lastOpponentMove = [...(state.moves || [])]
                     .reverse()
-                    .find((move) => ctx.getTeamForPeer(move.peerId) === opponentTeam);
+                    .find((move) => getTeamForPeer(ctx,move.peerId) === opponentTeam);
                 state.takebackResponderPeerId = lastOpponentMove?.peerId || '';
             } else {
                 state.takebackResponderPeerId = activePeerId;
             }
         } else {
             state.takebackMoveCount = 0;
-            state.takebackResponderPeerId = ctx.getOpponentPeerId(peerId);
+            state.takebackResponderPeerId = getOpponentPeerId(ctx,peerId);
         }
         return '';
     }
@@ -437,7 +549,7 @@
         if (!state || state.status !== 'playing') return ctx.i18n('errTakebackCannotRespond');
         const offerPeerId = state.takebackOfferByPeerId;
         if (!offerPeerId) return ctx.i18n('errTakebackNoOffer');
-        const opponentPeerId = state.takebackResponderPeerId || ctx.getOpponentPeerId(offerPeerId);
+        const opponentPeerId = state.takebackResponderPeerId || getOpponentPeerId(ctx,offerPeerId);
         if (peerId !== opponentPeerId) return ctx.i18n('errTakebackOnlyOpponentRespond');
         if (!accept) {
             state.takebackOfferByPeerId = '';
@@ -477,7 +589,7 @@
                 ...(logSpec ? { messageKey: logSpec.key, messageArg: logSpec.arg } : {}),
             });
         }
-        ctx.resetReadyFlags();
+        resetReadyFlags(ctx);
         setPhase(ctx, 'finished');
         ctx.resetReviewMoves();
     }
@@ -485,9 +597,9 @@
     function maybeStartMatch(ctx) {
         const state = ctx.state;
         if (!state || !['waiting-guest', 'finished'].includes(state.phase)
-            || !ctx.allRequiredSeatsOccupied() || !ctx.allSeatedPlayersReady()) return;
+            || !allRequiredSeatsOccupied(ctx) || !allSeatedPlayersReady(ctx)) return;
         ctx.clearBoardForNewMatch();
-        ctx.resetReadyFlags();
+        resetReadyFlags(ctx);
         ctx.initializePairTurnOrder();
         setPhase(ctx, 'opening-move-1');
     }
@@ -495,8 +607,8 @@
     function setReadyState(ctx, peerId, ready) {
         const state = ctx.state;
         if (!state || !peerId) return ctx.i18n('errNotReadyState');
-        const participant = ctx.getParticipantById(peerId);
-        if (!ctx.isSeatedParticipant(participant)) return ctx.i18n('errReadyPlayerOnly');
+        const participant = getParticipantById(ctx,peerId);
+        if (!isSeatedParticipant(ctx,participant)) return ctx.i18n('errReadyPlayerOnly');
         if (state.status === 'playing') return ctx.i18n('errReadyNotPlaying');
         state.readyByPeerId[peerId] = Boolean(ready);
         maybeStartMatch(ctx);
@@ -506,17 +618,17 @@
     function getDrawRequestError(ctx, peerId) {
         const state = ctx.state;
         if (!state || state.status !== 'playing') return ctx.i18n('errDrawPlayingOnly');
-        const participant = ctx.getParticipantById(peerId);
-        if (!ctx.isSeatedParticipant(participant)) return ctx.i18n('errDrawPlayerOnly');
+        const participant = getParticipantById(ctx,peerId);
+        if (!isSeatedParticipant(ctx,participant)) return ctx.i18n('errDrawPlayerOnly');
         const descriptor = phaseDescriptor(ctx);
         if (
             state.pairRenjuEnabled
-                ? ctx.getTeamForPeer(descriptor.actorPeerId) === ctx.getTeamForPeer(peerId)
+                ? getTeamForPeer(ctx,descriptor.actorPeerId) === getTeamForPeer(ctx,peerId)
                 : descriptor.actorPeerId === peerId
         ) {
             return ctx.i18n('errDrawNotYourTurn');
         }
-        const opponentPeerId = state.pairRenjuEnabled ? descriptor.actorPeerId : ctx.getOpponentPeerId(peerId);
+        const opponentPeerId = state.pairRenjuEnabled ? descriptor.actorPeerId : getOpponentPeerId(ctx,peerId);
         if (!opponentPeerId) return ctx.i18n('errDrawNoOpponent');
         if (state.pairRenjuEnabled && state.drawOfferByPeerId) return ctx.i18n('errDrawAlready');
         if (state.drawOfferByPeerId === peerId) return ctx.i18n('errDrawAlready');
@@ -527,7 +639,7 @@
         const state = ctx.state;
         const requestError = getDrawRequestError(ctx, peerId);
         if (requestError) return requestError;
-        const opponentPeerId = state.pairRenjuEnabled ? phaseDescriptor(ctx).actorPeerId : ctx.getOpponentPeerId(peerId);
+        const opponentPeerId = state.pairRenjuEnabled ? phaseDescriptor(ctx).actorPeerId : getOpponentPeerId(ctx,peerId);
         if (state.drawOfferByPeerId === opponentPeerId) {
             finishGame(ctx, '', ctx.messageSpec('msgDraw'), ctx.messageSpec('msgDrawLog'));
             return '';
@@ -542,7 +654,7 @@
         if (!state || state.status !== 'playing') return ctx.i18n('errDrawCannotRespond');
         const offerPeerId = state.drawOfferByPeerId;
         if (!offerPeerId) return ctx.i18n('errDrawNoOffer');
-        const opponentPeerId = state.drawResponderPeerId || ctx.getOpponentPeerId(offerPeerId);
+        const opponentPeerId = state.drawResponderPeerId || getOpponentPeerId(ctx,offerPeerId);
         if (peerId !== opponentPeerId) return ctx.i18n('errDrawOnlyOpponentRespond');
         if (accept) {
             finishGame(ctx, '', ctx.messageSpec('msgDraw'), ctx.messageSpec('msgDrawLog'));
@@ -556,13 +668,13 @@
     function resignGame(ctx, peerId) {
         const state = ctx.state;
         if (!state || state.status !== 'playing') return ctx.i18n('errResignPlayingOnly');
-        const participant = ctx.getParticipantById(peerId);
-        if (!ctx.isSeatedParticipant(participant)) return ctx.i18n('errResignPlayerOnly');
+        const participant = getParticipantById(ctx,peerId);
+        if (!isSeatedParticipant(ctx,participant)) return ctx.i18n('errResignPlayerOnly');
         if (state.pairRenjuEnabled) {
             finishGame(ctx, '', null, ctx.messageSpec('msgAgreedEndLog'));
             return '';
         }
-        const opponentPeerId = ctx.getOpponentPeerId(peerId);
+        const opponentPeerId = getOpponentPeerId(ctx,peerId);
         finishGame(ctx, opponentPeerId, ctx.messageSpec('msgWin', ctx.getPeerName(opponentPeerId)), ctx.messageSpec('msgAgreedEndLog'));
         return '';
     }
@@ -574,6 +686,26 @@
         getShapeHash,
         phaseDescriptorBase,
         phaseDescriptor,
+        // state / seat / color / turn helpers
+        getParticipantById,
+        isParticipantDisconnected,
+        getActiveSeatKeys,
+        isPlayingSeat,
+        hasDisconnectedSeatedPlayer,
+        getBlackPeerId,
+        getWhitePeerId,
+        getTeamForSeat,
+        getSeatForPeer,
+        getTeamForPeer,
+        isSeatedParticipant,
+        getOpponentTeam,
+        getPairTurnActor,
+        advancePairTurn,
+        getColorForPeer,
+        getOpponentPeerId,
+        allRequiredSeatsOccupied,
+        allSeatedPlayersReady,
+        resetReadyFlags,
         isOccupied,
         validateOfferMove,
         setPhase,
