@@ -449,6 +449,124 @@
         return '';
     }
 
+    // ---- match lifecycle / end / draw / resign (Step 1.3) ------------------
+    // Logs are emitted as structured data (messageKey + args) via ctx.addLog,
+    // so the worker can record them without localizing; the client localizes
+    // at render time.
+
+    function finishGame(ctx, winnerId, resultMessage, logMessage) {
+        const state = ctx.state;
+        if (!state) return;
+        state.winnerId = winnerId || null;
+        state.resultMessage = resultMessage && typeof resultMessage === 'object'
+            ? resultMessage
+            : null;
+        state.resultText = ctx.renderMessageSpec(state.resultMessage, resultMessage);
+        state.drawOfferByPeerId = '';
+        state.drawResponderPeerId = '';
+        state.takebackOfferByPeerId = '';
+        state.takebackResponderPeerId = '';
+        state.takebackMoveCount = 0;
+        state.connectionPause = null;
+        if (state.opening) state.opening.offeredMoves = [];
+        if (logMessage) {
+            const logSpec = logMessage && typeof logMessage === 'object' ? logMessage : null;
+            ctx.addLog('system', ctx.renderMessageSpec(logSpec, logMessage), {
+                action: 'copy-renjuportal-kifu',
+                moves: (state.moves || []).slice(),
+                ...(logSpec ? { messageKey: logSpec.key, messageArg: logSpec.arg } : {}),
+            });
+        }
+        ctx.resetReadyFlags();
+        setPhase(ctx, 'finished');
+        ctx.resetReviewMoves();
+    }
+
+    function maybeStartMatch(ctx) {
+        const state = ctx.state;
+        if (!state || !['waiting-guest', 'finished'].includes(state.phase)
+            || !ctx.allRequiredSeatsOccupied() || !ctx.allSeatedPlayersReady()) return;
+        ctx.clearBoardForNewMatch();
+        ctx.resetReadyFlags();
+        ctx.initializePairTurnOrder();
+        setPhase(ctx, 'opening-move-1');
+    }
+
+    function setReadyState(ctx, peerId, ready) {
+        const state = ctx.state;
+        if (!state || !peerId) return ctx.i18n('errNotReadyState');
+        const participant = ctx.getParticipantById(peerId);
+        if (!ctx.isSeatedParticipant(participant)) return ctx.i18n('errReadyPlayerOnly');
+        if (state.status === 'playing') return ctx.i18n('errReadyNotPlaying');
+        state.readyByPeerId[peerId] = Boolean(ready);
+        maybeStartMatch(ctx);
+        return '';
+    }
+
+    function getDrawRequestError(ctx, peerId) {
+        const state = ctx.state;
+        if (!state || state.status !== 'playing') return ctx.i18n('errDrawPlayingOnly');
+        const participant = ctx.getParticipantById(peerId);
+        if (!ctx.isSeatedParticipant(participant)) return ctx.i18n('errDrawPlayerOnly');
+        const descriptor = phaseDescriptor(ctx);
+        if (
+            state.pairRenjuEnabled
+                ? ctx.getTeamForPeer(descriptor.actorPeerId) === ctx.getTeamForPeer(peerId)
+                : descriptor.actorPeerId === peerId
+        ) {
+            return ctx.i18n('errDrawNotYourTurn');
+        }
+        const opponentPeerId = state.pairRenjuEnabled ? descriptor.actorPeerId : ctx.getOpponentPeerId(peerId);
+        if (!opponentPeerId) return ctx.i18n('errDrawNoOpponent');
+        if (state.pairRenjuEnabled && state.drawOfferByPeerId) return ctx.i18n('errDrawAlready');
+        if (state.drawOfferByPeerId === peerId) return ctx.i18n('errDrawAlready');
+        return '';
+    }
+
+    function offerDraw(ctx, peerId) {
+        const state = ctx.state;
+        const requestError = getDrawRequestError(ctx, peerId);
+        if (requestError) return requestError;
+        const opponentPeerId = state.pairRenjuEnabled ? phaseDescriptor(ctx).actorPeerId : ctx.getOpponentPeerId(peerId);
+        if (state.drawOfferByPeerId === opponentPeerId) {
+            finishGame(ctx, '', ctx.messageSpec('msgDraw'), ctx.messageSpec('msgDrawLog'));
+            return '';
+        }
+        state.drawOfferByPeerId = peerId;
+        state.drawResponderPeerId = opponentPeerId;
+        return '';
+    }
+
+    function respondDraw(ctx, peerId, accept) {
+        const state = ctx.state;
+        if (!state || state.status !== 'playing') return ctx.i18n('errDrawCannotRespond');
+        const offerPeerId = state.drawOfferByPeerId;
+        if (!offerPeerId) return ctx.i18n('errDrawNoOffer');
+        const opponentPeerId = state.drawResponderPeerId || ctx.getOpponentPeerId(offerPeerId);
+        if (peerId !== opponentPeerId) return ctx.i18n('errDrawOnlyOpponentRespond');
+        if (accept) {
+            finishGame(ctx, '', ctx.messageSpec('msgDraw'), ctx.messageSpec('msgDrawLog'));
+            return '';
+        }
+        state.drawOfferByPeerId = '';
+        state.drawResponderPeerId = '';
+        return '';
+    }
+
+    function resignGame(ctx, peerId) {
+        const state = ctx.state;
+        if (!state || state.status !== 'playing') return ctx.i18n('errResignPlayingOnly');
+        const participant = ctx.getParticipantById(peerId);
+        if (!ctx.isSeatedParticipant(participant)) return ctx.i18n('errResignPlayerOnly');
+        if (state.pairRenjuEnabled) {
+            finishGame(ctx, '', null, ctx.messageSpec('msgAgreedEndLog'));
+            return '';
+        }
+        const opponentPeerId = ctx.getOpponentPeerId(peerId);
+        finishGame(ctx, opponentPeerId, ctx.messageSpec('msgWin', ctx.getPeerName(opponentPeerId)), ctx.messageSpec('msgAgreedEndLog'));
+        return '';
+    }
+
     root.GameCore = {
         getImplicitMovePhase,
         isInsideCenteredSquare,
@@ -468,5 +586,12 @@
         requestTakeback,
         applyTakeback,
         respondTakeback,
+        finishGame,
+        maybeStartMatch,
+        setReadyState,
+        getDrawRequestError,
+        offerDraw,
+        respondDraw,
+        resignGame,
     };
 })(typeof globalThis !== 'undefined' ? globalThis : (typeof self !== 'undefined' ? self : this));

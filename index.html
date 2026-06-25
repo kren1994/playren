@@ -4111,8 +4111,19 @@
                 grantIncrementIfTurnPasses,
                 startClockFor,
                 stopClock,
+                // match lifecycle / end
+                allRequiredSeatsOccupied,
+                allSeatedPlayersReady,
+                clearBoardForNewMatch,
+                initializePairTurnOrder,
+                resetReadyFlags,
+                resetReviewMoves,
+                getPeerName,
                 // ui / i18n (worker will swap these for codes / event collectors)
                 i18n,
+                messageSpec,
+                renderMessageSpec,
+                addLog,
                 resetDisplayMoveCount: () => { displayMoveCount = -1; },
             };
         }
@@ -4134,11 +4145,7 @@
         }
 
         function maybeStartMatch() {
-            if (!state || !['waiting-guest', 'finished'].includes(state.phase) || !allRequiredSeatsOccupied() || !allSeatedPlayersReady()) return;
-            clearBoardForNewMatch();
-            resetReadyFlags();
-            initializePairTurnOrder();
-            setPhase('opening-move-1');
+            return GameCore.maybeStartMatch(gameCoreCtx());
         }
 
         function isOccupied(x, y) {
@@ -4162,44 +4169,11 @@
         }
 
         function finishGame(winnerId, resultMessage = null, logMessage = null) {
-            if (!state) return;
-            state.winnerId = winnerId || null;
-            state.resultMessage = resultMessage && typeof resultMessage === 'object'
-                ? resultMessage
-                : null;
-            state.resultText = renderMessageSpec(state.resultMessage, resultMessage);
-            state.drawOfferByPeerId = '';
-            state.drawResponderPeerId = '';
-            state.takebackOfferByPeerId = '';
-            state.takebackResponderPeerId = '';
-            state.takebackMoveCount = 0;
-            state.connectionPause = null;
-            if (state.opening) state.opening.offeredMoves = [];
-            if (logMessage) {
-                const logSpec = logMessage && typeof logMessage === 'object' ? logMessage : null;
-                addLog('system', renderMessageSpec(logSpec, logMessage), {
-                    action: 'copy-renjuportal-kifu',
-                    moves: (state.moves || []).slice(),
-                    ...(logSpec ? { messageKey: logSpec.key, messageArg: logSpec.arg } : {}),
-                });
-            }
-            resetReadyFlags();
-            setPhase('finished');
-            resetReviewMoves();
+            return GameCore.finishGame(gameCoreCtx(), winnerId, resultMessage, logMessage);
         }
 
         function setReadyState(peerId, ready) {
-            if (!state || !peerId) return i18n('errNotReadyState');
-            const participant = getParticipantById(peerId);
-            if (!isSeatedParticipant(participant)) {
-                return i18n('errReadyPlayerOnly');
-            }
-            if (state.status === 'playing') {
-                return i18n('errReadyNotPlaying');
-            }
-            state.readyByPeerId[peerId] = Boolean(ready);
-            maybeStartMatch();
-            return '';
+            return GameCore.setReadyState(gameCoreCtx(), peerId, ready);
         }
 
         function placeMove(peerId, x, y, timestamp = Date.now()) {
@@ -4223,62 +4197,15 @@
         }
 
         function getDrawRequestError(peerId) {
-            if (!state || state.status !== 'playing') return i18n('errDrawPlayingOnly');
-            const participant = getParticipantById(peerId);
-            if (!isSeatedParticipant(participant)) {
-                return i18n('errDrawPlayerOnly');
-            }
-            const descriptor = phaseDescriptor();
-            if (
-                state.pairRenjuEnabled
-                    ? getTeamForPeer(descriptor.actorPeerId) === getTeamForPeer(peerId)
-                    : descriptor.actorPeerId === peerId
-            ) {
-                return i18n('errDrawNotYourTurn');
-            }
-
-            const opponentPeerId = state.pairRenjuEnabled ? descriptor.actorPeerId : getOpponentPeerId(peerId);
-            if (!opponentPeerId) return i18n('errDrawNoOpponent');
-
-            if (state.pairRenjuEnabled && state.drawOfferByPeerId) {
-                return i18n('errDrawAlready');
-            }
-            if (state.drawOfferByPeerId === peerId) {
-                return i18n('errDrawAlready');
-            }
-            return '';
+            return GameCore.getDrawRequestError(gameCoreCtx(), peerId);
         }
 
         function offerDraw(peerId) {
-            const requestError = getDrawRequestError(peerId);
-            if (requestError) return requestError;
-            const opponentPeerId = state.pairRenjuEnabled ? phaseDescriptor().actorPeerId : getOpponentPeerId(peerId);
-
-            if (state.drawOfferByPeerId === opponentPeerId) {
-                finishGame('', messageSpec('msgDraw'), messageSpec('msgDrawLog'));
-                return '';
-            }
-
-            state.drawOfferByPeerId = peerId;
-            state.drawResponderPeerId = opponentPeerId;
-            return '';
+            return GameCore.offerDraw(gameCoreCtx(), peerId);
         }
 
         function respondDraw(peerId, accept) {
-            if (!state || state.status !== 'playing') return i18n('errDrawCannotRespond');
-            const offerPeerId = state.drawOfferByPeerId;
-            if (!offerPeerId) return i18n('errDrawNoOffer');
-            const opponentPeerId = state.drawResponderPeerId || getOpponentPeerId(offerPeerId);
-            if (peerId !== opponentPeerId) return i18n('errDrawOnlyOpponentRespond');
-
-            if (accept) {
-                finishGame('', messageSpec('msgDraw'), messageSpec('msgDrawLog'));
-                return '';
-            }
-
-            state.drawOfferByPeerId = '';
-            state.drawResponderPeerId = '';
-            return '';
+            return GameCore.respondDraw(gameCoreCtx(), peerId, accept);
         }
 
         function getTakebackRequestError(peerId) {
@@ -4298,18 +4225,7 @@
         }
 
         function resignGame(peerId) {
-            if (!state || state.status !== 'playing') return i18n('errResignPlayingOnly');
-            const participant = getParticipantById(peerId);
-            if (!isSeatedParticipant(participant)) {
-                return i18n('errResignPlayerOnly');
-            }
-            if (state.pairRenjuEnabled) {
-                finishGame('', null, messageSpec('msgAgreedEndLog'));
-                return '';
-            }
-            const opponentPeerId = getOpponentPeerId(peerId);
-            finishGame(opponentPeerId, messageSpec('msgWin', getPeerName(opponentPeerId)), messageSpec('msgAgreedEndLog'));
-            return '';
+            return GameCore.resignGame(gameCoreCtx(), peerId);
         }
 
         function addComment(peerId, text) {
