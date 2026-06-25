@@ -1712,6 +1712,7 @@
 
     <script src="./ws-config.js"></script>
     <script src="./peer-over-ws.js"></script>
+    <script src="./game-core.js"></script>
     <script>
         function isTouchMain() {
             return window.matchMedia('(pointer: coarse)').matches
@@ -4084,109 +4085,30 @@
             swapSeatColors();
         }
 
+        // Bundle of board/seat helpers game-core needs, so the rule logic can
+        // live in the shared (UI-free) module while still reading live state.
+        function gameCoreCtx() {
+            return {
+                state,
+                center: CENTER,
+                getBlackPeerId,
+                getWhitePeerId,
+                getOpponentPeerId,
+                getPairTurnActor,
+                hasDisconnectedSeatedPlayer,
+            };
+        }
+
         function getImplicitMovePhase(phase) {
-            switch (phase) {
-                case 'swap-after-1': return 'opening-move-2';
-                case 'swap-after-2': return 'opening-move-3';
-                case 'swap-after-3': return 'opening-move-4';
-                case 'swap-after-4': return 'opening-move-5-choice1';
-                case 'swap-after-5': return 'opening-move-6-choice1';
-                default: return '';
-            }
+            return GameCore.getImplicitMovePhase(phase);
         }
 
         function phaseDescriptorBase() {
-            if (!state) {
-                return {
-                    label: '',
-                    detail: '',
-                    actorPeerId: '',
-                    allowBoardAction: false,
-                    boardActionKind: '',
-                    constraint: null,
-                };
-            }
-            if (hasDisconnectedSeatedPlayer()) {
-                return { actorPeerId: '', allowBoardAction: false, boardActionKind: '', constraint: null };
-            }
-
-            const blackPeerId = getBlackPeerId();
-            const whitePeerId = getWhitePeerId();
-            const lastMove = state.moves[state.moves.length - 1];
-
-            switch (state.phase) {
-                case 'waiting-guest':
-                    return { actorPeerId: '', allowBoardAction: false, boardActionKind: '', constraint: null };
-                case 'opening-move-1':
-                    return { actorPeerId: blackPeerId, allowBoardAction: true, boardActionKind: 'move', constraint: { kind: 'center' } };
-                case 'swap-after-1':
-                case 'swap-after-2':
-                case 'swap-after-3':
-                case 'swap-after-5': {
-                    const implicitPhase = getImplicitMovePhase(state.phase);
-                    const currentActorPeerId = lastMove ? getOpponentPeerId(lastMove.peerId) : '';
-                    const savedPhase = state.phase;
-                    state.phase = implicitPhase;
-                    const implicitDescriptor = phaseDescriptor();
-                    state.phase = savedPhase;
-                    const actorPeerId = lastMove ? getOpponentPeerId(lastMove.peerId) : '';
-                    return {
-                        actorPeerId,
-                        allowBoardAction: Boolean(currentActorPeerId && implicitPhase),
-                        boardActionKind: implicitPhase ? 'move' : '',
-                        constraint: implicitDescriptor.constraint,
-                    };
-                }
-                case 'swap-after-4': {
-                    const implicitPhase = getImplicitMovePhase(state.phase);
-                    const savedPhase = state.phase;
-                    state.phase = implicitPhase;
-                    const implicitDescriptor = phaseDescriptor();
-                    state.phase = savedPhase;
-                    return {
-                        actorPeerId: blackPeerId,
-                        allowBoardAction: true,
-                        boardActionKind: 'move',
-                        constraint: implicitDescriptor.constraint,
-                    };
-                }
-                case 'opening-move-2':
-                    return { actorPeerId: whitePeerId, allowBoardAction: true, boardActionKind: 'move', constraint: { kind: 'square', radius: 1 } };
-                case 'opening-move-3':
-                    return { actorPeerId: blackPeerId, allowBoardAction: true, boardActionKind: 'move', constraint: { kind: 'square', radius: 2 } };
-                case 'opening-move-4':
-                    return { actorPeerId: whitePeerId, allowBoardAction: true, boardActionKind: 'move', constraint: { kind: 'square', radius: 3 } };
-                case 'opening-move-5-choice1':
-                    return { actorPeerId: blackPeerId, allowBoardAction: true, boardActionKind: 'move', constraint: { kind: 'square', radius: 4 } };
-                case 'opening-move-6-choice1':
-                    return { actorPeerId: whitePeerId, allowBoardAction: true, boardActionKind: 'move', constraint: { kind: 'anywhere' } };
-                case 'offering-choice2':
-                    return { actorPeerId: blackPeerId, allowBoardAction: true, boardActionKind: 'offer', constraint: { kind: 'offer-set' } };
-                case 'select-offer':
-                    return { actorPeerId: whitePeerId, allowBoardAction: true, boardActionKind: 'select-offer', constraint: { kind: 'select-offer' } };
-                case 'opening-move-6-choice2':
-                    return { actorPeerId: whitePeerId, allowBoardAction: true, boardActionKind: 'move', constraint: { kind: 'anywhere' } };
-                case 'regular': {
-                    const actorPeerId = lastMove ? getOpponentPeerId(lastMove.peerId) : blackPeerId;
-                    return { actorPeerId, allowBoardAction: true, boardActionKind: 'move', constraint: { kind: 'anywhere' } };
-                }
-                case 'finished':
-                    return { actorPeerId: '', allowBoardAction: false, boardActionKind: '', constraint: null };
-                default:
-                    return { actorPeerId: '', allowBoardAction: false, boardActionKind: '', constraint: null };
-            }
+            return GameCore.phaseDescriptorBase(gameCoreCtx());
         }
 
         function phaseDescriptor() {
-            const descriptor = phaseDescriptorBase();
-            if (
-                state?.pairRenjuEnabled &&
-                state.status === 'playing' &&
-                descriptor.allowBoardAction
-            ) {
-                descriptor.actorPeerId = getPairTurnActor();
-            }
-            return descriptor;
+            return GameCore.phaseDescriptor(gameCoreCtx());
         }
 
         function setPhase(nextPhase, timestamp = Date.now()) {
@@ -4224,59 +4146,15 @@
         }
 
         function isInsideCenteredSquare(x, y, radius) {
-            return Math.abs(x - CENTER) <= radius && Math.abs(y - CENTER) <= radius;
+            return GameCore.isInsideCenteredSquare(x, y, radius, CENTER);
         }
 
         function validateMoveConstraint(constraint, x, y) {
-            if (!constraint || constraint.kind === 'anywhere') return true;
-            if (constraint.kind === 'center') return x === CENTER && y === CENTER;
-            if (constraint.kind === 'square') return isInsideCenteredSquare(x, y, constraint.radius);
-            return true;
+            return GameCore.validateMoveConstraint(constraint, x, y, CENTER);
         }
 
         function getShapeHash(moves) {
-            let minHash = null;
-            for (let i = 0; i < 8; i++) {
-                const transformed = moves.map(m => {
-                    let tx, ty;
-                    switch (i) {
-                        case 0: tx = m.x; ty = m.y; break;
-                        case 1: tx = -m.y; ty = m.x; break;
-                        case 2: tx = -m.x; ty = -m.y; break;
-                        case 3: tx = m.y; ty = -m.x; break;
-                        case 4: tx = -m.x; ty = m.y; break;
-                        case 5: tx = m.y; ty = m.x; break;
-                        case 6: tx = m.x; ty = -m.y; break;
-                        case 7: tx = -m.y; ty = -m.x; break;
-                    }
-                    return { x: tx, y: ty, color: m.color };
-                });
-
-                let minX = Infinity;
-                let minY = Infinity;
-                for (const m of transformed) {
-                    if (m.x < minX) minX = m.x;
-                    if (m.y < minY) minY = m.y;
-                }
-
-                const normalized = transformed.map(m => ({
-                    x: m.x - minX,
-                    y: m.y - minY,
-                    color: m.color
-                }));
-
-                normalized.sort((a, b) => {
-                    if (a.x !== b.x) return a.x - b.x;
-                    if (a.y !== b.y) return a.y - b.y;
-                    return a.color.localeCompare(b.color);
-                });
-
-                const hash = normalized.map(m => `${m.color[0]}${m.x},${m.y}`).join(';');
-                if (minHash === null || hash < minHash) {
-                    minHash = hash;
-                }
-            }
-            return minHash;
+            return GameCore.getShapeHash(moves);
         }
 
         function validateOfferMove(x, y) {
@@ -6807,7 +6685,7 @@
 
         (() => {
             applyCachedUserSettings();
-            applyLanguage();
+            
             resizeBoard();
             render();
         })();
