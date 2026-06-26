@@ -1041,6 +1041,51 @@
             gap: 4px;
         }
 
+        /* Human chat: left-aligned white card. */
+        .log-item--chat {
+            justify-self: start;
+            max-width: 88%;
+            background: rgba(255, 255, 255, 0.94);
+            border-color: rgba(74, 54, 34, 0.10);
+        }
+
+        /* Join / leave / reconnect / disconnect: faint left-aligned note line. */
+        .log-item--note {
+            justify-self: stretch;
+            padding: 2px 4px 2px 6px;
+            background: transparent;
+            border: 0;
+            color: var(--muted);
+        }
+
+        .log-item--note .log-body {
+            font-size: 12px;
+            line-height: 1.4;
+            color: var(--muted);
+        }
+
+        .log-item--note .log-body::before {
+            content: "·";
+            margin-right: 6px;
+            opacity: 0.7;
+        }
+
+        /* Game end / timeout / draw: left card, set apart by a soft neutral tint. */
+        .log-item--result {
+            justify-self: start;
+            max-width: 92%;
+            padding: 8px 14px;
+            background: rgba(74, 54, 34, 0.06);
+            border: 1px solid rgba(74, 54, 34, 0.12);
+            border-radius: 14px;
+        }
+
+        .log-item--result .log-body {
+            font-size: 13px;
+            font-weight: 700;
+            color: var(--text);
+        }
+
         .log-head {
             display: flex;
             justify-content: space-between;
@@ -1051,6 +1096,9 @@
         .log-body {
             font-size: 14px;
             line-height: 1.55;
+            color: var(--text);
+            white-space: pre-wrap;
+            word-break: break-word;
         }
 
         .log-action-button {
@@ -1090,8 +1138,10 @@
         }
 
         .log-author {
-            font-weight: 700;
-            color: var(--text);
+            font-weight: 600;
+            font-size: 11px;
+            letter-spacing: 0.02em;
+            color: var(--muted);
         }
 
         .toast {
@@ -4656,7 +4706,7 @@
             const logs = (state?.log || []).filter((entry) => entry.kind === 'presence' || entry.kind === 'comment' || entry.kind === 'system');
             if (!logs.length) {
                 const item = document.createElement('li');
-                item.className = 'log-item';
+                item.className = 'log-item log-item--note';
                 item.textContent = i18n('chatNoMessages');
                 elements.logList.appendChild(item);
                 return;
@@ -4664,7 +4714,13 @@
 
             logs.forEach((entry) => {
                 const item = document.createElement('li');
-                item.className = 'log-item';
+                // Three visual tiers: human chat (left white card), presence
+                // notes (centered faint), and game-end results (centered pill).
+                const isComment = entry.kind === 'comment';
+                const isResult = entry.action === 'copy-renjuportal-kifu';
+                item.className = 'log-item ' + (isComment
+                    ? 'log-item--chat'
+                    : isResult ? 'log-item--result' : 'log-item--note');
 
                 const head = document.createElement('div');
                 head.className = 'log-head';
