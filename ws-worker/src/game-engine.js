@@ -14,6 +14,8 @@ const GameCore = globalThis.GameCore;
 
 const CENTER = 7;
 const MAX_LOG_ITEMS = 64; // mirror index.html
+// Display countdown (ms) shown while a disconnected seated player may return.
+const DISCONNECT_GRACE_MS = 120000; // mirror index.html
 
 function nowIsoTime(now) {
   // HH:MM:SS, mirroring the browser's display-time field. Clients may re-render.
@@ -86,13 +88,16 @@ export function makeCtx(state, { now = Date.now(), effects } = {}) {
 }
 
 export function createRoom({ roomId, hostToken, hostName, settings, now = Date.now() }) {
-  return GameCore.createInitialState(
+  const state = GameCore.createInitialState(
     { roomId, hostId: hostToken, hostName, settings, hostToken },
     {
       i18n: (key) => key,
       createLogEntry: (kind, text, options) => makeLogEntry(kind, text, options, now),
     }
   );
+  // Structured join log so clients localize (worker i18n returns codes).
+  state.log = [makeLogEntry('presence', '', { messageKey: 'msgJoined', messageArg: hostName }, now)];
+  return state;
 }
 
 // Intents that must not be applied while a seated player is mid-disconnect
@@ -167,23 +172,97 @@ export function applyIntent(state, actorToken, intent, options = {}) {
   return { error, effects, changed, state };
 }
 
-// Presence helpers (the DO drives connect/disconnect/leave; these mutate the
-// authoritative state the same way the browser host did).
-export function pauseForDisconnect(state, peerId, options = {}) {
-  const ctx = makeCtx(state, { now: options.now ?? Date.now() });
-  GameCore.pauseMatchForDisconnect(ctx, peerId);
-  return state;
-}
-
-export function resumeAfterReconnect(state, options = {}) {
+// Apply a clock timeout the DO's deadline alarm detected: the active player
+// loses on time (draw in pair-renju). Mirrors the host's clock-timeout handler.
+export function applyClockTimeout(state, options = {}) {
+  const now = options.now ?? Date.now();
   const effects = {};
-  const ctx = makeCtx(state, { now: options.now ?? Date.now(), effects });
-  GameCore.resumeMatchAfterReconnect(ctx);
-  return { effects, state };
+  const ctx = makeCtx(state, { now, effects });
+  if (!state || state.status !== 'playing') return { applied: false, effects, state };
+  const loserId = state.clocks.activePeerId;
+  if (!loserId) return { applied: false, effects, state };
+  GameCore.applyElapsedTime(ctx, now);
+  const winnerId = state.pairRenjuEnabled ? '' : GameCore.getOpponentPeerId(ctx, loserId);
+  GameCore.finishGame(
+    ctx,
+    winnerId,
+    ctx.messageSpec('msgTimeout', ctx.getPeerName(loserId)),
+    ctx.messageSpec('msgTimeoutLog')
+  );
+  state.version = (state.version || 0) + 1;
+  return { applied: true, effects, state };
 }
 
-export function removeParticipant(state, peerId, reasonText, options = {}) {
-  const ctx = makeCtx(state, { now: options.now ?? Date.now() });
-  GameCore.removeParticipant(ctx, peerId, reasonText);
-  return state;
+// ---- presence -> participant lifecycle (the DO drives this) -------------
+// Mirrors the browser host's hello / close / bye reactions, mutating the
+// authoritative state. The DO calls these from its presence machinery.
+
+function markReconnectedInner(ctx, token, name) {
+  const state = ctx.state;
+  const participant = GameCore.getParticipantById(ctx, token);
+  if (!participant) return false;
+  participant.name = name || participant.name;
+  participant.token = token;
+  const wasDisconnected = Boolean(participant.disconnectedAt);
+  delete participant.disconnectedAt;
+  delete participant.disconnectedUntil;
+  GameCore.ensureClockEntry(ctx, token);
+  GameCore.rebuildColors(ctx);
+  if (wasDisconnected) {
+    GameCore.resumeMatchAfterReconnect(ctx); // re-arms clock via effects
+    ctx.addLog('presence', '', { messageKey: 'msgReconnected', messageArg: participant.name });
+  }
+  return true;
+}
+
+// A token said hello: reconnect an existing participant, or add a new
+// spectator. Returns { effects, state, isNew }.
+export function joinParticipant(state, token, name, options = {}) {
+  const now = options.now ?? Date.now();
+  const effects = {};
+  const ctx = makeCtx(state, { now, effects });
+  const existing = GameCore.getParticipantById(ctx, token);
+  if (existing) {
+    markReconnectedInner(ctx, token, name);
+    return { effects, state, isNew: false };
+  }
+  state.participantsById[token] = { id: token, name, seat: 'spectator', isHost: false, token };
+  if (!Array.isArray(state.joinOrder)) state.joinOrder = [];
+  if (!state.joinOrder.includes(token)) state.joinOrder.push(token);
+  GameCore.ensureClockEntry(ctx, token);
+  ctx.addLog('presence', '', { messageKey: 'msgJoined', messageArg: name });
+  return { effects, state, isNew: true };
+}
+
+// A seated player who is mid-game is preserved (paused) rather than removed,
+// so they can reconnect. Returns { preserved, effects, state }.
+export function preserveDisconnected(state, token, options = {}) {
+  const now = options.now ?? Date.now();
+  const effects = {};
+  const ctx = makeCtx(state, { now, effects });
+  const participant = GameCore.getParticipantById(ctx, token);
+  if (!participant) return { preserved: false, effects, state };
+  const wasSeated = GameCore.isSeatedParticipant(ctx, participant);
+  if (!wasSeated || state.status !== 'playing' || (state.moves || []).length === 0) {
+    return { preserved: false, effects, state };
+  }
+  if (participant.disconnectedAt) return { preserved: true, effects, state };
+  participant.disconnectedAt = now;
+  participant.disconnectedUntil = now + DISCONNECT_GRACE_MS;
+  GameCore.pauseMatchForDisconnect(ctx, token); // sets effects.clock armed:false
+  ctx.addLog('presence', '', { messageKey: 'msgDisconnected', messageArg: participant.name });
+  return { preserved: true, effects, state };
+}
+
+// Fully remove a participant (used when not preserved). Logs a structured
+// "left" entry. Returns { effects, state }.
+export function removeParticipant(state, token, options = {}) {
+  const now = options.now ?? Date.now();
+  const effects = {};
+  const ctx = makeCtx(state, { now, effects });
+  const participant = GameCore.getParticipantById(ctx, token);
+  const name = participant?.name || '';
+  GameCore.removeParticipant(ctx, token, ''); // no text; we log structured below
+  if (participant) ctx.addLog('system', '', { messageKey: 'msgLeft', messageArg: name });
+  return { effects, state };
 }
