@@ -4867,10 +4867,8 @@
         }
 
         async function copyRenjuPortalKifu(moves) {
-            if (!state || state.status !== 'finished') return;
-
             try {
-                const targetMoves = Array.isArray(moves) ? moves : (state.moves || []);
+                const targetMoves = Array.isArray(moves) ? moves : (state?.moves || []);
                 await copyTextToClipboard(buildRenjuPortalKifuUrl(targetMoves));
                 showToast(i18n('msgRenjuPortalCopied'));
             } catch (_error) {
