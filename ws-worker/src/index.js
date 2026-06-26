@@ -1,10 +1,28 @@
-const PROTOCOL_VERSION = 1;
+import {
+  createRoom,
+  applyIntent,
+  applyClockTimeout,
+  joinParticipant,
+  preserveDisconnected,
+  removeParticipant,
+} from './game-engine.js';
+
+const PROTOCOL_VERSION = 2;
 const PRESENCE_GRACE_MS = 4000;
-// Authoritative state snapshot kept so a room survives all participants
-// briefly leaving: the first returner (elected host) restores from it.
-const SNAPSHOT_MAX_AGE_MS = 30 * 60 * 1000;
 // Slack before declaring a clock timeout, to absorb in-flight moves / latency.
 const CLOCK_LATENCY_GRACE_MS = 800;
+
+const DEFAULT_BASE_SECONDS = 300;
+const DEFAULT_INCREMENT_SECONDS = 3;
+
+function parseSettings(raw) {
+  const base = Number(raw && raw.baseSeconds);
+  const inc = Number(raw && raw.incrementSeconds);
+  return {
+    baseSeconds: Number.isFinite(base) && base > 0 ? base : DEFAULT_BASE_SECONDS,
+    incrementSeconds: Number.isFinite(inc) && inc >= 0 ? inc : DEFAULT_INCREMENT_SECONDS,
+  };
+}
 
 export default {
   async fetch(request, env) {
@@ -32,67 +50,55 @@ export default {
   },
 };
 
+// The Durable Object is now the authoritative game server (Phase C.2). It owns
+// the room state, applies client intents through the shared game-core engine,
+// runs the clock deadline, and broadcasts the full state. "host" is just an
+// admin role (settings); seating / readiness / moves are each player's own.
 export class RoomRelay {
   constructor(state, env) {
     this.state = state;
     this.env = env;
     this.loaded = false;
     this.model = null;
+    this.roomName = '';
 
-    // Infra-level keepalive: the client pings, we auto-reply pong.
-    // Used only for each client to self-heal its own socket; peer presence
-    // is decided here in the Durable Object, never by client heartbeats.
+    // Infra-level keepalive: the client pings, we auto-reply pong. Used only for
+    // each client to self-heal its own socket; peer presence is decided here.
     this.state.setWebSocketAutoResponse(
       new WebSocketRequestResponsePair('ping', 'pong')
     );
   }
 
   // ---- model (durable) ---------------------------------------------------
-  // members:    { [token]: { name, joinSeq } }   connected OR within grace
-  // hostToken:  string
-  // seqCounter: number
-  // pendingDrop:{ [token]: deadlineMs }          sockets gone, awaiting grace
+  // game:          authoritative room state (null until first hello creates it)
+  // members:       { [token]: { name, joinSeq } }   connected OR within grace
+  // hostToken:     string (elected; mirrored into game.hostPeerId as admin)
+  // seqCounter:    number
+  // pendingDrop:   { [token]: deadlineMs }          sockets gone, awaiting grace
+  // clockArmed:    bool        the active player's clock is running
+  // clockDeadlineAt:ms         absolute time the running clock times out
 
   async ensureLoaded() {
     if (this.loaded) return;
     const stored = await this.state.storage.get([
+      'game',
       'members',
       'hostToken',
       'seqCounter',
       'pendingDrop',
-      'snapshot',
-      'snapshotVersion',
-      'snapshotSavedAt',
-      'clockEpoch',
       'clockArmed',
-      'clockBudgetMs',
-      'clockConsumedMs',
-      'clockActiveSince',
-      'clockGate',
-      'clockTimedOutEpoch',
+      'clockDeadlineAt',
+      'roomName',
     ]);
     this.model = {
+      game: stored.get('game') || null,
       members: stored.get('members') || {},
       hostToken: stored.get('hostToken') || '',
       seqCounter: stored.get('seqCounter') || 0,
       pendingDrop: stored.get('pendingDrop') || {},
-      snapshot: stored.get('snapshot') || null,
-      snapshotVersion: stored.get('snapshotVersion') || 0,
-      snapshotSavedAt: stored.get('snapshotSavedAt') || 0,
-      // ---- authoritative clock (C.1: deadline timer only) ----
-      // epoch:        monotonic; arm/disarm/timeout tagged so stale ones drop
-      // budgetMs:     remaining at the last arm
-      // consumedMs:   active time accumulated across pauses
-      // activeSince:  DO time the clock is currently counting from (null=paused)
-      // gate:         seated tokens whose absence pauses the clock
-      // timedOutEpoch:epoch that already fired a timeout (0 = none)
-      clockEpoch: stored.get('clockEpoch') || 0,
       clockArmed: stored.get('clockArmed') || false,
-      clockBudgetMs: stored.get('clockBudgetMs') || 0,
-      clockConsumedMs: stored.get('clockConsumedMs') || 0,
-      clockActiveSince: stored.get('clockActiveSince') ?? null,
-      clockGate: stored.get('clockGate') || [],
-      clockTimedOutEpoch: stored.get('clockTimedOutEpoch') || 0,
+      clockDeadlineAt: stored.get('clockDeadlineAt') || 0,
+      roomName: stored.get('roomName') || this.roomName || '',
     };
     this.loaded = true;
   }
@@ -109,6 +115,8 @@ export class RoomRelay {
     if (request.headers.get('Upgrade') !== 'websocket') {
       return new Response('Expected websocket', { status: 426 });
     }
+    const room = String(new URL(request.url).searchParams.get('room') || '').trim();
+    if (room) this.roomName = room;
 
     const pair = new WebSocketPair();
     const client = pair[0];
@@ -117,10 +125,7 @@ export class RoomRelay {
     server.serializeAttachment({ token: '' });
     this.state.acceptWebSocket(server);
 
-    return new Response(null, {
-      status: 101,
-      webSocket: client,
-    });
+    return new Response(null, { status: 101, webSocket: client });
   }
 
   async webSocketMessage(socket, rawData) {
@@ -143,37 +148,10 @@ export class RoomRelay {
     }
 
     const meta = socket.deserializeAttachment() || {};
-    if (!meta.token) {
-      return;
-    }
+    if (!meta.token) return;
 
-    if (message.type === 'relay') {
-      this.handleRelay(meta.token, message);
-      return;
-    }
-
-    if (message.type === 'snapshot') {
-      await this.handleSnapshot(meta.token, message);
-      return;
-    }
-
-    if (message.type === 'snapshot-request') {
-      this.handleSnapshotRequest(socket, meta.token);
-      return;
-    }
-
-    if (message.type === 'clock-arm') {
-      await this.handleClockArm(meta.token, message);
-      return;
-    }
-
-    if (message.type === 'clock-disarm') {
-      await this.handleClockDisarm(meta.token, message);
-      return;
-    }
-
-    if (message.type === 'clock-gate') {
-      await this.handleClockGate(meta.token, message);
+    if (message.type === 'intent') {
+      await this.handleIntent(meta.token, message);
       return;
     }
 
@@ -196,6 +174,7 @@ export class RoomRelay {
     await this.ensureLoaded();
     const now = Date.now();
     let rosterChanged = false;
+    let gameChanged = false;
 
     for (const [token, deadline] of Object.entries(this.model.pendingDrop)) {
       if (deadline > now) continue;
@@ -204,30 +183,32 @@ export class RoomRelay {
         delete this.model.members[token];
         rosterChanged = true;
       }
+      if (this.finalizeDeparture(token, now)) gameChanged = true;
       if (this.model.hostToken === token) {
         this.electHost();
         rosterChanged = true;
       }
     }
 
-    // A finalized drop of a seated (gate) player pauses the clock.
-    this.reevaluateClockPause();
+    if (rosterChanged) this.syncHostIntoGame();
 
-    // Clock timeout: armed, counting, present, and past the deadline.
+    // Clock timeout: armed, the game is still live, and past the deadline.
     let timedOut = false;
-    if (this.model.clockArmed && !this.model.clockTimedOutEpoch
-        && this.model.clockActiveSince != null
-        && now >= this.clockDeadline()) {
-      this.model.clockTimedOutEpoch = this.model.clockEpoch;
-      this.model.clockActiveSince = null;
-      timedOut = true;
+    if (this.model.clockArmed && this.model.game
+        && this.model.game.status === 'playing'
+        && now >= this.model.clockDeadlineAt) {
+      const result = applyClockTimeout(this.model.game, { now });
+      if (result.applied) {
+        this.applyClockEffect(result.effects.clock, now);
+        gameChanged = true;
+        timedOut = true;
+      }
     }
 
-    await this.persist(['pendingDrop', 'members', 'hostToken']);
-    await this.persistClock();
+    await this.persist(['pendingDrop', 'members', 'hostToken', 'game', 'clockArmed', 'clockDeadlineAt']);
     await this.rescheduleAlarm();
+    if (gameChanged || timedOut) this.broadcastGameState(null);
     if (rosterChanged) this.broadcastRoster(null);
-    if (timedOut) this.broadcastClockTimeout();
   }
 
   // ---- handlers ----------------------------------------------------------
@@ -243,10 +224,12 @@ export class RoomRelay {
       this.send(socket, { type: 'protocol-mismatch', server: PROTOCOL_VERSION });
       return;
     }
-    const name = String(message.name || '').slice(0, 64);
+    const name = String(message.name || '').slice(0, 64) || 'Player';
+    if (this.roomName && !this.model.roomName) this.model.roomName = this.roomName;
+    if (message.roomId && !this.model.roomName) this.model.roomName = String(message.roomId);
 
-    // Token is the sole identity: a new socket with the same token displaces
-    // the old one (e.g. a duplicate tab). The old tab is told to stand down.
+    // Token is the sole identity: a new socket with the same token displaces the
+    // old one (e.g. a duplicate tab). The old tab is told to stand down.
     for (const other of this.state.getWebSockets()) {
       if (other === socket) continue;
       const otherMeta = other.deserializeAttachment() || {};
@@ -260,24 +243,40 @@ export class RoomRelay {
 
     const membershipChanged = this.upsertMember(token, name);
 
-    // Reconnected within grace: cancel the pending drop. No roster change,
-    // so guests never see a blip (this is the whole point of the grace).
+    // Reconnected within grace: cancel the pending drop. No roster blip.
     if (this.model.pendingDrop[token] != null) {
       delete this.model.pendingDrop[token];
-      await this.rescheduleAlarm();
     }
 
+    const now = Date.now();
     let hostAssigned = false;
-    if (!this.model.hostToken) {
+    if (!this.model.game) {
+      // First arrival creates the room (creator seated black, host/admin).
+      this.model.game = createRoom({
+        roomId: this.model.roomName || message.roomId || '',
+        hostToken: token,
+        hostName: name,
+        settings: parseSettings(message.settings),
+        now,
+      });
       this.model.hostToken = token;
       hostAssigned = true;
+    } else {
+      // Returning or new participant joins the existing authoritative game.
+      const result = joinParticipant(this.model.game, token, name, { now });
+      this.applyClockEffect(result.effects.clock, now);
+      if (!this.model.hostToken) {
+        this.model.hostToken = token;
+        hostAssigned = true;
+      }
     }
 
-    // A returning seated player may let the clock resume.
-    this.reevaluateClockPause();
+    this.syncHostIntoGame();
 
-    await this.persist(['members', 'seqCounter', 'pendingDrop', 'hostToken']);
-    await this.persistClock();
+    await this.persist([
+      'game', 'members', 'seqCounter', 'pendingDrop', 'hostToken',
+      'clockArmed', 'clockDeadlineAt', 'roomName',
+    ]);
     await this.rescheduleAlarm();
 
     this.send(socket, {
@@ -286,90 +285,50 @@ export class RoomRelay {
       you: { token, role: this.model.hostToken === token ? 'host' : 'member' },
       roster: this.roster(),
     });
+    this.send(socket, { type: 'game-state', state: this.model.game, serverNow: now });
 
-    // If the clock already timed out while no host was around to finalize it,
-    // hand the fact to whoever is host now so it is never dropped.
-    if (this.model.hostToken === token && this.model.clockTimedOutEpoch) {
-      this.send(socket, { type: 'clock-timeout', epoch: this.model.clockTimedOutEpoch });
-    }
-
-    if (membershipChanged || hostAssigned) {
-      this.broadcastRoster(socket);
-    }
+    // Joining changed presence/participants; refresh everyone else.
+    this.broadcastGameState(socket);
+    if (membershipChanged || hostAssigned) this.broadcastRoster(socket);
   }
 
-  handleRelay(fromToken, message) {
-    const to = String(message.to || '');
-    if (!to) return;
-    const data = message.data;
+  async handleIntent(token, message) {
+    if (!this.model.game) return;
+    const intent = message.intent;
+    if (!intent || typeof intent !== 'object') return;
 
-    if (to === '*') {
-      for (const socket of this.state.getWebSockets()) {
-        const meta = socket.deserializeAttachment() || {};
-        if (!meta.token || meta.token === fromToken) continue;
-        this.send(socket, { type: 'message', from: fromToken, data });
-      }
+    const now = Date.now();
+    const { error, effects } = applyIntent(this.model.game, token, intent, { now });
+    if (error) {
+      const sock = this.findSocketByToken(token);
+      if (sock) this.send(sock, { type: 'notice', message: error });
       return;
     }
 
-    const targetToken = to === 'host' ? this.model.hostToken : to;
-    if (!targetToken) return;
-
-    const target = this.findSocketByToken(targetToken);
-    if (!target) return;
-
-    this.send(target, { type: 'message', from: fromToken, data });
-  }
-
-  // Only the current host owns the authoritative state. Store newer versions
-  // (older or duplicate versions are ignored). No fan-out, debounced by the
-  // client, so this is a low-rate write path.
-  async handleSnapshot(token, message) {
-    if (!token || token !== this.model.hostToken) return;
-    const version = Number(message.version || 0);
-    if (!version || version <= this.model.snapshotVersion) return;
-    if (!message.state || typeof message.state !== 'object') return;
-
-    this.model.snapshot = message.state;
-    this.model.snapshotVersion = version;
-    this.model.snapshotSavedAt = Date.now();
-    await this.persist(['snapshot', 'snapshotVersion', 'snapshotSavedAt']);
-  }
-
-  // Host-only recovery: a (re)connecting or promoted host pulls the latest
-  // authoritative state when its own copy is missing or stale.
-  handleSnapshotRequest(socket, token) {
-    if (!token || token !== this.model.hostToken) return;
-    if (!this.snapshotFresh()) return;
-    this.send(socket, {
-      type: 'snapshot',
-      version: this.model.snapshotVersion,
-      state: this.model.snapshot,
-    });
-  }
-
-  snapshotFresh() {
-    if (!this.model.snapshot || !this.model.snapshotVersion) return false;
-    return Date.now() - this.model.snapshotSavedAt <= SNAPSHOT_MAX_AGE_MS;
+    this.applyClockEffect(effects.clock, now);
+    await this.persist(['game', 'clockArmed', 'clockDeadlineAt']);
+    await this.rescheduleAlarm();
+    this.broadcastGameState(null);
   }
 
   async handleBye(socket, token) {
     let rosterChanged = false;
+    let gameChanged = false;
     if (this.model.members[token]) {
       delete this.model.members[token];
       rosterChanged = true;
     }
-    if (this.model.pendingDrop[token] != null) {
-      delete this.model.pendingDrop[token];
-    }
+    if (this.model.pendingDrop[token] != null) delete this.model.pendingDrop[token];
+    if (this.finalizeDeparture(token, Date.now())) gameChanged = true;
     if (this.model.hostToken === token) {
       this.electHost();
       rosterChanged = true;
     }
-    this.reevaluateClockPause(); // a leaving seated player pauses the clock
-    await this.persist(['members', 'pendingDrop', 'hostToken']);
-    await this.persistClock();
+    if (rosterChanged) this.syncHostIntoGame();
+
+    await this.persist(['game', 'members', 'pendingDrop', 'hostToken', 'clockArmed', 'clockDeadlineAt']);
     await this.rescheduleAlarm();
+    if (gameChanged) this.broadcastGameState(socket);
     if (rosterChanged) this.broadcastRoster(socket);
     try { socket.close(1000, 'bye'); } catch { /* no-op */ }
   }
@@ -380,8 +339,7 @@ export class RoomRelay {
     if (!token) return;
 
     // A still-open OTHER socket with this token means a displacement just
-    // happened; the old socket's close should not start a drop. The closing
-    // socket itself may still appear in getWebSockets(), so exclude it.
+    // happened; the old socket's close should not start a drop.
     if (this.findSocketByToken(token, socket)) return;
     if (!this.model.members[token]) return;
 
@@ -391,7 +349,42 @@ export class RoomRelay {
     // No roster broadcast: the member stays listed during the grace window.
   }
 
-  // ---- helpers -----------------------------------------------------------
+  // ---- game / presence helpers ------------------------------------------
+
+  // A seated mid-game player is preserved (paused) so they can reconnect;
+  // anyone else is removed. Returns whether the game changed.
+  finalizeDeparture(token, now) {
+    if (!this.model.game || !this.model.game.participantsById[token]) return false;
+    const preserved = preserveDisconnected(this.model.game, token, { now });
+    if (preserved.preserved) {
+      this.applyClockEffect(preserved.effects.clock, now);
+    } else {
+      const removed = removeParticipant(this.model.game, token, { now });
+      this.applyClockEffect(removed.effects.clock, now);
+    }
+    return true;
+  }
+
+  syncHostIntoGame() {
+    if (!this.model.game) return;
+    const host = this.model.hostToken;
+    this.model.game.hostPeerId = host || '';
+    for (const participant of Object.values(this.model.game.participantsById || {})) {
+      if (participant) participant.isHost = Boolean(host) && participant.id === host;
+    }
+  }
+
+  // Translate an engine clock effect into the DO's deadline timer.
+  applyClockEffect(clock, now) {
+    if (!clock) return;
+    if (clock.armed) {
+      this.model.clockArmed = true;
+      this.model.clockDeadlineAt = now + Math.max(0, clock.remainingMs || 0) + CLOCK_LATENCY_GRACE_MS;
+    } else {
+      this.model.clockArmed = false;
+      this.model.clockDeadlineAt = 0;
+    }
+  }
 
   upsertMember(token, name) {
     const existing = this.model.members[token];
@@ -426,8 +419,9 @@ export class RoomRelay {
 
   async rescheduleAlarm() {
     const deadlines = Object.values(this.model.pendingDrop);
-    const clockAt = this.clockDeadline();
-    if (clockAt !== Infinity) deadlines.push(clockAt);
+    if (this.model.clockArmed && this.model.clockDeadlineAt) {
+      deadlines.push(this.model.clockDeadlineAt);
+    }
     if (deadlines.length === 0) {
       await this.state.storage.deleteAlarm();
       return;
@@ -438,8 +432,6 @@ export class RoomRelay {
   roster() {
     return {
       hostToken: this.model.hostToken,
-      snapshotVersion: this.snapshotFresh() ? this.model.snapshotVersion : 0,
-      clockEpoch: this.model.clockEpoch,
       members: Object.entries(this.model.members).map(([token, member]) => ({
         token,
         name: member.name,
@@ -457,81 +449,18 @@ export class RoomRelay {
     }
   }
 
-  // ---- clock (host-driven, DO is the authoritative deadline timer) -------
-
-  async handleClockArm(token, message) {
-    if (!token || token !== this.model.hostToken) return;
-    const epoch = Number(message.epoch || 0);
-    if (epoch < this.model.clockEpoch) return; // stale / reordered
-    this.model.clockEpoch = epoch;
-    this.model.clockArmed = true;
-    this.model.clockBudgetMs = Math.max(0, Number(message.remainingMs || 0));
-    this.model.clockConsumedMs = 0;
-    this.model.clockGate = Array.isArray(message.gateTokens) ? message.gateTokens.map(String) : [];
-    this.model.clockTimedOutEpoch = 0;
-    this.model.clockActiveSince = this.clockGatePresent() ? Date.now() : null;
-    await this.persistClock();
-    await this.rescheduleAlarm();
-  }
-
-  async handleClockDisarm(token, message) {
-    if (!token || token !== this.model.hostToken) return;
-    const epoch = Number(message.epoch || 0);
-    if (epoch < this.model.clockEpoch) return;
-    this.model.clockEpoch = epoch;
-    this.model.clockArmed = false;
-    this.model.clockActiveSince = null;
-    this.model.clockTimedOutEpoch = 0;
-    await this.persistClock();
-    await this.rescheduleAlarm();
-  }
-
-  async handleClockGate(token, message) {
-    if (!token || token !== this.model.hostToken) return;
-    this.model.clockGate = Array.isArray(message.gateTokens) ? message.gateTokens.map(String) : [];
-    this.reevaluateClockPause();
-    await this.persistClock();
-    await this.rescheduleAlarm();
-  }
-
-  clockGatePresent() {
-    return this.model.clockGate.every((token) => !!this.model.members[token]);
-  }
-
-  clockDeadline() {
-    if (!this.model.clockArmed || this.model.clockTimedOutEpoch) return Infinity;
-    if (this.model.clockActiveSince == null) return Infinity; // paused
-    const remaining = this.model.clockBudgetMs - this.model.clockConsumedMs;
-    return this.model.clockActiveSince + remaining + CLOCK_LATENCY_GRACE_MS;
-  }
-
-  // Resume when every gate player is present, pause when any is absent. Caller
-  // persists + reschedules.
-  reevaluateClockPause() {
-    if (!this.model.clockArmed || this.model.clockTimedOutEpoch) return;
-    const present = this.clockGatePresent();
-    const counting = this.model.clockActiveSince != null;
-    if (present && !counting) {
-      this.model.clockActiveSince = Date.now();
-    } else if (!present && counting) {
-      this.model.clockConsumedMs += Date.now() - this.model.clockActiveSince;
-      this.model.clockActiveSince = null;
-    }
-  }
-
-  async persistClock() {
-    await this.persist([
-      'clockEpoch', 'clockArmed', 'clockBudgetMs', 'clockConsumedMs',
-      'clockActiveSince', 'clockGate', 'clockTimedOutEpoch',
-    ]);
-  }
-
-  broadcastClockTimeout() {
-    const payload = { type: 'clock-timeout', epoch: this.model.clockEpoch };
+  broadcastGameState(excludeSocket) {
+    if (!this.model.game) return;
+    const payload = JSON.stringify({
+      type: 'game-state',
+      state: this.model.game,
+      serverNow: Date.now(),
+    });
     for (const socket of this.state.getWebSockets()) {
+      if (socket === excludeSocket) continue;
       const meta = socket.deserializeAttachment() || {};
       if (!meta.token) continue;
-      this.send(socket, payload);
+      try { socket.send(payload); } catch { /* no-op */ }
     }
   }
 
