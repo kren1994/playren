@@ -1745,10 +1745,6 @@
         const ROOM_STATE_PREFIX = 'playren-room-state:';
         // Bumped when participant ids switched from ephemeral peer ids to stable
         // tokens. Older snapshots use the legacy id scheme and are discarded.
-        const ROOM_STATE_VERSION = 2;
-        // Debounce for pushing the authoritative state to the server. Renju is
-        // slow, so this collapses any burst into ~1 write per meaningful change.
-        const SNAPSHOT_PUSH_DEBOUNCE_MS = 1000;
         const USER_SETTINGS_STORAGE_KEY = 'playren:user-settings';
         const DEFAULT_BASE_MINUTES = 5;
         const DEFAULT_INCREMENT_SECONDS = 3;
@@ -1847,7 +1843,6 @@
         const ctx = elements.boardCanvas.getContext('2d');
 
         let peer = null;
-        let hostConnection = null;
         let state = null;
         let roomId = '';
         let localPeerId = '';
@@ -1856,10 +1851,8 @@
         let toastTimer = null;
         let boardGeometry = null;
         let resizeFrame = 0;
-        let lastClockBroadcastBucket = null;
         let lastActivityAt = 0;
         let resignConfirmOpen = false;
-        const guestConnections = new Map();
 
         let showCoords = true;
         let showMoveNumbers = true;
@@ -1879,10 +1872,7 @@
         let hasNotifiedHostLeaving = false;
         let reconnectTimer = 0;
         let sessionTerminated = false;
-        let snapshotPushTimer = 0;
-        let lastPushedSnapshotVersion = -1;
-        let clockEpoch = 0; // host-only: monotonic tag for DO clock arm/timeout
-        // Guest-only: estimated (hostClock - localClock) offset so the display
+        // Estimated (serverClock - localClock) offset so the display
         // interpolates clocks against host time, not the local wall clock.
         // Always 0 on the host (it is the time authority).
         let clockOffsetMs = 0;
@@ -2626,57 +2616,12 @@
             }
         }
 
-        function getRoomStateStorageKey(nextRoomId) {
-            return `${ROOM_STATE_PREFIX}${nextRoomId}`;
-        }
-
-        function persistRoomStateSnapshot() {
-            if (!state || !state.roomId) return;
-            try {
-                window.localStorage.setItem(getRoomStateStorageKey(state.roomId), JSON.stringify({
-                    v: ROOM_STATE_VERSION,
-                    savedAt: Date.now(),
-                    state,
-                }));
-            } catch (error) {
-                // Best-effort recovery cache.
-            }
-        }
-
         function clearRoomStateSnapshot(nextRoomId) {
             if (!nextRoomId) return;
             try {
-                window.localStorage.removeItem(getRoomStateStorageKey(nextRoomId));
+                window.localStorage.removeItem(`${ROOM_STATE_PREFIX}${nextRoomId}`);
             } catch (error) {
-                // Best-effort cleanup.
-            }
-        }
-
-        function loadRoomStateSnapshot(nextRoomId, localName, localToken = '') {
-            if (!nextRoomId || !localName) return null;
-            try {
-                const raw = window.localStorage.getItem(getRoomStateStorageKey(nextRoomId));
-                if (!raw) return null;
-                const parsed = JSON.parse(raw);
-                if (!parsed || parsed.v !== ROOM_STATE_VERSION) {
-                    clearRoomStateSnapshot(nextRoomId);
-                    return null;
-                }
-                if (parsed.state?.roomId !== nextRoomId) return null;
-                if (Date.now() - Number(parsed.savedAt || 0) > ROOM_STATE_MAX_AGE_MS) {
-                    clearRoomStateSnapshot(nextRoomId);
-                    return null;
-                }
-                const participants = Object.values(parsed.state.participantsById || {});
-                const hasLocalParticipant = participants.some((participant) => {
-                    if (!participant) return false;
-                    if (localToken && participant.token === localToken && participant.name === localName) return true;
-                    return participant.name === localName;
-                });
-                if (!hasLocalParticipant) return null;
-                return parsed.state;
-            } catch (error) {
-                return null;
+                // Best-effort cleanup of any legacy local cache.
             }
         }
 
@@ -2878,14 +2823,6 @@
             return entry;
         }
 
-        function addLogEntry(entry) {
-            if (!state || !entry) return;
-            if (!Array.isArray(state.log)) state.log = [];
-            if (state.log.some((item) => item.id === entry.id)) return;
-            state.log.unshift(entry);
-            state.log = state.log.slice(0, MAX_LOG_ITEMS);
-        }
-
         function normalizeCommentText(value) {
             return GameCore.normalizeCommentText(value);
         }
@@ -3078,26 +3015,6 @@
             return participant.name;
         }
 
-        function setHostPeerId(nextHostPeerId) {
-            if (!state) return;
-            state.hostPeerId = nextHostPeerId || '';
-            Object.values(state.participantsById || {}).forEach((participant) => {
-                if (!participant) return;
-                participant.isHost = Boolean(nextHostPeerId) && participant.id === nextHostPeerId;
-            });
-        }
-
-        function ensureJoinOrderContains(peerId) {
-            if (!state || !peerId) return;
-            if (!Array.isArray(state.joinOrder)) state.joinOrder = [];
-            if (!state.joinOrder.includes(peerId)) state.joinOrder.push(peerId);
-        }
-
-        function removeFromJoinOrder(peerId) {
-            if (!state || !Array.isArray(state.joinOrder)) return;
-            state.joinOrder = state.joinOrder.filter((id) => id !== peerId);
-        }
-
         function isParticipantDisconnected(participant) {
             return GameCore.isParticipantDisconnected(participant);
         }
@@ -3112,56 +3029,8 @@
             return GameCore.hasDisconnectedSeatedPlayer(gameCoreCtx());
         }
 
-        function hasDisconnectedParticipantInView() {
-            if (!state || !state.participantsById) return false;
-            return Object.values(state.participantsById).some((participant) => {
-                return participant && participant.disconnectedAt;
-            });
-        }
-
-        function hasDisconnectedOtherSeatedParticipantInView() {
-            if (!state || !state.participantsById || !state.seats) return false;
-
-            return getActiveSeatKeys().some((seat) => {
-                const peerId = state.seats[seat];
-                if (!peerId || peerId === localPeerId) return false;
-
-                const participant = state.participantsById[peerId];
-                return Boolean(participant && participant.disconnectedAt);
-            });
-        }
-
         // The participant id IS the token now, so a returning host finds itself
         // directly — no id reconciliation or placeholder juggling needed.
-        function restoreLocalHostFromSnapshot(nextRoomId, hostToken, hostName, settings) {
-            const restored = loadRoomStateSnapshot(nextRoomId, hostName, hostToken);
-            if (!restored) {
-                return createInitialState(nextRoomId, hostToken, hostName, settings, hostToken);
-            }
-
-            state = restored;
-            ensurePairRenjuState();
-
-            if (!state.participantsById[hostToken]) {
-                state.participantsById[hostToken] = { id: hostToken, name: hostName, seat: 'spectator', isHost: true, token: hostToken };
-                ensureJoinOrderContains(hostToken);
-            }
-
-            const participant = state.participantsById[hostToken];
-            participant.name = hostName;
-            participant.token = hostToken;
-            delete participant.disconnectedAt;
-            delete participant.disconnectedUntil;
-
-            state.config = state.config || settings;
-            setHostPeerId(hostToken);
-            ensureClockEntry(hostToken);
-            rebuildColors();
-            resumeMatchAfterReconnect();
-            persistRoomStateSnapshot();
-            return state;
-        }
-
         function getPeerName(peerId) {
             const participant = getParticipantById(peerId);
             return participant ? participant.name : i18n('playerNotJoined');
@@ -3299,48 +3168,6 @@
 
         function assignSeat(targetPeerId, nextSeat) {
             return GameCore.assignSeat(gameCoreCtx(), targetPeerId, nextSeat);
-        }
-
-        function pauseMatchForDisconnect(peerId) {
-            return GameCore.pauseMatchForDisconnect(gameCoreCtx(), peerId);
-        }
-
-        function resumeMatchAfterReconnect() {
-            return GameCore.resumeMatchAfterReconnect(gameCoreCtx());
-        }
-
-        function preserveDisconnectedParticipant(peerId) {
-            if (!state || !peerId) return false;
-            const participant = getParticipantById(peerId);
-            if (!participant) return false;
-            const wasSeated = isSeatedParticipant(participant);
-            if (!wasSeated || state.status !== 'playing' || state.moves.length === 0) return false;
-            if (participant.disconnectedAt) return true;
-
-            participant.disconnectedAt = Date.now();
-            participant.disconnectedUntil = participant.disconnectedAt + DISCONNECT_GRACE_MS;
-            pauseMatchForDisconnect(peerId);
-            addLog('presence', i18n('msgDisconnected', participant.name));
-            return true;
-        }
-
-        // Mark an existing participant (found by its stable token id) as
-        // reconnected: update display name, clear disconnect flags, resume.
-        function markParticipantReconnected(token, nextName) {
-            const participant = getParticipantById(token);
-            if (!participant) return null;
-            participant.name = nextName || participant.name;
-            participant.token = token;
-            const wasDisconnected = Boolean(participant.disconnectedAt);
-            delete participant.disconnectedAt;
-            delete participant.disconnectedUntil;
-            ensureClockEntry(token);
-            rebuildColors();
-            if (wasDisconnected) {
-                resumeMatchAfterReconnect();
-                addLog('presence', i18n('msgReconnected', participant.name));
-            }
-            return participant;
         }
 
         function removeParticipant(peerId, reasonText = '') {
@@ -3485,7 +3312,6 @@
             state = nextState;
             ensurePairRenjuState();
             refreshLocalizedResultText();
-            persistRoomStateSnapshot();
             clearPendingMove();
             clearConfirmMovePoint();
             if (shouldHighlightIncomingMove) {
@@ -3764,129 +3590,6 @@
             );
         }
 
-        function applyHostAction(peerId, action) {
-            if (!state || !action) return;
-            let error = '';
-            const pausedBlockedActions = [
-                'move', 'swap', 'choice2', 'draw', 'draw-response', 'takeback', 'takeback-response',
-                'resign', 'offer', 'select-offer', 'ready'
-            ];
-            if (hasDisconnectedSeatedPlayer() && pausedBlockedActions.includes(action.kind)) {
-                error = i18n('errMatchPausedForDisconnect');
-            }
-
-            if (!error && action.kind === 'move') error = placeMove(peerId, action.x, action.y);
-            if (!error && action.kind === 'swap') error = resolveSwap(peerId, true);
-            if (!error && action.kind === 'choice2') error = chooseBranch(peerId, 'choice2');
-            if (!error && action.kind === 'draw') error = offerDraw(peerId);
-            if (!error && action.kind === 'draw-response') error = respondDraw(peerId, Boolean(action.accept));
-            if (!error && action.kind === 'takeback') error = requestTakeback(peerId);
-            if (!error && action.kind === 'takeback-response') error = respondTakeback(peerId, Boolean(action.accept));
-            if (!error && action.kind === 'resign') error = resignGame(peerId);
-            if (!error && action.kind === 'comment') error = addComment(peerId, action.text);
-            if (!error && action.kind === 'review-move') error = addReviewMove(peerId, action.x, action.y);
-            if (!error && action.kind === 'review-cursor') error = setReviewCursor(peerId, action.cursor);
-            if (!error && action.kind === 'review-undo') error = setReviewCursor(peerId, (state.reviewCursor ?? (state.reviewMoves || []).length) - 1);
-            if (!error && action.kind === 'review-reset') error = resetReviewMovesForPeer(peerId);
-            if (!error && action.kind === 'review-branch-base') error = returnReviewToBranchBase(peerId);
-            if (!error && action.kind === 'swap-seat-colors') {
-                if (peerId !== state.hostPeerId) {
-                    error = i18n('errUnconnected');
-                } else if (state.status === 'playing') {
-                    error = i18n('errCannotSwap');
-                } else {
-                    swapSeatColors();
-                    resetReadyFlags();
-                }
-            }
-            if (!error && action.kind === 'pair-renju') {
-                if (peerId !== state.hostPeerId) {
-                    error = i18n('errUnconnected');
-                } else if (state.status === 'playing') {
-                    error = i18n('errCannotSwap');
-                } else {
-                    setPairRenjuEnabled(Boolean(action.enabled));
-                }
-            }
-            if (!error && action.kind === 'offer') error = offerMove(peerId, action.x, action.y);
-            if (!error && action.kind === 'select-offer') error = selectOfferedMove(peerId, action.x, action.y);
-            if (!error && action.kind === 'ready') error = setReadyState(peerId, Boolean(action.ready));
-            if (!error && action.kind === 'seat-change') {
-                const isSelfSeatChange = action.targetPeerId === peerId && canSelfChangeSeat(peerId, action.seat);
-                if (!isSelfSeatChange) {
-                    error = i18n('errOnlyEmptySeat');
-                } else {
-                    error = assignSeat(action.targetPeerId, action.seat);
-                }
-            }
-
-            if (error) {
-                if (peerId === localPeerId) showToast(error);
-                if (peerId !== localPeerId) {
-                    const targetConn = guestConnections.get(peerId);
-                    if (targetConn && targetConn.open) {
-                        targetConn.send({ type: 'notice', message: error });
-                    }
-                }
-                return;
-            }
-
-            if (['move', 'offer', 'select-offer', 'review-move'].includes(action.kind) && peerId !== localPeerId) {
-                playStoneSound(false);
-            }
-            if (isActiveActionNotification(action.kind) && shouldNotifyRemoteAction(peerId, action.kind)) {
-                playActionNotificationSound();
-            }
-
-            if (['move', 'swap', 'choice2', 'offer', 'select-offer', 'takeback-response'].includes(action.kind)) {
-                displayMoveCount = -1;
-                clearConfirmMovePoint();
-            }
-            if (['review-move', 'review-cursor', 'review-undo', 'review-reset', 'review-branch-base'].includes(action.kind)) {
-                displayMoveCount = -1;
-                clearConfirmMovePoint();
-            }
-
-            if (peerId === localPeerId && action.kind === 'draw' && state.drawOfferByPeerId === peerId) {
-                showToast(i18n('msgDrawOffered'));
-            }
-            if (peerId === localPeerId && action.kind === 'takeback' && state.takebackOfferByPeerId === peerId) {
-                showToast(i18n('msgTakebackRequested'));
-            }
-
-            if (action.kind === 'comment') {
-                broadcastLogEntry(state.log?.[0]);
-                persistRoomStateSnapshot();
-                renderLog();
-                return;
-            }
-
-            state.version = (state.version || 0) + 1;
-            if (action.kind === 'move') {
-                startLastMoveHighlight(state.moves[state.moves.length - 1]);
-                persistRoomStateSnapshot();
-                broadcastMoveEvent(action);
-                render();
-                return;
-            }
-            if (action.kind === 'select-offer') {
-                startLastMoveHighlight(state.moves[state.moves.length - 1]);
-            }
-            if (action.kind === 'swap' && shouldNotifyRemoteAction(peerId, action.kind)) {
-                startBoardAlertHighlight('swap');
-            }
-            if (action.kind === 'takeback' || action.kind === 'takeback-response') {
-                persistRoomStateSnapshot();
-                broadcastTakebackEvent(peerId, action);
-                render();
-                return;
-            }
-
-            broadcastState();
-            broadcastActionNotification(peerId, action.kind);
-            render();
-        }
-
         // Send a player intent to the authoritative Durable Object. Our own move
         // / draw / takeback get optimistic UI; the server's game-state broadcast
         // confirms, or a 'notice' rolls the optimism back.
@@ -3935,322 +3638,6 @@
             const visible = resignConfirmOpen && canLocalResign();
             elements.resignConfirm.hidden = !visible;
             if (visible) updateConfirmDialogPosition();
-        }
-
-        // Push the authoritative state to the server on meaningful changes only
-        // (moves / seats / status / time-setting), debounced. Per-second clock
-        // ticks are intentionally NOT a trigger.
-        function scheduleSnapshotPush() {
-            if (localMode !== 'host') return;
-            if (snapshotPushTimer) return;
-            snapshotPushTimer = window.setTimeout(() => {
-                snapshotPushTimer = 0;
-                pushSnapshotToServer();
-            }, SNAPSHOT_PUSH_DEBOUNCE_MS);
-        }
-
-        function pushSnapshotToServer() {
-            if (localMode !== 'host' || !state || !peer) return;
-            const version = state.version || 0;
-            if (version === lastPushedSnapshotVersion) return;
-            lastPushedSnapshotVersion = version;
-            peer.pushSnapshot(version, state);
-        }
-
-        // A host (reload-recovery or migration) adopts the server's snapshot when
-        // it is newer than whatever the host currently holds, then re-broadcasts.
-        function adoptHostSnapshot(snapshotState) {
-            if (localMode !== 'host' || !snapshotState) return;
-            const incomingVersion = snapshotState.version || 0;
-            const currentVersion = state ? (state.version || 0) : -1;
-            if (incomingVersion <= currentVersion) return;
-
-            state = snapshotState;
-            ensurePairRenjuState();
-            refreshLocalizedResultText();
-            setHostPeerId(localPeerId);
-            const participant = getParticipantById(localPeerId);
-            if (participant) {
-                participant.name = sanitizeName(elements.nameInput.value || participant.name || 'Player');
-                participant.token = localPlayerToken;
-                participant.isHost = true;
-                delete participant.disconnectedAt;
-                delete participant.disconnectedUntil;
-            }
-            ensureClockEntry(localPeerId);
-            rebuildColors();
-            reconcileSeatedPresence();
-            syncServerClock();
-            lastPushedSnapshotVersion = incomingVersion;
-            persistRoomStateSnapshot();
-            broadcastState();
-            render();
-        }
-
-        function broadcastState() {
-            if (localMode !== 'host' || !state) return;
-            persistRoomStateSnapshot();
-            scheduleSnapshotPush();
-            const hostNow = Date.now();
-            guestConnections.forEach((connection) => {
-                if (connection && connection.open) {
-                    connection.send({ type: 'state', state, hostNow });
-                }
-            });
-        }
-
-        function createMoveAppliedEvent(action) {
-            const move = state.moves[state.moves.length - 1];
-            return {
-                kind: 'move-applied',
-                version: state.version || 0,
-                requestId: action.requestId || '',
-                move,
-                phase: state.phase,
-                status: state.status,
-                winnerId: state.winnerId,
-                resultText: state.resultText,
-                resultMessage: state.resultMessage || null,
-                drawOfferByPeerId: state.drawOfferByPeerId,
-                drawResponderPeerId: state.drawResponderPeerId,
-                takebackOfferByPeerId: state.takebackOfferByPeerId,
-                takebackResponderPeerId: state.takebackResponderPeerId,
-                takebackMoveCount: state.takebackMoveCount,
-                pairTurnOrder: state.pairTurnOrder,
-                pairTurnIndex: state.pairTurnIndex,
-                opening: state.opening,
-                clocks: state.clocks,
-                readyByPeerId: state.readyByPeerId,
-                reviewMoves: canUseReviewBoard() ? state.reviewMoves : null,
-                reviewCursor: canUseReviewBoard() ? state.reviewCursor : null,
-                reviewBranchBaseCursor: canUseReviewBoard() ? state.reviewBranchBaseCursor : null,
-            };
-        }
-
-        function createTakebackUpdatedEvent(actorPeerId, action) {
-            return {
-                kind: 'takeback-updated',
-                updateKind: action.kind === 'takeback' ? 'requested' : 'responded',
-                accepted: action.kind === 'takeback-response' ? Boolean(action.accept) : null,
-                actorPeerId,
-                version: state.version || 0,
-                moves: state.moves || [],
-                phase: state.phase,
-                status: state.status,
-                winnerId: state.winnerId,
-                resultText: state.resultText,
-                resultMessage: state.resultMessage || null,
-                drawOfferByPeerId: state.drawOfferByPeerId,
-                drawResponderPeerId: state.drawResponderPeerId,
-                takebackOfferByPeerId: state.takebackOfferByPeerId,
-                takebackResponderPeerId: state.takebackResponderPeerId,
-                takebackMoveCount: state.takebackMoveCount,
-                pairTurnOrder: state.pairTurnOrder,
-                pairTurnIndex: state.pairTurnIndex,
-                opening: state.opening,
-                clocks: state.clocks,
-                readyByPeerId: state.readyByPeerId,
-            };
-        }
-
-        function broadcastMoveEvent(action) {
-            if (localMode !== 'host' || !state) return;
-            scheduleSnapshotPush();
-            const event = createMoveAppliedEvent(action);
-            const hostNow = Date.now();
-            guestConnections.forEach((connection) => {
-                if (connection && connection.open) {
-                    connection.send({ type: 'event', event, hostNow });
-                }
-            });
-        }
-
-        function broadcastLogEntry(entry) {
-            if (localMode !== 'host' || !state || !entry) return;
-            const event = { kind: 'log-entry', entry };
-            guestConnections.forEach((connection) => {
-                if (connection && connection.open) {
-                    connection.send({ type: 'event', event });
-                }
-            });
-        }
-
-        function broadcastTakebackEvent(actorPeerId, action) {
-            if (localMode !== 'host' || !state) return;
-            scheduleSnapshotPush();
-            const event = createTakebackUpdatedEvent(actorPeerId, action);
-            const hostNow = Date.now();
-            guestConnections.forEach((connection) => {
-                if (connection && connection.open) {
-                    connection.send({ type: 'event', event, hostNow });
-                }
-            });
-        }
-
-        function broadcastActionNotification(actorPeerId, actionKind) {
-            if (localMode !== 'host' || !state) return;
-            if (!isActiveActionNotification(actionKind)) return;
-            const event = {
-                kind: 'action-notification',
-                actionKind,
-                actorPeerId,
-                version: state.version || 0,
-            };
-            guestConnections.forEach((connection) => {
-                if (connection && connection.open && connection.peer !== actorPeerId) {
-                    connection.send({ type: 'event', event });
-                }
-            });
-        }
-
-        function requestSnapshot() {
-            clearPendingMove();
-            renderBoard();
-            if (localMode === 'guest' && hostConnection && hostConnection.open) {
-                hostConnection.send({ type: 'snapshot-request' });
-            }
-        }
-
-        function isPendingMoveConfirmed(event) {
-            return pendingMove && (
-                pendingMove.requestId === event.requestId ||
-                (event.move && pendingMove.peerId === event.move.peerId && pendingMove.x === event.move.x && pendingMove.y === event.move.y)
-            );
-        }
-
-        function applyMoveEvent(event) {
-            if (!state || !event || event.kind !== 'move-applied' || !event.move) return;
-
-            const currentVersion = state.version || 0;
-            const nextVersion = event.version || 0;
-            if (nextVersion && nextVersion <= currentVersion) {
-                if (isPendingMoveConfirmed(event)) clearPendingMove();
-                renderBoard();
-                return;
-            }
-            if (!Array.isArray(state.moves)) state.moves = [];
-            if (nextVersion && nextVersion !== currentVersion + 1) {
-                requestSnapshot();
-                return;
-            }
-            if (state.moves.length !== event.move.number - 1) {
-                requestSnapshot();
-                return;
-            }
-
-            state.moves.push(event.move);
-            startLastMoveHighlight(event.move);
-            if (event.move.peerId !== localPeerId) playStoneSound(false);
-
-            state.phase = event.phase;
-            state.status = event.status;
-            state.winnerId = event.winnerId;
-            state.resultMessage = event.resultMessage || null;
-            state.resultText = renderMessageSpec(state.resultMessage, event.resultText);
-            state.drawOfferByPeerId = event.drawOfferByPeerId;
-            state.drawResponderPeerId = event.drawResponderPeerId || '';
-            state.takebackOfferByPeerId = event.takebackOfferByPeerId || '';
-            state.takebackResponderPeerId = event.takebackResponderPeerId || '';
-            state.takebackMoveCount = event.takebackMoveCount || 0;
-            state.pairTurnOrder = event.pairTurnOrder || state.pairTurnOrder || [];
-            state.pairTurnIndex = event.pairTurnIndex ?? state.pairTurnIndex ?? 0;
-            state.opening = event.opening;
-            state.clocks = event.clocks;
-            state.readyByPeerId = event.readyByPeerId;
-            state.version = nextVersion || currentVersion + 1;
-            if (event.status === 'finished') {
-                state.reviewMoves = event.reviewMoves || [];
-                state.reviewCursor = event.reviewCursor ?? state.reviewMoves.length;
-                state.reviewBranchBaseCursor = event.reviewBranchBaseCursor ?? null;
-            }
-            if (isPendingMoveConfirmed(event)) clearPendingMove();
-            clearConfirmMovePoint();
-            displayMoveCount = -1;
-            persistRoomStateSnapshot();
-            render();
-        }
-
-        function applyLogEntryEvent(event) {
-            if (!state || !event || event.kind !== 'log-entry' || !event.entry) return;
-            addLogEntry(event.entry);
-            persistRoomStateSnapshot();
-            renderLog();
-        }
-
-        function applyTakebackUpdatedEvent(event) {
-            if (!state || !event || event.kind !== 'takeback-updated') return;
-
-            const currentVersion = state.version || 0;
-            const nextVersion = event.version || 0;
-            if (nextVersion && nextVersion < currentVersion) return;
-
-            state.moves = Array.isArray(event.moves) ? event.moves : [];
-            state.phase = event.phase;
-            state.status = event.status;
-            state.winnerId = event.winnerId;
-            state.resultMessage = event.resultMessage || null;
-            state.resultText = renderMessageSpec(state.resultMessage, event.resultText);
-            state.drawOfferByPeerId = event.drawOfferByPeerId || '';
-            state.drawResponderPeerId = event.drawResponderPeerId || '';
-            state.takebackOfferByPeerId = event.takebackOfferByPeerId || '';
-            state.takebackResponderPeerId = event.takebackResponderPeerId || '';
-            state.takebackMoveCount = event.takebackMoveCount || 0;
-            state.pairTurnOrder = event.pairTurnOrder || state.pairTurnOrder || [];
-            state.pairTurnIndex = event.pairTurnIndex ?? state.pairTurnIndex ?? 0;
-            state.opening = event.opening;
-            state.clocks = event.clocks;
-            state.readyByPeerId = event.readyByPeerId;
-            state.version = nextVersion || currentVersion;
-            clearPendingMove();
-            clearConfirmMovePoint();
-            displayMoveCount = -1;
-
-            if (event.updateKind === 'requested' && shouldNotifyRemoteAction(event.actorPeerId, 'takeback')) {
-                playActionNotificationSound();
-            }
-
-            persistRoomStateSnapshot();
-            render();
-        }
-
-        function applyActionNotificationEvent(event) {
-            if (!event || event.kind !== 'action-notification') return;
-            if (shouldNotifyRemoteAction(event.actorPeerId, event.actionKind)) {
-                if (event.actionKind === 'swap') {
-                    startBoardAlertHighlight('swap');
-                }
-                playActionNotificationSound();
-            }
-        }
-
-        function applyNetworkEvent(event) {
-            if (!event) return;
-            if (event.kind === 'move-applied') {
-                applyMoveEvent(event);
-                return;
-            }
-            if (event.kind === 'log-entry') {
-                applyLogEntryEvent(event);
-                return;
-            }
-            if (event.kind === 'takeback-updated') {
-                applyTakebackUpdatedEvent(event);
-                return;
-            }
-            if (event.kind === 'action-notification') {
-                applyActionNotificationEvent(event);
-            }
-        }
-
-        function broadcastClocks() {
-            if (localMode !== 'host' || !state) return;
-            persistRoomStateSnapshot();
-            const hostNow = Date.now();
-            guestConnections.forEach((connection) => {
-                if (connection && connection.open) {
-                    connection.send({ type: 'clock', clocks: state.clocks, hostNow });
-                }
-            });
         }
 
         function updateShareLinkUi() {
@@ -4458,31 +3845,13 @@
             if (isResponder) updateConfirmDialogPosition();
         }
 
-        function clearSnapshotPush() {
-            if (snapshotPushTimer) {
-                window.clearTimeout(snapshotPushTimer);
-                snapshotPushTimer = 0;
-            }
-            lastPushedSnapshotVersion = -1;
-            clockOffsetMs = 0;
-            clockEpoch = 0;
-        }
-
         function destroyNetworkState() {
             sessionTerminated = true;
             clearReconnectTimer();
-            clearSnapshotPush();
+            clockOffsetMs = 0;
             clearConfirmMovePoint();
             clearLastMoveHighlight();
             clearBoardAlertHighlight();
-            guestConnections.forEach((connection) => {
-                try { connection.close(); } catch (error) { }
-            });
-            guestConnections.clear();
-            if (hostConnection) {
-                try { hostConnection.close(); } catch (error) { }
-                hostConnection = null;
-            }
             if (peer) {
                 try { peer.destroy(); } catch (error) { }
                 peer = null;
@@ -4492,34 +3861,22 @@
             localMode = 'idle';
             localPlayerToken = '';
             hasNotifiedHostLeaving = false;
-            lastClockBroadcastBucket = null;
         }
 
         function closeLocalSessionWithoutSnapshot() {
             sessionTerminated = true;
             clearReconnectTimer();
-            clearSnapshotPush();
+            clockOffsetMs = 0;
             clearConfirmMovePoint();
-            const previousHostConnection = hostConnection;
             const previousPeer = peer;
-            const previousGuestConnections = Array.from(guestConnections.values());
 
-            guestConnections.clear();
-            hostConnection = null;
             peer = null;
             roomId = '';
             localPeerId = '';
             localMode = 'idle';
             localPlayerToken = '';
             hasNotifiedHostLeaving = true;
-            lastClockBroadcastBucket = null;
 
-            previousGuestConnections.forEach((connection) => {
-                try { connection.close(); } catch (error) { }
-            });
-            if (previousHostConnection) {
-                try { previousHostConnection.close(); } catch (error) { }
-            }
             if (previousPeer) {
                 try { previousPeer.destroy(); } catch (error) { }
             }
@@ -4546,7 +3903,6 @@
         }
 
         function resetAppState() {
-            persistRoomStateSnapshot();
             destroyNetworkState();
             state = null;
             setConnectionLabel('未接続');
@@ -4586,177 +3942,6 @@
 
             // The server assigns host/guest; connectToRoom reacts to it.
             connectToRoom();
-        }
-
-        function wireConnectionHandlers(connection) {
-            if (!connection) return;
-
-            connection.on('open', () => {
-                if (localMode === 'guest') {
-                    setConnectionLabel(i18n('msgRoomSyncing'));
-                    elements.leaveRoomBtn.disabled = false;
-                    connection.send({ type: 'hello', name: sanitizeName(elements.nameInput.value || 'Player'), token: localPlayerToken });
-                } else {
-                    setConnectionLabel(i18n('msgRoomGuestConnecting'));
-                    // Push current state so a (re)connected guest syncs even when
-                    // it does not re-send hello (e.g. after a host reconnect).
-                    if (state && connection.open) connection.send({ type: 'state', state });
-                }
-            });
-
-            connection.on('data', (message) => {
-                if (!message || typeof message !== 'object') return;
-                lastActivityAt = Date.now();
-
-                // Track the host clock offset from any host->guest message that
-                // carries hostNow, so clock interpolation uses host time.
-                if (localMode === 'guest' && typeof message.hostNow === 'number') {
-                    clockOffsetMs = message.hostNow - Date.now();
-                }
-
-                if (message.type === 'hello' && localMode === 'host') {
-                    // connection.peer is the guest's stable token: identity is
-                    // the token, so a returning guest matches its participant
-                    // directly with no name/peer reconciliation.
-                    const token = connection.peer;
-                    const nextName = sanitizeName(message.name || 'Player');
-                    const existing = getParticipantById(token);
-                    if (existing) {
-                        markParticipantReconnected(token, nextName);
-                    } else {
-                        state.participantsById[token] = { id: token, name: nextName, seat: 'spectator', isHost: false, token };
-                        ensureJoinOrderContains(token);
-                        ensureClockEntry(token);
-                        addLog('presence', i18n('msgJoined', nextName));
-                    }
-
-                    broadcastState();
-                    render();
-                    return;
-                }
-
-                if (message.type === 'action' && localMode === 'host') {
-                    applyHostAction(connection.peer, message.action);
-                    return;
-                }
-
-                if (message.type === 'snapshot-request' && localMode === 'host') {
-                    if (state && connection.open) connection.send({ type: 'state', state });
-                    return;
-                }
-
-                if (message.type === 'bye' && localMode === 'host') {
-                    const participant = getParticipantById(connection.peer);
-                    if (participant) {
-                        const wasSeated = isSeatedParticipant(participant);
-                        const isPlaying = state && state.status === 'playing' && (state.moves || []).length > 0;
-                        if (!preserveDisconnectedParticipant(connection.peer)) {
-                            if (wasSeated && isPlaying) {
-                                addLog('presence', i18n('msgDisconnected', participant.name));
-                            }
-                            removeParticipant(connection.peer, i18n('msgLeft', participant.name));
-                        }
-                        broadcastState();
-                        render();
-                    }
-                    return;
-                }
-
-                if (message.type === 'state') {
-                    const incomingVersion = message.state?.version || 0;
-                    const currentVersion = state?.version || 0;
-                    const currentMoveCount = state?.moves?.length || 0;
-                    const incomingMoves = Array.isArray(message.state?.moves) ? message.state.moves : [];
-                    const shouldHighlightIncomingMove = Boolean(
-                        state &&
-                        incomingVersion &&
-                        incomingVersion > currentVersion &&
-                        incomingMoves.length > currentMoveCount
-                    );
-                    if (incomingVersion && currentVersion && incomingVersion < currentVersion) {
-                        return;
-                    }
-                    state = message.state;
-                    ensurePairRenjuState();
-                    refreshLocalizedResultText();
-                    persistRoomStateSnapshot();
-                    clearPendingMove();
-                    clearConfirmMovePoint();
-                    if (shouldHighlightIncomingMove) {
-                        startLastMoveHighlight(incomingMoves[incomingMoves.length - 1]);
-                    }
-                    elements.leaveRoomBtn.disabled = false;
-                    if (localMode === 'guest') {
-                        roomId = state.roomId;
-                        setConnectionLabel(i18n('msgRoomConnected'));
-                    }
-                    
-                    if (displayMoveCount !== -1) {
-                        const currentMax = getRenderedMoves().length;
-                        if (displayMoveCount > currentMax) displayMoveCount = -1;
-                    }
-                    render();
-                    return;
-                }
-
-                if (message.type === 'event') {
-                    applyNetworkEvent(message.event);
-                    return;
-                }
-
-                if (message.type === 'clock') {
-                    if (!state || !message.clocks) return;
-                    state.clocks = message.clocks;
-                    renderPlayers();
-                    return;
-                }
-
-                if (message.type === 'notice' && message.message) {
-                    clearPendingMove();
-                    clearLocalOptimisticRequests();
-                    render();
-                    showToast(message.message);
-                    return;
-                }
-
-                if (message.type === 'reject') {
-                    showToast(message.message);
-                    resetAppState();
-                }
-            });
-
-            connection.on('close', () => {
-                if (localMode === 'host') {
-                    // The server reports a guest gone only after its presence
-                    // grace expires, so this close is already debounced.
-                    if (guestConnections.get(connection.peer) === connection) {
-                        guestConnections.delete(connection.peer);
-                    }
-                    const participant = getParticipantById(connection.peer);
-                    if (participant) {
-                        const wasSeated = isSeatedParticipant(participant);
-                        const isPlaying = state && state.status === 'playing' && (state.moves || []).length > 0;
-                        if (!preserveDisconnectedParticipant(connection.peer)) {
-                            if (wasSeated && isPlaying) {
-                                addLog('presence', i18n('msgDisconnected', participant.name));
-                            }
-                            removeParticipant(connection.peer, i18n('msgLeft', participant.name));
-                        }
-                        broadcastState();
-                        render();
-                    }
-                } else if (localMode === 'guest' && connection === hostConnection) {
-                    // Host link dropped. A real socket loss is handled by the
-                    // peer 'close' (reconnect); a host migration is handled by
-                    // 'host-changed'. Here we only drop the stale reference.
-                    hostConnection = null;
-                }
-            });
-
-            connection.on('error', () => {
-                // Transport errors surface through the peer-level 'error'/'close'
-                // events, which drive reconnection. Nothing to do per-connection.
-            });
         }
 
         function leaveRoom() {
