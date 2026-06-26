@@ -816,7 +816,7 @@
         }
         resetReadyFlags(ctx);
         setPhase(ctx, 'finished');
-        ctx.resetReviewMoves();
+        resetReviewMoves(ctx);
     }
 
     function maybeStartMatch(ctx) {
@@ -901,6 +901,95 @@
         }
         const opponentPeerId = getOpponentPeerId(ctx,peerId);
         finishGame(ctx, opponentPeerId, ctx.messageSpec('msgWin', ctx.getPeerName(opponentPeerId)), ctx.messageSpec('msgAgreedEndLog'));
+        return '';
+    }
+
+    // ---- review board (post-game analysis) state ops (Step 2.2b) -----------
+    // The shared analysis board after a game. Pure state mutations on
+    // reviewMoves/reviewCursor/reviewBranchBaseCursor behind review-* intents.
+
+    function canUseReviewBoard(ctx) {
+        const state = ctx.state;
+        return Boolean(state && state.status !== 'playing');
+    }
+
+    function getReviewBaseMoves(ctx) {
+        const state = ctx.state;
+        return state?.status === 'finished'
+            ? (state.moves || []).map((move) => ({ ...move }))
+            : [];
+    }
+
+    function resetReviewMoves(ctx) {
+        const state = ctx.state;
+        if (!state) return;
+        state.reviewMoves = getReviewBaseMoves(ctx);
+        state.reviewCursor = state.reviewMoves.length;
+        state.reviewBranchBaseCursor = null;
+    }
+
+    function resetReviewMovesForPeer(ctx, peerId) {
+        const state = ctx.state;
+        if (!canUseReviewBoard(ctx)) return ctx.i18n('errReviewOnlyAfter');
+        state.reviewMoves = getReviewBaseMoves(ctx);
+        state.reviewCursor = state.reviewMoves.length;
+        state.reviewBranchBaseCursor = null;
+        return '';
+    }
+
+    function returnReviewToBranchBase(ctx, peerId) {
+        const state = ctx.state;
+        if (!canUseReviewBoard(ctx)) return ctx.i18n('errReviewOnlyAfter');
+        if (!getParticipantById(ctx, peerId)) return ctx.i18n('errReviewOnlyParticipant');
+        const currentCursor = state.reviewCursor ?? (state.reviewMoves || []).length;
+        const hasBranch = state.reviewBranchBaseCursor != null;
+        const base = hasBranch ? state.reviewBranchBaseCursor : currentCursor;
+        const targetCursor = hasBranch && currentCursor > base ? base : currentCursor;
+        state.reviewMoves = getReviewBaseMoves(ctx);
+        state.reviewCursor = Math.max(0, Math.min(state.reviewMoves.length, targetCursor));
+        state.reviewBranchBaseCursor = null;
+        return '';
+    }
+
+    function addReviewMove(ctx, peerId, x, y) {
+        const state = ctx.state;
+        if (!canUseReviewBoard(ctx)) return ctx.i18n('errReviewOnlyAfter');
+        if (!getParticipantById(ctx, peerId)) return ctx.i18n('errReviewOnlyParticipant');
+
+        const cursor = state.reviewCursor ?? (state.reviewMoves || []).length;
+        const currentMoves = (state.reviewMoves || []).slice(0, cursor);
+
+        if (currentMoves.some((move) => move.x === x && move.y === y)) {
+            return ctx.i18n('errReviewOccupied');
+        }
+
+        state.reviewMoves = currentMoves;
+        if (state.reviewBranchBaseCursor == null) {
+            const baseMoves = getReviewBaseMoves(ctx);
+            const isOnMainLine = baseMoves[cursor]?.x === x && baseMoves[cursor]?.y === y;
+            if (!isOnMainLine) {
+                state.reviewBranchBaseCursor = cursor;
+            }
+        }
+        const nextColor = state.reviewMoves.length % 2 === 0 ? 'black' : 'white';
+        state.reviewMoves.push({
+            x,
+            y,
+            color: nextColor,
+            peerId,
+            number: state.reviewMoves.length + 1,
+            review: true,
+        });
+        state.reviewCursor = state.reviewMoves.length;
+        return '';
+    }
+
+    function setReviewCursor(ctx, peerId, cursor) {
+        const state = ctx.state;
+        if (!canUseReviewBoard(ctx)) return ctx.i18n('errReviewOnlyAfter');
+        if (!getParticipantById(ctx, peerId)) return ctx.i18n('errReviewOnlyParticipant');
+        const max = (state.reviewMoves || []).length;
+        state.reviewCursor = Math.max(0, Math.min(max, cursor));
         return '';
     }
 
@@ -1225,6 +1314,14 @@
         offerDraw,
         respondDraw,
         resignGame,
+        // review board
+        canUseReviewBoard,
+        getReviewBaseMoves,
+        resetReviewMoves,
+        resetReviewMovesForPeer,
+        returnReviewToBranchBase,
+        addReviewMove,
+        setReviewCursor,
         // room setup / seat / participant / admin / comment
         createInitialState,
         ensurePairRenjuState,
