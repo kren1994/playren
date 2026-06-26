@@ -2,12 +2,14 @@
     'use strict';
 
     // Must match PROTOCOL_VERSION in ws-worker/src/index.js.
-    const PROTOCOL_VERSION = 1;
+    // v2: the Durable Object is the authoritative game server. Clients send
+    // intents and render the full state the server broadcasts. There is no more
+    // host-mesh / DataConnection emulation; "host" is just an admin role.
+    const PROTOCOL_VERSION = 2;
 
     // Self-heal keepalive. The Durable Object auto-responds to 'ping' with
-    // 'pong' (setWebSocketAutoResponse), so this only ever closes OUR OWN
-    // socket when the server is unreachable. Peer presence is decided by the
-    // server's roster, never by these probes.
+    // 'pong' (setWebSocketAutoResponse), so this only ever closes OUR OWN socket
+    // when the server is unreachable. Presence is decided by the server.
     const HEARTBEAT_INTERVAL_MS = 30 * 1000;
     const PONG_TIMEOUT_MS = 10 * 1000;
     const HEARTBEAT_RETRY_DELAY_MS = 1000;
@@ -33,67 +35,6 @@
         };
     }
 
-    // DataConnection-shaped facade over the star relay. There is no real
-    // peer-to-peer link: send() routes a payload through the Durable Object to
-    // a target token ('host' resolves to whoever is host right now).
-    class WsDataConnection {
-        constructor(peerRef, remoteToken, metadata, route) {
-            this._peerRef = peerRef;
-            this.peer = String(remoteToken || '');
-            this.metadata = metadata || {};
-            this._route = String(route || this.peer || '');
-            this.open = false;
-            this._closed = false;
-            this._emitter = createEmitter();
-        }
-
-        on(event, handler) {
-            this._emitter.on(event, handler);
-        }
-
-        _emit(event, payload) {
-            this._emitter.emit(event, payload);
-        }
-
-        _markOpen() {
-            if (this._closed || this.open) return;
-            this.open = true;
-            this._emit('open');
-        }
-
-        send(data) {
-            if (this._closed || !this.open) return;
-            this._peerRef._relay(this._route, data);
-        }
-
-        close() {
-            // Local teardown only, and silent: an explicit close is not a peer
-            // departure. Genuine departures arrive via the server roster.
-            this._handleRemoteClose('', true);
-        }
-
-        _handleData(data) {
-            if (this._closed) return;
-            this._emit('data', data);
-        }
-
-        // silent=true tears down without a 'close' event. Used when OUR socket
-        // dropped (the peer-level 'close' already covers it) so the app does not
-        // mistake our own disconnect for every remote peer leaving.
-        _handleRemoteClose(reason, silent) {
-            if (this._closed) return;
-            this._closed = true;
-            this.open = false;
-            if (!silent) this._emit('close', reason || '');
-            this._peerRef._dropRemote(this.peer, this);
-        }
-
-        _handleError(err) {
-            if (this._closed) return;
-            this._emit('error', err || { type: 'network' });
-        }
-    }
-
     class Peer {
         constructor(roomId, options) {
             this.id = '';
@@ -109,15 +50,13 @@
             ).trim();
             this._token = String(opts.token || '').trim();
             this._name = String(opts.name || '');
+            this._settings = opts.settings || null;
 
             this._emitter = createEmitter();
             this._ready = false;
-            this._role = '';
-            this._hostToken = '';
+            this.role = '';
+            this.hostToken = '';
             this._roster = new Map();
-            this._remotes = new Map();
-            this.snapshotVersion = 0; // latest authoritative version the server holds
-            this.clockEpoch = 0;      // latest clock epoch the server knows
 
             this._terminal = false; // displaced / protocol-mismatch: do not reconnect
             this._heartbeatTimer = 0;
@@ -154,6 +93,8 @@
                     protocol: PROTOCOL_VERSION,
                     token: this._token,
                     name: this._name,
+                    roomId: this._roomId,
+                    ...(this._settings ? { settings: this._settings } : {}),
                 });
                 this._startHeartbeat();
             });
@@ -165,7 +106,6 @@
             this._socket.addEventListener('close', () => {
                 this._stopHeartbeat();
                 this.disconnected = true;
-                this._closeAllRemotes();
                 if (this._terminal) return;
                 this._emitter.emit('close');
             });
@@ -179,58 +119,21 @@
             this._emitter.on(event, handler);
         }
 
-        // Guest -> host. Routes to whoever is host now, so a host migration
-        // mid-flight still lands on the right socket.
-        connect(targetToken, options) {
-            const remoteToken = String(targetToken || '');
-            const connection = new WsDataConnection(
-                this,
-                remoteToken,
-                (options && options.metadata) || {},
-                'host'
-            );
-            this._remotes.set(remoteToken, connection);
-            queueMicrotask(() => connection._markOpen());
-            return connection;
+        // The one game channel: send a player intent to the authoritative server.
+        sendIntent(intent) {
+            if (!intent || typeof intent !== 'object') return;
+            this._send({ type: 'intent', intent });
         }
 
-        // Host -> all members in one relay (saves inbound traffic vs N sends).
-        broadcast(data) {
-            this._relay('*', data);
-        }
-
-        // Host pushes its authoritative state to the server (debounced by the
-        // caller). The server keeps only newer versions.
-        pushSnapshot(version, state) {
-            this._send({ type: 'snapshot', version, state });
-        }
-
-        // Host pulls the server snapshot (used when its own copy is missing or
-        // older than serverSnapshotVersion).
-        requestSnapshot() {
-            this._send({ type: 'snapshot-request' });
+        // Explicit leave: removes us immediately (no presence grace wait).
+        bye() {
+            this._send({ type: 'bye' });
         }
 
         // Is this token currently present (connected, or within presence grace)
-        // per the server roster? Used to reconcile seated-player presence after
-        // adopting a snapshot.
+        // per the server roster?
         isMember(token) {
             return this._roster.has(String(token || ''));
-        }
-
-        // ---- authoritative clock (host -> server) ----
-        // The server runs the deadline timer and pauses on gate-player absence;
-        // it emits 'clock-timeout' (tagged with epoch) when the budget is spent.
-        clockArm(epoch, remainingMs, gateTokens) {
-            this._send({ type: 'clock-arm', epoch, remainingMs, gateTokens });
-        }
-
-        clockDisarm(epoch) {
-            this._send({ type: 'clock-disarm', epoch });
-        }
-
-        clockGate(gateTokens) {
-            this._send({ type: 'clock-gate', gateTokens });
         }
 
         setHeartbeatEnabled() {
@@ -243,7 +146,6 @@
             this.destroyed = true;
             this.disconnected = true;
             this._stopHeartbeat();
-            this._closeAllRemotes();
             if (this._socket && this._socket.readyState <= WebSocket.OPEN) {
                 try {
                     this._socket.close();
@@ -340,22 +242,6 @@
             }
         }
 
-        _relay(to, data) {
-            this._send({ type: 'relay', to: String(to || ''), data });
-        }
-
-        _dropRemote(token, connection) {
-            if (this._remotes.get(token) === connection) {
-                this._remotes.delete(token);
-            }
-        }
-
-        _closeAllRemotes() {
-            const remotes = Array.from(this._remotes.values());
-            this._remotes.clear();
-            remotes.forEach((connection) => connection._handleRemoteClose('', true));
-        }
-
         // ---- inbound ------------------------------------------------------
 
         _onMessage(raw) {
@@ -381,14 +267,15 @@
                 case 'roster':
                     this._applyRoster(message.roster);
                     return;
-                case 'message':
-                    this._handleRelayedMessage(message);
+                case 'game-state':
+                    this._emitter.emit('game-state', {
+                        state: message.state,
+                        serverNow: Number(message.serverNow || 0),
+                        lastAction: message.lastAction || null,
+                    });
                     return;
-                case 'snapshot':
-                    this._emitter.emit('snapshot', { version: Number(message.version || 0), state: message.state });
-                    return;
-                case 'clock-timeout':
-                    this._emitter.emit('clock-timeout', { epoch: Number(message.epoch || 0) });
+                case 'notice':
+                    this._emitter.emit('notice', { message: String(message.message || '') });
                     return;
                 case 'displaced':
                     this._terminal = true;
@@ -420,72 +307,20 @@
         _applyRoster(roster) {
             if (!roster || typeof roster !== 'object') return;
 
-            const prevHostToken = this._hostToken;
-            this._hostToken = String(roster.hostToken || '');
-            this.snapshotVersion = Number(roster.snapshotVersion || 0);
-            this.clockEpoch = Number(roster.clockEpoch || 0);
+            const prevHostToken = this.hostToken;
+            this.hostToken = String(roster.hostToken || '');
 
             const members = Array.isArray(roster.members) ? roster.members : [];
             this._roster = new Map(
                 members.map((m) => [String(m.token || ''), String(m.name || '')])
             );
 
-            const wasHost = this._role === 'host';
-            this._role = this._hostToken === this._token ? 'host' : 'member';
+            this.role = this.hostToken === this._token ? 'host' : 'member';
 
-            if (this._hostToken !== prevHostToken) {
-                this._emitter.emit('host-changed', this._hostToken);
+            if (this.hostToken !== prevHostToken) {
+                this._emitter.emit('host-changed', this.hostToken);
             }
-
-            this._reconcileRemotes(wasHost);
-        }
-
-        _reconcileRemotes(wasHost) {
-            if (this._role === 'host') {
-                // Ensure one connection per other member; close vanished ones.
-                this._roster.forEach((name, token) => {
-                    if (token === this._token) return;
-                    if (this._remotes.has(token)) return;
-                    this._createIncoming(token, name);
-                });
-                Array.from(this._remotes.keys()).forEach((token) => {
-                    if (!this._roster.has(token)) {
-                        const connection = this._remotes.get(token);
-                        if (connection) connection._handleRemoteClose();
-                    }
-                });
-            } else {
-                // Member: only the host link matters. The app (re)connects to
-                // the host on 'host-changed'; drop any other synthesized links.
-                Array.from(this._remotes.keys()).forEach((token) => {
-                    if (token !== this._hostToken) {
-                        const connection = this._remotes.get(token);
-                        if (connection) connection._handleRemoteClose();
-                    }
-                });
-            }
-        }
-
-        _createIncoming(token, name) {
-            const connection = new WsDataConnection(this, token, { name }, token);
-            this._remotes.set(token, connection);
-            this._emitter.emit('connection', connection);
-            queueMicrotask(() => connection._markOpen());
-            return connection;
-        }
-
-        _handleRelayedMessage(message) {
-            const from = String(message.from || '');
-            if (!from) return;
-
-            let connection = this._remotes.get(from);
-            if (!connection && this._role === 'host') {
-                // Data arrived before the roster created the link (race).
-                connection = this._createIncoming(from, this._roster.get(from) || '');
-                connection._markOpen();
-            }
-            if (!connection) return;
-            connection._handleData(message.data);
+            this._emitter.emit('roster', roster);
         }
     }
 

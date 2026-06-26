@@ -2,6 +2,7 @@ import {
   createRoom,
   applyIntent,
   applyClockTimeout,
+  applyDisconnectForfeit,
   joinParticipant,
   preserveDisconnected,
   removeParticipant,
@@ -192,6 +193,21 @@ export class RoomRelay {
 
     if (rosterChanged) this.syncHostIntoGame();
 
+    // A disconnected seated player who never returned forfeits on countdown.
+    if (this.model.game && this.model.game.status === 'playing') {
+      for (const participant of Object.values(this.model.game.participantsById || {})) {
+        if (participant && participant.disconnectedAt && participant.disconnectedUntil
+            && now >= participant.disconnectedUntil) {
+          const result = applyDisconnectForfeit(this.model.game, participant.id, { now });
+          if (result.applied) {
+            this.applyClockEffect(result.effects.clock, now);
+            gameChanged = true;
+          }
+          break;
+        }
+      }
+    }
+
     // Clock timeout: armed, the game is still live, and past the deadline.
     let timedOut = false;
     if (this.model.clockArmed && this.model.game
@@ -308,7 +324,9 @@ export class RoomRelay {
     this.applyClockEffect(effects.clock, now);
     await this.persist(['game', 'clockArmed', 'clockDeadlineAt']);
     await this.rescheduleAlarm();
-    this.broadcastGameState(null);
+    // Carry the applied action so clients can play the right sound / highlight
+    // (stone, swap / draw / takeback notification) without re-deriving it.
+    this.broadcastGameState(null, { lastAction: { kind: intent.kind, actorPeerId: token } });
   }
 
   async handleBye(socket, token) {
@@ -422,6 +440,11 @@ export class RoomRelay {
     if (this.model.clockArmed && this.model.clockDeadlineAt) {
       deadlines.push(this.model.clockDeadlineAt);
     }
+    if (this.model.game && this.model.game.status === 'playing') {
+      for (const participant of Object.values(this.model.game.participantsById || {})) {
+        if (participant && participant.disconnectedUntil) deadlines.push(participant.disconnectedUntil);
+      }
+    }
     if (deadlines.length === 0) {
       await this.state.storage.deleteAlarm();
       return;
@@ -449,12 +472,13 @@ export class RoomRelay {
     }
   }
 
-  broadcastGameState(excludeSocket) {
+  broadcastGameState(excludeSocket, extra) {
     if (!this.model.game) return;
     const payload = JSON.stringify({
       type: 'game-state',
       state: this.model.game,
       serverNow: Date.now(),
+      ...(extra || {}),
     });
     for (const socket of this.state.getWebSockets()) {
       if (socket === excludeSocket) continue;

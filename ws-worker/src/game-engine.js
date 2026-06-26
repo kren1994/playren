@@ -146,6 +146,15 @@ function dispatch(ctx, peerId, action, now) {
       if (state.status === 'playing') return ctx.i18n('errCannotSwap');
       GameCore.setPairRenjuEnabled(ctx, Boolean(action.enabled));
       return '';
+    case 'time-settings':
+      if (peerId !== state.hostPeerId) return ctx.i18n('errUnconnected');
+      if (state.status === 'playing') return ctx.i18n('errChangeTimePlaying');
+      GameCore.applyTimeSettings(ctx, {
+        timeHandicapEnabled: Boolean(action.timeHandicapEnabled),
+        black: action.black,
+        white: action.white,
+      });
+      return '';
     case 'seat-change': {
       const isSelf = action.targetPeerId === peerId && GameCore.canSelfChangeSeat(ctx, peerId, action.seat);
       if (!isSelf) return ctx.i18n('errOnlyEmptySeat');
@@ -188,6 +197,27 @@ export function applyClockTimeout(state, options = {}) {
     winnerId,
     ctx.messageSpec('msgTimeout', ctx.getPeerName(loserId)),
     ctx.messageSpec('msgTimeoutLog')
+  );
+  state.version = (state.version || 0) + 1;
+  return { applied: true, effects, state };
+}
+
+// A seated player who stayed disconnected past the grace countdown forfeits
+// (draw in pair-renju). Mirrors the host's periodicClockWork disconnect check.
+export function applyDisconnectForfeit(state, token, options = {}) {
+  const now = options.now ?? Date.now();
+  const effects = {};
+  const ctx = makeCtx(state, { now, effects });
+  if (!state || state.status !== 'playing') return { applied: false, effects, state };
+  const participant = GameCore.getParticipantById(ctx, token);
+  if (!participant || !participant.disconnectedAt) return { applied: false, effects, state };
+  if (!GameCore.isSeatedParticipant(ctx, participant)) return { applied: false, effects, state };
+  const winnerId = state.pairRenjuEnabled ? '' : GameCore.getOpponentPeerId(ctx, token);
+  GameCore.finishGame(
+    ctx,
+    winnerId,
+    ctx.messageSpec('msgDisconnectTimeout', participant.name),
+    ctx.messageSpec('msgAgreedEndLog')
   );
   state.version = (state.version || 0) + 1;
   return { applied: true, effects, state };

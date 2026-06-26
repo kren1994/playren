@@ -2558,11 +2558,16 @@
         }
 
         function setScreen(name) {
+            // Only refit the board when actually entering the game screen.
+            // Refitting on every render made the board jump a size whenever a
+            // panel's height changed (comment / seat / time). Window resize and
+            // coord-toggle call resizeBoard() directly.
+            const wasGame = !elements.gameScreen.hidden;
             elements.lobbyScreen.hidden = name !== 'lobby';
             elements.gameScreen.hidden = name !== 'game';
-            requestAnimationFrame(() => {
-                if (name === 'game') resizeBoard();
-            });
+            if (name === 'game' && !wasGame) {
+                requestAnimationFrame(() => resizeBoard());
+            }
         }
 
         function sanitizeName(value) {
@@ -3371,7 +3376,7 @@
             }
 
             const name = sanitizeName(elements.nameInput.value || 'Player');
-            const thisPeer = new Peer(roomId, { token: localPlayerToken, name });
+            const thisPeer = new Peer(roomId, { token: localPlayerToken, name, settings: buildSettings() });
             peer = thisPeer;
 
             thisPeer.on('open', (id) => {
@@ -3380,39 +3385,36 @@
                 elements.leaveRoomBtn.disabled = false;
             });
 
-            thisPeer.on('host-changed', (hostToken) => {
+            // The Durable Object owns the game. We only adopt the authoritative
+            // state it broadcasts and reflect our role (host = admin label).
+            thisPeer.on('game-state', ({ state: nextState, serverNow, lastAction }) => {
                 if (peer !== thisPeer) return;
-                if (hostToken && hostToken === localPeerId) {
-                    applyHostRole();
-                } else if (hostToken) {
-                    applyGuestRole(hostToken);
-                }
-                // hostToken === '' means the room has no host yet; wait.
+                handleGameState(nextState, serverNow, lastAction);
             });
 
-            thisPeer.on('connection', (incoming) => {
+            thisPeer.on('host-changed', () => {
                 if (peer !== thisPeer) return;
-                if (localMode !== 'host' || !state) return;
-                const previous = guestConnections.get(incoming.peer);
-                if (previous && previous !== incoming) {
-                    try { previous.close(); } catch (error) { }
-                }
-                guestConnections.set(incoming.peer, incoming);
-                wireConnectionHandlers(incoming);
+                applyRole();
+            });
+
+            thisPeer.on('roster', () => {
+                if (peer !== thisPeer) return;
+                applyRole();
+            });
+
+            // A rejected intent: undo any optimistic UI and surface the reason.
+            // The server sends an i18n CODE; localize it here.
+            thisPeer.on('notice', ({ message }) => {
+                if (peer !== thisPeer) return;
+                clearPendingMove();
+                clearLocalOptimisticRequests();
+                render();
+                if (message) showToast(i18n(message));
             });
 
             thisPeer.on('close', () => {
                 if (peer !== thisPeer) return;
                 if (sessionTerminated) return;
-                if (localMode === 'host') {
-                    // Keep the clock running off activeStartedAt. Calling
-                    // stopClock() here would drop the elapsed time (rewind the
-                    // display) and leave it frozen until the next move, since
-                    // there is no connectionPause for resumeMatchAfterReconnect
-                    // to clear. A brief host blip/background must be seamless.
-                    persistRoomStateSnapshot();
-                }
-                hostConnection = null;
                 setConnectionLabel(i18n('msgRoomSyncing'));
                 scheduleReconnect(800);
                 render();
@@ -3441,157 +3443,87 @@
                 clearReconnectTimer();
                 window.location.reload();
             });
-
-            thisPeer.on('snapshot', (snap) => {
-                if (peer !== thisPeer) return;
-                if (snap && snap.state) adoptHostSnapshot(snap.state);
-            });
-
-            thisPeer.on('clock-timeout', ({ epoch }) => {
-                if (peer !== thisPeer) return;
-                if (localMode !== 'host' || !state) return;
-                if (epoch !== clockEpoch) return;          // stale: turn already advanced
-                if (state.status !== 'playing') return;
-                const loserId = state.clocks.activePeerId;
-                if (!loserId) return;
-                applyElapsedTime();
-                const winnerId = state.pairRenjuEnabled ? '' : getOpponentPeerId(loserId);
-                finishGame(winnerId, messageSpec('msgTimeout', getPeerName(loserId)), messageSpec('msgTimeoutLog'));
-                broadcastState();
-                render();
-            });
         }
 
-        function applyHostRole() {
-            localMode = 'host';
-            clockOffsetMs = 0; // host is the time authority
-            // Continue the clock epoch monotonically across host changes so the
-            // server can drop stale arms/timeouts.
-            clockEpoch = Math.max(clockEpoch, peer?.clockEpoch || 0);
-            setConnectionLabel(i18n('msgRoomCreated'));
+        // "host" is now only an admin label (the elected member who may change
+        // time / pair-renju / seat colors). All authority is in the Durable
+        // Object; this just tracks which role the server assigned us.
+        function applyRole() {
+            if (!peer) return;
+            localMode = peer.role === 'host' ? 'host' : 'guest';
             elements.leaveRoomBtn.disabled = false;
+            render();
+        }
 
-            if (hostConnection) {
-                try { hostConnection.close(); } catch (error) { }
-                hostConnection = null;
-            }
-
-            if (!state) {
-                // First host of the room, or a returning host after a reload.
-                // Restore instantly from local cache, then upgrade from the
-                // server snapshot if it is newer (covers all-disconnect revival).
-                const settings = buildSettings();
-                const name = sanitizeName(elements.nameInput.value || 'Player');
-                state = restoreLocalHostFromSnapshot(roomId, localPeerId, name, settings);
-                reconcileSeatedPresence();
-                syncServerClock();
-                broadcastState();
-                render();
-                maybeRequestServerSnapshot();
+        // Adopt the authoritative state the Durable Object broadcasts on every
+        // change. This replaces the old host-broadcast / guest-receive split:
+        // everyone (including the admin) just renders what the server sends.
+        function handleGameState(nextState, serverNow, lastAction) {
+            if (!nextState || typeof nextState !== 'object') return;
+            const incomingVersion = nextState.version || 0;
+            const currentVersion = state?.version || 0;
+            const currentMoveCount = state?.moves?.length || 0;
+            const incomingMoves = Array.isArray(nextState.moves) ? nextState.moves : [];
+            const shouldHighlightIncomingMove = Boolean(
+                state &&
+                incomingVersion &&
+                incomingVersion > currentVersion &&
+                incomingMoves.length > currentMoveCount
+            );
+            // Ignore a stale/out-of-order broadcast (shouldn't happen over one
+            // ordered socket, but cheap to guard).
+            if (incomingVersion && currentVersion && incomingVersion < currentVersion) {
                 return;
             }
-
-            // Promoted from guest (host migration) or host reconnect with live
-            // state. Demote the previous host and claim the role.
-            const previousHostId = state.hostPeerId;
-            setHostPeerId(localPeerId);
-
-            let participant = getParticipantById(localPeerId);
-            if (!participant) {
-                participant = { id: localPeerId, name: sanitizeName(elements.nameInput.value || 'Player'), seat: 'spectator', isHost: true, token: localPlayerToken };
-                state.participantsById[localPeerId] = participant;
-                ensureJoinOrderContains(localPeerId);
-                ensureClockEntry(localPeerId);
-                rebuildColors();
+            // Align our wall clock to the server's so clock interpolation in
+            // getDisplayRemainingMs uses authoritative (DO) time.
+            if (typeof serverNow === 'number' && serverNow > 0) {
+                clockOffsetMs = serverNow - Date.now();
             }
-            participant.name = sanitizeName(elements.nameInput.value || participant.name || 'Player');
-            participant.token = localPlayerToken;
-            participant.isHost = true;
-            delete participant.disconnectedAt;
-            delete participant.disconnectedUntil;
-
-            if (previousHostId && previousHostId !== localPeerId) {
-                const previousHost = getParticipantById(previousHostId);
-                if (previousHost) {
-                    const seatedPlaying = isSeatedParticipant(previousHost)
-                        && state.status === 'playing'
-                        && (state.moves || []).length > 0;
-                    if (seatedPlaying) {
-                        if (!previousHost.disconnectedAt) {
-                            previousHost.disconnectedAt = Date.now();
-                            previousHost.disconnectedUntil = previousHost.disconnectedAt + DISCONNECT_GRACE_MS;
-                            pauseMatchForDisconnect(previousHost.id);
-                            addLog('presence', i18n('msgDisconnected', previousHost.name));
-                        }
-                    } else {
-                        removeParticipant(previousHost.id, i18n('msgLeft', previousHost.name));
-                    }
-                }
+            if (peer) localMode = peer.role === 'host' ? 'host' : 'guest';
+            const previousState = state;
+            state = nextState;
+            ensurePairRenjuState();
+            refreshLocalizedResultText();
+            persistRoomStateSnapshot();
+            clearPendingMove();
+            clearConfirmMovePoint();
+            if (shouldHighlightIncomingMove) {
+                startLastMoveHighlight(incomingMoves[incomingMoves.length - 1]);
             }
-
-            reconcileSeatedPresence();
-            syncServerClock();
-            broadcastState();
+            reactToStateChange(previousState, state, lastAction);
+            elements.leaveRoomBtn.disabled = false;
+            roomId = state.roomId || roomId;
+            setConnectionLabel(i18n('msgRoomConnected'));
+            if (displayMoveCount !== -1) {
+                const currentMax = getRenderedMoves().length;
+                if (displayMoveCount > currentMax) displayMoveCount = -1;
+            }
             render();
-            maybeRequestServerSnapshot();
         }
 
-        // After claiming host / adopting a snapshot, align seated players with
-        // who the server actually reports as present: clear stale disconnect
-        // flags for the connected, mark the absent disconnected (and pause).
-        function reconcileSeatedPresence() {
-            if (!state || !peer) return;
-            if (state.status !== 'playing' || (state.moves || []).length === 0) return;
-            let pausedFor = null;
-            getActiveSeatKeys().forEach((seat) => {
-                const pid = state.seats?.[seat];
-                if (!pid || pid === localPeerId) return;
-                const participant = getParticipantById(pid);
-                if (!participant) return;
-                if (peer.isMember(pid)) {
-                    delete participant.disconnectedAt;
-                    delete participant.disconnectedUntil;
-                } else if (!participant.disconnectedAt) {
-                    participant.disconnectedAt = Date.now();
-                    participant.disconnectedUntil = participant.disconnectedAt + DISCONNECT_GRACE_MS;
-                    pausedFor = pid;
-                }
-            });
-            if (pausedFor) pauseMatchForDisconnect(pausedFor);
-            else resumeMatchAfterReconnect();
-        }
+        // Client-side feedback the Durable Object can't produce: stone sound for
+        // an opponent's placement, swap/draw/takeback notification sounds, and an
+        // orange highlight on the (re)played stone. Driven by the state diff plus
+        // the lastAction hint (kind + actor) the server attaches to broadcasts.
+        function reactToStateChange(prev, next, lastAction) {
+            if (!prev || !next) return; // first state load: no reactions
+            const prevMoves = prev.moves?.length || 0;
+            const nextMoves = next.moves?.length || 0;
+            const lastMove = next.moves?.[nextMoves - 1];
 
-        // Fetch the server snapshot only when it is newer than our copy, so a
-        // routine host reconnect with live state costs no extra traffic.
-        function maybeRequestServerSnapshot() {
-            if (localMode !== 'host' || !peer) return;
-            const serverVersion = peer.snapshotVersion || 0;
-            const currentVersion = state ? (state.version || 0) : -1;
-            if (serverVersion > currentVersion) peer.requestSnapshot();
-        }
-
-        function applyGuestRole(hostToken) {
-            localMode = 'guest';
-            if (state) setHostPeerId(hostToken);
-
-            const needsConnect = !hostConnection
-                || !hostConnection.open
-                || hostConnection.peer !== hostToken;
-            if (needsConnect) {
-                if (hostConnection) {
-                    try { hostConnection.close(); } catch (error) { }
-                    hostConnection = null;
-                }
-                const name = sanitizeName(elements.nameInput.value || 'Player');
-                hostConnection = peer.connect(hostToken, {
-                    reliable: true,
-                    metadata: { name, token: localPlayerToken },
-                });
-                wireConnectionHandlers(hostConnection);
+            if (nextMoves > prevMoves && lastMove && lastMove.peerId !== localPeerId) {
+                playStoneSound(false);
             }
 
-            setConnectionLabel(i18n('msgRoomSyncing'));
-            render();
+            // swap / draw / takeback notifications fire on the seated opponent:
+            // swap also flashes a whole-board orange alert (mirrors v1).
+            const kind = lastAction && lastAction.kind;
+            if (kind && isActiveActionNotification(kind)
+                && shouldNotifyRemoteAction(lastAction.actorPeerId, kind)) {
+                if (kind === 'swap') startBoardAlertHighlight('swap');
+                playActionNotificationSound();
+            }
         }
 
         function handleVisibleResync() {
@@ -3600,12 +3532,9 @@
                 connectToRoom();
                 return;
             }
-            if (localMode === 'host') {
-                broadcastState();
-                render();
-            } else if (localMode === 'guest' && hostConnection && hostConnection.open) {
-                hostConnection.send({ type: 'snapshot-request' });
-            }
+            // The Durable Object is the authority and re-sends state on any
+            // change; a live socket needs no pull. Just redraw with what we have.
+            render();
         }
 
         function scheduleVisibleResyncChecks() {
@@ -3644,63 +3573,21 @@
             return GameCore.applyElapsedTime(gameCoreCtx(), timestamp);
         }
 
-        // Pure state mutation lives in game-core; the browser side effect here
-        // is arming/disarming the authoritative DO timer (C.1). In Step 2.2 the
-        // worker supplies its own start/stop that derive the timeout instead.
+        // The Durable Object now owns the clock (it runs the deadline alarm and
+        // drives pause/resume from the engine's clock effects). These remain as
+        // injected ctx hooks for the shared game-core, but the client no longer
+        // mutates the clock authoritatively — it only displays state.clocks.
         function startClockFor(peerId, timestamp = Date.now()) {
             if (!state || !peerId) {
                 stopClock();
                 return;
             }
             GameCore.setActiveClock(gameCoreCtx(), peerId, timestamp);
-            armServerClock(peerId);
         }
 
         function stopClock() {
             if (!state) return;
             GameCore.clearActiveClock(gameCoreCtx());
-            disarmServerClock();
-        }
-
-        // ---- authoritative timeout (C.1): the DO runs the deadline timer ----
-        // The host display/arithmetic stays local; we only hand the DO the
-        // current budget so the always-on server decides the actual timeout.
-
-        function getGateTokens() {
-            if (!state) return [];
-            return getActiveSeatKeys()
-                .map((seat) => state.seats?.[seat])
-                .filter(Boolean);
-        }
-
-        function nextClockEpoch() {
-            clockEpoch = Math.max(clockEpoch + 1, (peer?.clockEpoch || 0) + 1);
-            return clockEpoch;
-        }
-
-        function armServerClock(peerId) {
-            if (localMode !== 'host' || !peer || !state) return;
-            // getDisplayRemainingMs accounts for time already elapsed this turn,
-            // so re-arming after a reconnect does not refund consumed time.
-            const remaining = Math.max(0, Math.round(getDisplayRemainingMs(peerId)));
-            peer.clockArm(nextClockEpoch(), remaining, getGateTokens());
-        }
-
-        function disarmServerClock() {
-            if (localMode !== 'host' || !peer) return;
-            peer.clockDisarm(nextClockEpoch());
-        }
-
-        // Re-sync the DO clock to our current authoritative state (used after
-        // becoming host, to override any stale arm left by a previous host).
-        function syncServerClock() {
-            if (localMode !== 'host' || !peer || !state) return;
-            const active = state.clocks.activePeerId;
-            if (state.status === 'playing' && active && state.clocks.activeStartedAt) {
-                armServerClock(active);
-            } else {
-                disarmServerClock();
-            }
         }
 
         function grantIncrement(peerId) {
@@ -4000,9 +3887,12 @@
             render();
         }
 
+        // Send a player intent to the authoritative Durable Object. Our own move
+        // / draw / takeback get optimistic UI; the server's game-state broadcast
+        // confirms, or a 'notice' rolls the optimism back.
         function sendAction(action) {
             if (!state) return;
-            if (!localPeerId) {
+            if (!peer || !localPeerId) {
                 showToast(i18n('errUnconnected'));
                 return;
             }
@@ -4014,14 +3904,6 @@
                 showToast(i18n('errMatchPausedForDisconnect'));
                 return;
             }
-            if (localMode === 'host') {
-                applyHostAction(localPeerId, action);
-                return;
-            }
-            if (!hostConnection || !hostConnection.open) {
-                showToast(i18n('errNoHostConnection'));
-                return;
-            }
             if (action.kind === 'move') {
                 action = { ...action, requestId: createRequestId() };
                 setPendingMove(action);
@@ -4029,7 +3911,7 @@
             if ((action.kind === 'draw' || action.kind === 'takeback') && !applyOptimisticRequest(action.kind)) {
                 return;
             }
-            hostConnection.send({ type: 'action', action });
+            peer.sendIntent(action);
         }
 
         function canLocalResign() {
@@ -4491,14 +4373,12 @@
             const right = hasHandicap
                 ? readClockSettingInputs(elements.timeRightBaseInput, elements.timeRightIncrementInput)
                 : { ...left };
-            GameCore.applyTimeSettings(gameCoreCtx(), { timeHandicapEnabled: hasHandicap, black: left, white: right });
             persistUserSettings({
                 baseMinutes: Math.round(left.baseSeconds / 60),
                 incrementSeconds: left.incrementSeconds,
             });
             closeTimeSettingsDialog();
-            broadcastState();
-            render();
+            sendAction({ kind: 'time-settings', timeHandicapEnabled: hasHandicap, black: left, white: right });
         }
 
         function getSeatOccupant(seat) {
@@ -4652,13 +4532,14 @@
             render();
         }
 
+        // Explicit leave (button / tab close): tell the Durable Object so we are
+        // removed immediately instead of waiting out the presence grace.
         function notifyHostLeaving() {
             if (hasNotifiedHostLeaving) return;
-            if (localMode !== 'guest') return;
-            if (!hostConnection || !hostConnection.open) return;
+            if (!peer) return;
             hasNotifiedHostLeaving = true;
             try {
-                hostConnection.send({ type: 'bye' });
+                peer.bye();
             } catch (error) {
                 // Best-effort on tab close.
             }
@@ -5671,19 +5552,6 @@
 
         function periodicClockWork() {
             if (!state) return;
-
-            if (localMode === 'host' && state.status === 'playing') {
-                const expired = getActiveSeatKeys().map((seat) => state.seats[seat])
-                    .map((peerId) => getParticipantById(peerId))
-                    .find((participant) => isParticipantDisconnected(participant) && getDisconnectedRemainingSeconds(participant) <= 0);
-                if (expired) {
-                    const winnerId = state.pairRenjuEnabled ? '' : getOpponentPeerId(expired.id);
-                    finishGame(winnerId, messageSpec('msgDisconnectTimeout', expired.name), messageSpec('msgAgreedEndLog'));
-                    broadcastState();
-                    render();
-                    return;
-                }
-            }
 
             if (state.status === 'playing' && state.clocks.activePeerId === localPeerId) {
                 const remaining = getDisplayRemainingMs(localPeerId);

@@ -794,6 +794,9 @@
     function finishGame(ctx, winnerId, resultMessage, logMessage) {
         const state = ctx.state;
         if (!state) return;
+        // Commit the active player's elapsed time before the clock stops, so the
+        // displayed remaining doesn't rewind to its pre-turn value on finish.
+        applyElapsedTime(ctx);
         state.winnerId = winnerId || null;
         state.resultMessage = resultMessage && typeof resultMessage === 'object'
             ? resultMessage
