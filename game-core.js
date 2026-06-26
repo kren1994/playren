@@ -904,6 +904,261 @@
         return '';
     }
 
+    // ---- room setup / seat / participant / admin / comment (Step 2.2a) -----
+    // The remaining state mutations behind client intents, so the worker can
+    // own them in Step 2.2. createInitialState runs before ctx.state exists, so
+    // it takes a small deps object (i18n + createLogEntry) instead of ctx.
+
+    function createInitialState(params, deps) {
+        const { roomId, hostId, hostName, settings, hostToken = '' } = params;
+        const initialMs = settings.baseSeconds * 1000;
+        return {
+            roomId,
+            config: settings,
+            pairRenjuEnabled: false,
+            timeHandicapEnabled: false,
+            seatClockSettings: {
+                black: { baseSeconds: settings.baseSeconds, incrementSeconds: settings.incrementSeconds },
+                white: { baseSeconds: settings.baseSeconds, incrementSeconds: settings.incrementSeconds },
+            },
+            hostPeerId: hostId,
+            joinOrder: [hostId],
+            participantsById: {
+                [hostId]: { id: hostId, name: hostName, seat: 'black', isHost: true, token: hostToken },
+            },
+            seats: {
+                black: hostId,
+                white: null,
+                blackBottom: null,
+                whiteBottom: null,
+            },
+            readyByPeerId: {
+                [hostId]: false,
+            },
+            seatColors: {
+                black: 'black',
+                white: 'white',
+            },
+            colorsByPeerId: { [hostId]: 'black' },
+            moves: [],
+            phase: 'waiting-guest',
+            opening: {
+                variant: null,
+                offeredMoves: [],
+            },
+            clocks: {
+                remainingMsByPeerId: { [hostId]: initialMs },
+                activePeerId: null,
+                activeStartedAt: null,
+            },
+            status: 'waiting',
+            winnerId: null,
+            resultText: '',
+            resultMessage: null,
+            drawOfferByPeerId: '',
+            drawResponderPeerId: '',
+            takebackOfferByPeerId: '',
+            takebackResponderPeerId: '',
+            takebackMoveCount: 0,
+            pairTurnOrder: [],
+            pairTurnIndex: 0,
+            connectionPause: null,
+            reviewMoves: [],
+            reviewCursor: 0,
+            reviewBranchBaseCursor: null,
+            log: [deps.createLogEntry('presence', deps.i18n('msgJoined', hostName))],
+            version: 0,
+        };
+    }
+
+    function ensurePairRenjuState(ctx) {
+        const state = ctx.state;
+        if (!state) return;
+        state.pairRenjuEnabled = Boolean(state.pairRenjuEnabled);
+        state.seats = state.seats || { black: null, white: null };
+        if (!Object.prototype.hasOwnProperty.call(state.seats, 'blackBottom')) state.seats.blackBottom = null;
+        if (!Object.prototype.hasOwnProperty.call(state.seats, 'whiteBottom')) state.seats.whiteBottom = null;
+        if (!Array.isArray(state.pairTurnOrder)) state.pairTurnOrder = [];
+        if (!Number.isInteger(state.pairTurnIndex)) state.pairTurnIndex = 0;
+        if (typeof state.drawResponderPeerId !== 'string') state.drawResponderPeerId = '';
+        if (typeof state.takebackResponderPeerId !== 'string') state.takebackResponderPeerId = '';
+        if (!Number.isInteger(state.takebackMoveCount)) state.takebackMoveCount = 0;
+    }
+
+    function normalizeCommentText(value) {
+        return String(value || '').replace(/\s+/g, ' ').trim().slice(0, 140);
+    }
+
+    function setPairRenjuEnabled(ctx, enabled) {
+        const state = ctx.state;
+        if (!state || state.status === 'playing') return;
+        ensurePairRenjuState(ctx);
+        const nextEnabled = Boolean(enabled);
+        if (state.pairRenjuEnabled === nextEnabled) return;
+
+        if (!nextEnabled) {
+            for (const seat of ['blackBottom', 'whiteBottom']) {
+                const peerId = state.seats[seat];
+                const participant = getParticipantById(ctx, peerId);
+                if (participant) participant.seat = 'spectator';
+                if (peerId) state.readyByPeerId[peerId] = false;
+                state.seats[seat] = null;
+            }
+        }
+
+        state.pairRenjuEnabled = nextEnabled;
+        clearBoardForNewMatch(ctx);
+        resetReadyFlags(ctx);
+        state.pairTurnOrder = [];
+        state.pairTurnIndex = 0;
+        state.phase = 'waiting-guest';
+        state.status = 'waiting';
+        rebuildColors(ctx);
+    }
+
+    function canSelfChangeSeat(ctx, peerId, nextSeat) {
+        const state = ctx.state;
+        if (!state || !peerId) return false;
+        const participant = getParticipantById(ctx, peerId);
+        if (!participant) return false;
+        if (state.status === 'playing') return false;
+        if (nextSeat === 'spectator') return true;
+        if (!getActiveSeatKeys(ctx).includes(nextSeat)) return false;
+        const occupant = state.seats[nextSeat];
+        return !occupant || occupant === peerId;
+    }
+
+    function assignSeat(ctx, targetPeerId, nextSeat) {
+        const state = ctx.state;
+        if (!state) return ctx.i18n('errUnconnected');
+        const participant = getParticipantById(ctx, targetPeerId);
+        if (!participant) return '';
+        if (nextSeat !== 'spectator' && !getActiveSeatKeys(ctx).includes(nextSeat)) return ctx.i18n('errInvalidSeat');
+
+        const currentSeat = participant.seat || 'spectator';
+        if (currentSeat === nextSeat) return '';
+        if (isPlayingSeat(ctx, nextSeat)) {
+            const occupantPeerId = state.seats[nextSeat];
+            if (occupantPeerId && occupantPeerId !== targetPeerId) return ctx.i18n('errSeatOccupied');
+        }
+
+        const beforeSeatedIds = getActiveSeatKeys(ctx).map((seat) => state.seats[seat]).filter(Boolean);
+        if (isPlayingSeat(ctx, currentSeat)) state.seats[currentSeat] = null;
+        state.readyByPeerId[targetPeerId] = false;
+
+        if (isPlayingSeat(ctx, nextSeat)) {
+            state.seats[nextSeat] = targetPeerId;
+        }
+
+        participant.seat = nextSeat;
+        rebuildColors(ctx);
+        if (isPlayingSeat(ctx, nextSeat)) {
+            syncSeatClockToParticipant(ctx, nextSeat);
+        }
+        ensureClockEntry(ctx, targetPeerId);
+        const afterSeatedIds = getActiveSeatKeys(ctx).map((seat) => state.seats[seat]).filter(Boolean);
+        const seatingChanged = beforeSeatedIds.join(':') !== afterSeatedIds.join(':');
+
+        if (
+            state.status === 'playing'
+            && nextSeat === 'spectator'
+            && isPlayingSeat(ctx, currentSeat)
+        ) {
+            finishGame(ctx, '', null, ctx.messageSpec('msgAgreedEndLog'));
+            return '';
+        }
+
+        if (state.status === 'finished') {
+            if (seatingChanged) resetReadyFlags(ctx);
+            return '';
+        }
+
+        if (!allRequiredSeatsOccupied(ctx)) {
+            state.phase = 'waiting-guest';
+            state.status = 'waiting';
+            ctx.stopClock();
+            return '';
+        }
+
+        if (seatingChanged) {
+            resetReadyFlags(ctx);
+            state.phase = 'waiting-guest';
+            state.status = 'waiting';
+            ctx.stopClock();
+        }
+        return '';
+    }
+
+    function applyTimeSettings(ctx, settings) {
+        const state = ctx.state;
+        if (!state) return;
+        state.timeHandicapEnabled = Boolean(settings.timeHandicapEnabled);
+        state.seatClockSettings = { black: settings.black, white: settings.white };
+        ensureSeatClockSettings(ctx);
+        syncSeatClocksToParticipants(ctx);
+        resetReadyFlags(ctx);
+    }
+
+    function removeParticipant(ctx, peerId, reasonText) {
+        const state = ctx.state;
+        if (!state || !peerId) return;
+        const participant = getParticipantById(ctx, peerId);
+        if (!participant) return;
+        const wasSeated = isSeatedParticipant(ctx, participant);
+        if (isPlayingSeat(ctx, participant.seat)) state.seats[participant.seat] = null;
+        delete state.participantsById[peerId];
+        delete state.colorsByPeerId[peerId];
+        delete state.clocks.remainingMsByPeerId[peerId];
+        delete state.readyByPeerId[peerId];
+        if (Array.isArray(state.joinOrder)) {
+            state.joinOrder = state.joinOrder.filter((id) => id !== peerId);
+        }
+
+        if (reasonText) ctx.addLog('system', reasonText);
+
+        if (state.status === 'finished') {
+            if (wasSeated) resetReadyFlags(ctx);
+            return;
+        }
+
+        if (!allRequiredSeatsOccupied(ctx)) {
+            state.phase = 'waiting-guest';
+            state.status = 'waiting';
+            ctx.stopClock();
+        }
+    }
+
+    function addComment(ctx, peerId, text) {
+        const state = ctx.state;
+        if (!state) return ctx.i18n('errUnconnected');
+        const participant = getParticipantById(ctx, peerId);
+        if (!participant) return ctx.i18n('errUnconnected');
+        const message = normalizeCommentText(text);
+        if (!message) return ctx.i18n('errNeedComment');
+        ctx.addLog('comment', `${participant.name}\n${message}`);
+        return '';
+    }
+
+    function pauseMatchForDisconnect(ctx, peerId) {
+        const state = ctx.state;
+        if (!state || state.status !== 'playing') return;
+        const activePeerId = state.clocks.activePeerId;
+        applyElapsedTime(ctx);
+        state.connectionPause = { peerId, activePeerId };
+        ctx.stopClock();
+    }
+
+    function resumeMatchAfterReconnect(ctx) {
+        const state = ctx.state;
+        if (!state || state.status !== 'playing' || !state.connectionPause) return;
+        if (hasDisconnectedSeatedPlayer(ctx)) return;
+        const activePeerId = state.connectionPause.activePeerId || phaseDescriptor(ctx).actorPeerId;
+        state.connectionPause = null;
+        if (activePeerId) {
+            ctx.startClockFor(activePeerId);
+        }
+    }
+
     root.GameCore = {
         getImplicitMovePhase,
         isInsideCenteredSquare,
@@ -970,5 +1225,17 @@
         offerDraw,
         respondDraw,
         resignGame,
+        // room setup / seat / participant / admin / comment
+        createInitialState,
+        ensurePairRenjuState,
+        normalizeCommentText,
+        setPairRenjuEnabled,
+        canSelfChangeSeat,
+        assignSeat,
+        applyTimeSettings,
+        removeParticipant,
+        addComment,
+        pauseMatchForDisconnect,
+        resumeMatchAfterReconnect,
     };
 })(typeof globalThis !== 'undefined' ? globalThis : (typeof self !== 'undefined' ? self : this));
