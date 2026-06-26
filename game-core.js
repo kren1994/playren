@@ -431,6 +431,87 @@
         state.pairTurnIndex = 0;
     }
 
+    // ---- pure clock state ops (Step 2.1) -----------------------------------
+    // These mutate state.clocks deterministically (time via the passed
+    // timestamp / Date.now). The environment-specific side effects (browser
+    // arming the DO timer; the DO deriving its own timeout) stay in the
+    // injected startClockFor/stopClock wrappers, which call setActiveClock /
+    // clearActiveClock for the shared state mutation.
+
+    function getClockSettingForPeer(ctx, peerId) {
+        ensureSeatClockSettings(ctx);
+        const team = getTeamForPeer(ctx, peerId);
+        return ctx.state?.seatClockSettings?.[team] || normalizeClockSetting();
+    }
+
+    function getClockKeyForPeer(ctx, peerId) {
+        const state = ctx.state;
+        if (!state?.pairRenjuEnabled) return peerId;
+        const team = getTeamForPeer(ctx, peerId);
+        return team ? `team:${team}` : peerId;
+    }
+
+    function ensureClockEntry(ctx, peerId) {
+        const state = ctx.state;
+        if (!state || !peerId) return;
+        const clockKey = getClockKeyForPeer(ctx, peerId);
+        if (state.clocks.remainingMsByPeerId[clockKey] == null) {
+            state.clocks.remainingMsByPeerId[clockKey] = getClockSettingForPeer(ctx, peerId).baseSeconds * 1000;
+        }
+        if (state.readyByPeerId[peerId] == null) {
+            state.readyByPeerId[peerId] = false;
+        }
+    }
+
+    function applyElapsedTime(ctx, timestamp) {
+        const state = ctx.state;
+        if (!state || state.status !== 'playing') return;
+        const ts = timestamp === undefined ? Date.now() : timestamp;
+        const activePeerId = state.clocks.activePeerId;
+        const startedAt = state.clocks.activeStartedAt;
+        if (!activePeerId || !startedAt) return;
+        const elapsed = Math.max(0, ts - startedAt);
+        const clockKey = getClockKeyForPeer(ctx, activePeerId);
+        state.clocks.remainingMsByPeerId[clockKey] = Math.max(
+            0,
+            (state.clocks.remainingMsByPeerId[clockKey] ?? 0) - elapsed
+        );
+        state.clocks.activeStartedAt = ts;
+    }
+
+    function grantIncrement(ctx, peerId) {
+        const state = ctx.state;
+        if (!state || !peerId) return;
+        const increment = getClockSettingForPeer(ctx, peerId).incrementSeconds * 1000;
+        const clockKey = getClockKeyForPeer(ctx, peerId);
+        state.clocks.remainingMsByPeerId[clockKey] = (state.clocks.remainingMsByPeerId[clockKey] ?? 0) + increment;
+    }
+
+    function grantIncrementIfTurnPasses(ctx, actorPeerId, previousActorPeerId) {
+        const state = ctx.state;
+        if (!state || !actorPeerId || actorPeerId !== previousActorPeerId) return;
+        const nextActorPeerId = phaseDescriptor(ctx).actorPeerId;
+        if (nextActorPeerId && getClockKeyForPeer(ctx, nextActorPeerId) !== getClockKeyForPeer(ctx, actorPeerId)) {
+            grantIncrement(ctx, actorPeerId);
+        }
+    }
+
+    // Shared state mutation for the start/stop wrappers (no timer side effect).
+    function setActiveClock(ctx, peerId, timestamp) {
+        const state = ctx.state;
+        if (!state || !peerId) return;
+        state.status = 'playing';
+        state.clocks.activePeerId = peerId;
+        state.clocks.activeStartedAt = timestamp === undefined ? Date.now() : timestamp;
+    }
+
+    function clearActiveClock(ctx) {
+        const state = ctx.state;
+        if (!state) return;
+        state.clocks.activePeerId = null;
+        state.clocks.activeStartedAt = null;
+    }
+
     // ---- board / opening / takeback transitions (Step 1.2) -----------------
     // All take the injected ctx so they can run host-side (parity) or in the
     // worker later. Error returns are i18n keys via ctx.i18n.
@@ -511,7 +592,7 @@
             return ctx.i18n('errConstraintOut');
         }
 
-        ctx.applyElapsedTime(timestamp);
+        applyElapsedTime(ctx,timestamp);
 
         const color = getColorForPeer(ctx,peerId);
         const moveNumber = state.moves.length + 1;
@@ -523,7 +604,7 @@
             number: moveNumber,
             ...(state.pairRenjuEnabled ? { pairTurnIndex: state.pairTurnIndex } : {}),
         });
-        ctx.grantIncrement(peerId);
+        grantIncrement(ctx,peerId);
         advancePairTurn(ctx);
 
         switch (state.phase) {
@@ -546,7 +627,7 @@
         if (!state || !state.phase.startsWith('swap-after-')) return ctx.i18n('errCannotSwap');
         if (peerId !== descriptor.actorPeerId) return ctx.i18n('errNotSwapTurn');
 
-        ctx.applyElapsedTime(timestamp);
+        applyElapsedTime(ctx,timestamp);
         const previousActorPeerId = descriptor.actorPeerId;
         if (shouldSwap) swapColors(ctx);
         advancePairTurn(ctx);
@@ -556,7 +637,7 @@
         if (state.phase === 'swap-after-3') setPhase(ctx, 'opening-move-4', timestamp);
         if (state.phase === 'swap-after-4') setPhase(ctx, 'opening-move-5-choice1', timestamp);
         if (state.phase === 'swap-after-5') setPhase(ctx, 'opening-move-6-choice1', timestamp);
-        ctx.grantIncrementIfTurnPasses(peerId, previousActorPeerId);
+        grantIncrementIfTurnPasses(ctx,peerId, previousActorPeerId);
         return '';
     }
 
@@ -567,7 +648,7 @@
         if (peerId !== descriptor.actorPeerId) return ctx.i18n('errOnlyBlackChoice');
         if (branch !== 'choice2') return '';
 
-        ctx.applyElapsedTime(timestamp);
+        applyElapsedTime(ctx,timestamp);
         state.opening.variant = branch;
         state.opening.offeredMoves = [];
         setPhase(ctx, 'offering-choice2', timestamp);
@@ -582,7 +663,7 @@
         const error = validateOfferMove(ctx, x, y);
         if (error) return error;
 
-        ctx.applyElapsedTime(timestamp);
+        applyElapsedTime(ctx,timestamp);
         const previousActorPeerId = descriptor.actorPeerId;
         state.opening.offeredMoves.push({ x, y });
 
@@ -592,7 +673,7 @@
         } else {
             setPhase(ctx, 'offering-choice2', timestamp);
         }
-        ctx.grantIncrementIfTurnPasses(peerId, previousActorPeerId);
+        grantIncrementIfTurnPasses(ctx,peerId, previousActorPeerId);
         return '';
     }
 
@@ -605,7 +686,7 @@
         const selected = state.opening.offeredMoves.find((move) => move.x === x && move.y === y);
         if (!selected) return ctx.i18n('errSelectFromOffers');
 
-        ctx.applyElapsedTime(timestamp);
+        applyElapsedTime(ctx,timestamp);
         const blackPeerId = getBlackPeerId(ctx);
         const moveNumber = state.moves.length + 1;
         state.moves.push({
@@ -619,7 +700,7 @@
         });
         state.opening.offeredMoves = [];
         setPhase(ctx, 'opening-move-6-choice2', timestamp);
-        ctx.grantIncrementIfTurnPasses(peerId, previousActorPeerId);
+        grantIncrementIfTurnPasses(ctx,peerId, previousActorPeerId);
         return '';
     }
 
@@ -665,7 +746,7 @@
     function applyTakeback(ctx, peerId, timestamp) {
         const state = ctx.state;
         if (!state || !state.moves?.length) return;
-        ctx.applyElapsedTime(timestamp);
+        applyElapsedTime(ctx,timestamp);
         if (state.pairRenjuEnabled) {
             const count = Math.min(state.takebackMoveCount || 1, state.moves.length);
             const firstRemovedMove = state.moves[state.moves.length - count];
@@ -861,6 +942,15 @@
         swapColors,
         clearBoardForNewMatch,
         initializePairTurnOrder,
+        // pure clock state ops
+        getClockSettingForPeer,
+        getClockKeyForPeer,
+        ensureClockEntry,
+        applyElapsedTime,
+        grantIncrement,
+        grantIncrementIfTurnPasses,
+        setActiveClock,
+        clearActiveClock,
         isOccupied,
         validateOfferMove,
         setPhase,

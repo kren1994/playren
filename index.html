@@ -3374,15 +3374,11 @@
         }
 
         function getClockSettingForPeer(peerId) {
-            ensureSeatClockSettings();
-            const team = getTeamForPeer(peerId);
-            return state?.seatClockSettings?.[team] || normalizeClockSetting();
+            return GameCore.getClockSettingForPeer(gameCoreCtx(), peerId);
         }
 
         function getClockKeyForPeer(peerId) {
-            if (!state?.pairRenjuEnabled) return peerId;
-            const team = getTeamForPeer(peerId);
-            return team ? `team:${team}` : peerId;
+            return GameCore.getClockKeyForPeer(gameCoreCtx(), peerId);
         }
 
         function syncSeatClockToParticipant(seat) {
@@ -3424,14 +3420,7 @@
         }
 
         function ensureClockEntry(peerId) {
-            if (!state || !peerId) return;
-            const clockKey = getClockKeyForPeer(peerId);
-            if (state.clocks.remainingMsByPeerId[clockKey] == null) {
-                state.clocks.remainingMsByPeerId[clockKey] = getClockSettingForPeer(peerId).baseSeconds * 1000;
-            }
-            if (state.readyByPeerId[peerId] == null) {
-                state.readyByPeerId[peerId] = false;
-            }
+            return GameCore.ensureClockEntry(gameCoreCtx(), peerId);
         }
 
         function canSelfChangeSeat(peerId, nextSeat) {
@@ -3882,34 +3871,24 @@
         }
 
         function applyElapsedTime(timestamp = Date.now()) {
-            if (!state || state.status !== 'playing') return;
-            const activePeerId = state.clocks.activePeerId;
-            const startedAt = state.clocks.activeStartedAt;
-            if (!activePeerId || !startedAt) return;
-            const elapsed = Math.max(0, timestamp - startedAt);
-            const clockKey = getClockKeyForPeer(activePeerId);
-            state.clocks.remainingMsByPeerId[clockKey] = Math.max(
-                0,
-                (state.clocks.remainingMsByPeerId[clockKey] ?? 0) - elapsed
-            );
-            state.clocks.activeStartedAt = timestamp;
+            return GameCore.applyElapsedTime(gameCoreCtx(), timestamp);
         }
 
+        // Pure state mutation lives in game-core; the browser side effect here
+        // is arming/disarming the authoritative DO timer (C.1). In Step 2.2 the
+        // worker supplies its own start/stop that derive the timeout instead.
         function startClockFor(peerId, timestamp = Date.now()) {
             if (!state || !peerId) {
                 stopClock();
                 return;
             }
-            state.status = 'playing';
-            state.clocks.activePeerId = peerId;
-            state.clocks.activeStartedAt = timestamp;
+            GameCore.setActiveClock(gameCoreCtx(), peerId, timestamp);
             armServerClock(peerId);
         }
 
         function stopClock() {
             if (!state) return;
-            state.clocks.activePeerId = null;
-            state.clocks.activeStartedAt = null;
+            GameCore.clearActiveClock(gameCoreCtx());
             disarmServerClock();
         }
 
@@ -3955,18 +3934,11 @@
         }
 
         function grantIncrement(peerId) {
-            if (!state || !peerId) return;
-            const increment = getClockSettingForPeer(peerId).incrementSeconds * 1000;
-            const clockKey = getClockKeyForPeer(peerId);
-            state.clocks.remainingMsByPeerId[clockKey] = (state.clocks.remainingMsByPeerId[clockKey] ?? 0) + increment;
+            return GameCore.grantIncrement(gameCoreCtx(), peerId);
         }
 
         function grantIncrementIfTurnPasses(actorPeerId, previousActorPeerId) {
-            if (!state || !actorPeerId || actorPeerId !== previousActorPeerId) return;
-            const nextActorPeerId = phaseDescriptor().actorPeerId;
-            if (nextActorPeerId && getClockKeyForPeer(nextActorPeerId) !== getClockKeyForPeer(actorPeerId)) {
-                grantIncrement(actorPeerId);
-            }
+            return GameCore.grantIncrementIfTurnPasses(gameCoreCtx(), actorPeerId, previousActorPeerId);
         }
 
         function swapColors() {
@@ -3983,10 +3955,9 @@
             return {
                 state,
                 center: CENTER,
-                // clock ops (host browser now; the DO owns these in Step 2.1)
-                applyElapsedTime,
-                grantIncrement,
-                grantIncrementIfTurnPasses,
+                // start/stop carry the environment-specific timer side effect
+                // (browser arms the DO; worker derives timeout). The pure clock
+                // arithmetic now lives in game-core.
                 startClockFor,
                 stopClock,
                 // review / naming
