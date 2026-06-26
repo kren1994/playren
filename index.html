@@ -5048,9 +5048,12 @@
 
         (() => {
             applyCachedUserSettings();
-            
+
             resizeBoard();
-            render();
+            // Localize all static labels for the saved language, then render
+            // (applyLanguage ends with render()). Without this, a non-Japanese
+            // saved language still showed Japanese static text after a reload.
+            applyLanguage();
         })();
     </script>
 </body>
