@@ -1090,6 +1090,12 @@
             border-color: rgba(74, 54, 34, 0.32);
         }
 
+        /* The compose badge is decorative; keep it fainter than the chat badges
+           so the input stays the focus. */
+        #composeAvatar {
+            opacity: 0.35;
+        }
+
         /* Join / leave / reconnect / disconnect: faint left-aligned note line. */
         .log-item--note {
             justify-self: stretch;
