@@ -62,6 +62,14 @@ export function makeCtx(state, { now = Date.now(), effects } = {}) {
       state.log.unshift(makeLogEntry(kind, text, options, now));
       state.log = state.log.slice(0, MAX_LOG_ITEMS);
     },
+    // Presence (join / leave / disconnect / reconnect) is ephemeral: collected
+    // into effects so the DO can broadcast a transient toast instead of letting
+    // it pile up in the persistent chat log.
+    notePresence: (messageKey, messageArg) => {
+      if (!effects) return;
+      if (!effects.presence) effects.presence = [];
+      effects.presence.push({ messageKey, messageArg });
+    },
     startClockFor: (peerId, ts) => {
       if (!state || !peerId) {
         ctx.stopClock();
@@ -95,8 +103,9 @@ export function createRoom({ roomId, hostToken, hostName, settings, now = Date.n
       createLogEntry: (kind, text, options) => makeLogEntry(kind, text, options, now),
     }
   );
-  // Structured join log so clients localize (worker i18n returns codes).
-  state.log = [makeLogEntry('presence', '', { messageKey: 'msgJoined', messageArg: hostName }, now)];
+  // Presence is now ephemeral (toast), not logged; the creator joining alone
+  // needs no entry. Start with an empty chat log.
+  state.log = [];
   return state;
 }
 
@@ -240,7 +249,7 @@ function markReconnectedInner(ctx, token, name) {
   GameCore.rebuildColors(ctx);
   if (wasDisconnected) {
     GameCore.resumeMatchAfterReconnect(ctx); // re-arms clock via effects
-    ctx.addLog('presence', '', { messageKey: 'msgReconnected', messageArg: participant.name });
+    ctx.notePresence('msgReconnected', participant.name);
   }
   return true;
 }
@@ -260,7 +269,7 @@ export function joinParticipant(state, token, name, options = {}) {
   if (!Array.isArray(state.joinOrder)) state.joinOrder = [];
   if (!state.joinOrder.includes(token)) state.joinOrder.push(token);
   GameCore.ensureClockEntry(ctx, token);
-  ctx.addLog('presence', '', { messageKey: 'msgJoined', messageArg: name });
+  ctx.notePresence('msgJoined', name);
   return { effects, state, isNew: true };
 }
 
@@ -280,19 +289,19 @@ export function preserveDisconnected(state, token, options = {}) {
   participant.disconnectedAt = now;
   participant.disconnectedUntil = now + DISCONNECT_GRACE_MS;
   GameCore.pauseMatchForDisconnect(ctx, token); // sets effects.clock armed:false
-  ctx.addLog('presence', '', { messageKey: 'msgDisconnected', messageArg: participant.name });
+  ctx.notePresence('msgDisconnected', participant.name);
   return { preserved: true, effects, state };
 }
 
-// Fully remove a participant (used when not preserved). Logs a structured
-// "left" entry. Returns { effects, state }.
+// Fully remove a participant (used when not preserved). Emits an ephemeral
+// "left" presence toast (not a log entry). Returns { effects, state }.
 export function removeParticipant(state, token, options = {}) {
   const now = options.now ?? Date.now();
   const effects = {};
   const ctx = makeCtx(state, { now, effects });
   const participant = GameCore.getParticipantById(ctx, token);
   const name = participant?.name || '';
-  GameCore.removeParticipant(ctx, token, ''); // no text; we log structured below
-  if (participant) ctx.addLog('system', '', { messageKey: 'msgLeft', messageArg: name });
+  GameCore.removeParticipant(ctx, token, ''); // no log text; toast below
+  if (participant) ctx.notePresence('msgLeft', name);
   return { effects, state };
 }

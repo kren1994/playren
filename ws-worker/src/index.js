@@ -176,6 +176,7 @@ export class RoomRelay {
     const now = Date.now();
     let rosterChanged = false;
     let gameChanged = false;
+    const presence = [];
 
     for (const [token, deadline] of Object.entries(this.model.pendingDrop)) {
       if (deadline > now) continue;
@@ -184,7 +185,8 @@ export class RoomRelay {
         delete this.model.members[token];
         rosterChanged = true;
       }
-      if (this.finalizeDeparture(token, now)) gameChanged = true;
+      const departed = this.finalizeDeparture(token, now);
+      if (departed) { gameChanged = true; presence.push(...departed); }
       if (this.model.hostToken === token) {
         this.electHost();
         rosterChanged = true;
@@ -223,7 +225,7 @@ export class RoomRelay {
 
     await this.persist(['pendingDrop', 'members', 'hostToken', 'game', 'clockArmed', 'clockDeadlineAt']);
     await this.rescheduleAlarm();
-    if (gameChanged || timedOut) this.broadcastGameState(null);
+    if (gameChanged || timedOut) this.broadcastGameState(null, presence.length ? { presence } : undefined);
     if (rosterChanged) this.broadcastRoster(null);
   }
 
@@ -266,6 +268,7 @@ export class RoomRelay {
 
     const now = Date.now();
     let hostAssigned = false;
+    let joinPresence = null;
     if (!this.model.game) {
       // First arrival creates the room (creator seated black, host/admin).
       this.model.game = createRoom({
@@ -281,6 +284,7 @@ export class RoomRelay {
       // Returning or new participant joins the existing authoritative game.
       const result = joinParticipant(this.model.game, token, name, { now });
       this.applyClockEffect(result.effects.clock, now);
+      joinPresence = result.effects.presence || null;
       if (!this.model.hostToken) {
         this.model.hostToken = token;
         hostAssigned = true;
@@ -303,8 +307,9 @@ export class RoomRelay {
     });
     this.send(socket, { type: 'game-state', state: this.model.game, serverNow: now });
 
-    // Joining changed presence/participants; refresh everyone else.
-    this.broadcastGameState(socket);
+    // Joining changed presence/participants; refresh everyone else and toast
+    // the join/reconnect to them (not to the joiner).
+    this.broadcastGameState(socket, joinPresence && joinPresence.length ? { presence: joinPresence } : undefined);
     if (membershipChanged || hostAssigned) this.broadcastRoster(socket);
   }
 
@@ -331,13 +336,12 @@ export class RoomRelay {
 
   async handleBye(socket, token) {
     let rosterChanged = false;
-    let gameChanged = false;
     if (this.model.members[token]) {
       delete this.model.members[token];
       rosterChanged = true;
     }
     if (this.model.pendingDrop[token] != null) delete this.model.pendingDrop[token];
-    if (this.finalizeDeparture(token, Date.now())) gameChanged = true;
+    const presence = this.finalizeDeparture(token, Date.now());
     if (this.model.hostToken === token) {
       this.electHost();
       rosterChanged = true;
@@ -346,7 +350,7 @@ export class RoomRelay {
 
     await this.persist(['game', 'members', 'pendingDrop', 'hostToken', 'clockArmed', 'clockDeadlineAt']);
     await this.rescheduleAlarm();
-    if (gameChanged) this.broadcastGameState(socket);
+    if (presence) this.broadcastGameState(socket, presence.length ? { presence } : undefined);
     if (rosterChanged) this.broadcastRoster(socket);
     try { socket.close(1000, 'bye'); } catch { /* no-op */ }
   }
@@ -370,17 +374,18 @@ export class RoomRelay {
   // ---- game / presence helpers ------------------------------------------
 
   // A seated mid-game player is preserved (paused) so they can reconnect;
-  // anyone else is removed. Returns whether the game changed.
+  // anyone else is removed. Returns the presence toasts to broadcast (an array,
+  // possibly empty) when a participant departed, or null if there was none.
   finalizeDeparture(token, now) {
-    if (!this.model.game || !this.model.game.participantsById[token]) return false;
+    if (!this.model.game || !this.model.game.participantsById[token]) return null;
     const preserved = preserveDisconnected(this.model.game, token, { now });
     if (preserved.preserved) {
       this.applyClockEffect(preserved.effects.clock, now);
-    } else {
-      const removed = removeParticipant(this.model.game, token, { now });
-      this.applyClockEffect(removed.effects.clock, now);
+      return preserved.effects.presence || [];
     }
-    return true;
+    const removed = removeParticipant(this.model.game, token, { now });
+    this.applyClockEffect(removed.effects.clock, now);
+    return removed.effects.presence || [];
   }
 
   syncHostIntoGame() {

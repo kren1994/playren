@@ -272,6 +272,7 @@
                         state: message.state,
                         serverNow: Number(message.serverNow || 0),
                         lastAction: message.lastAction || null,
+                        presence: Array.isArray(message.presence) ? message.presence : null,
                     });
                     return;
                 case 'notice':

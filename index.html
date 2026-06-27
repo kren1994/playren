@@ -1167,6 +1167,40 @@
             transform: translateY(0);
         }
 
+        /* Light, stacked presence toasts (join / leave / disconnect / reconnect),
+           kept distinct and subtler than the bottom-right info/error toast. */
+        .presence-toasts {
+            position: fixed;
+            top: 14px;
+            left: 50%;
+            transform: translateX(-50%);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 6px;
+            z-index: 19;
+            pointer-events: none;
+        }
+
+        .presence-toast {
+            max-width: min(360px, calc(100vw - 32px));
+            padding: 5px 12px;
+            border-radius: 999px;
+            background: rgba(255, 255, 255, 0.95);
+            color: var(--muted);
+            border: 1px solid var(--line);
+            font-size: 12.5px;
+            box-shadow: 0 6px 16px rgba(24, 17, 12, 0.12);
+            opacity: 0;
+            transform: translateY(-6px);
+            transition: opacity 0.2s ease, transform 0.2s ease;
+        }
+
+        .presence-toast.show {
+            opacity: 1;
+            transform: translateY(0);
+        }
+
         .mono {
             font-family: Consolas, "Courier New", monospace;
             letter-spacing: 0.02em;
@@ -1759,6 +1793,7 @@
     </div>
 
     <div id="toast" class="toast" aria-live="polite"></div>
+    <div id="presenceToasts" class="presence-toasts" aria-live="polite"></div>
 
     <script src="./ws-config.js"></script>
     <script src="./peer-over-ws.js"></script>
@@ -1879,6 +1914,7 @@
             uiTimeRightMinute: document.getElementById('uiTimeRightMinute'),
             uiTimeRightSecond: document.getElementById('uiTimeRightSecond'),
             toast: document.getElementById('toast'),
+            presenceToasts: document.getElementById('presenceToasts'),
             
             uiLobbyTitle: document.getElementById('uiLobbyTitle'),
             lobbyLangBtn: document.getElementById('lobbyLangBtn'),
@@ -2789,6 +2825,24 @@
             }, 2600);
         }
 
+        // Light, auto-fading toast for presence events (join / leave / etc.).
+        // Stacks a few at once and caps the stack so a burst can't pile up.
+        function showPresenceToast(message) {
+            if (!message) return;
+            const el = document.createElement('div');
+            el.className = 'presence-toast';
+            el.textContent = message;
+            elements.presenceToasts.appendChild(el);
+            while (elements.presenceToasts.childElementCount > 4) {
+                elements.presenceToasts.firstElementChild.remove();
+            }
+            requestAnimationFrame(() => el.classList.add('show'));
+            window.setTimeout(() => {
+                el.classList.remove('show');
+                window.setTimeout(() => el.remove(), 240);
+            }, 2600);
+        }
+
         function encodeRenjuPortalCoordinate(value) {
             return value.toString(16);
         }
@@ -3264,9 +3318,14 @@
 
             // The Durable Object owns the game. We only adopt the authoritative
             // state it broadcasts and reflect our role (host = admin label).
-            thisPeer.on('game-state', ({ state: nextState, serverNow, lastAction }) => {
+            thisPeer.on('game-state', ({ state: nextState, serverNow, lastAction, presence }) => {
                 if (peer !== thisPeer) return;
                 handleGameState(nextState, serverNow, lastAction);
+                if (Array.isArray(presence)) {
+                    presence.forEach((p) => {
+                        if (p && p.messageKey) showPresenceToast(i18n(p.messageKey, p.messageArg));
+                    });
+                }
             });
 
             thisPeer.on('host-changed', () => {
