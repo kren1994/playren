@@ -1757,6 +1757,7 @@
                                     <button id="menuMoveConfirmBtn" class="control-menu-item" type="button">着手確認</button>
                                     <button id="coordsBtn" class="control-menu-item active" type="button">座標</button>
                                     <button id="themeBtn" class="control-menu-item board-theme-item" type="button" data-value="茶">盤面色</button>
+                                    <button id="stoneShadingBtn" class="control-menu-item" type="button">石の陰影</button>
                                     <button id="moveNumBtn" class="control-menu-item active" type="button">手数</button>
                                 </div>
                             </div>
@@ -2034,6 +2035,7 @@
 
         let showCoords = true;
         let showMoveNumbers = true;
+        let stoneShadingEnabled = false;
         let moveConfirmEnabled = false;
         let boardThemeIndex = 0;
         let currentLanguage = 'ja';
@@ -2260,6 +2262,7 @@
                 menuLang: '言語',
                 menuSound: '効果音',
                 menuCoords: '座標',
+                menuStoneShading: '石の陰影',
                 menuTheme: '盤面色',
                 menuMoveNum: '手数',
                 menuMoveConfirm: '着手確認',
@@ -2383,6 +2386,7 @@
                 menuLang: '语言',
                 menuSound: '音效',
                 menuCoords: '坐标',
+                menuStoneShading: '棋子阴影',
                 menuTheme: '棋盘色',
                 menuMoveNum: '手数',
                 menuMoveConfirm: '落子确认',
@@ -2506,6 +2510,7 @@
                 menuLang: 'Language',
                 menuSound: 'Sound',
                 menuCoords: 'Coords',
+                menuStoneShading: 'Shading',
                 menuTheme: 'Board Color',
                 menuMoveNum: 'Move Nos.',
                 menuMoveConfirm: 'Move Confirm',
@@ -2708,6 +2713,7 @@
             document.querySelector('#langBtn .control-menu-label').textContent = i18n('menuLang');
             document.getElementById('soundBtn').childNodes[0].nodeValue = i18n('menuSound');
             document.getElementById('coordsBtn').textContent = i18n('menuCoords');
+            document.getElementById('stoneShadingBtn').textContent = i18n('menuStoneShading');
             document.getElementById('themeBtn').childNodes[0].nodeValue = i18n('menuTheme');
             document.getElementById('moveNumBtn').textContent = i18n('menuMoveNum');
             syncViewSettingsControls();
@@ -2817,6 +2823,7 @@
                 showCoords: true,
                 showMoveNumbers: true,
                 moveConfirmEnabled: false,
+                stoneShading: false,
                 boardThemeIndex: 0,
                 language: 'ja',
             };
@@ -2835,6 +2842,7 @@
             next.showCoords = next.showCoords !== false;
             next.showMoveNumbers = next.showMoveNumbers !== false;
             next.moveConfirmEnabled = next.moveConfirmEnabled === true;
+            next.stoneShading = next.stoneShading === true;
             next.boardThemeIndex = clamp(Number(next.boardThemeIndex) || 0, 0, boardThemes.length - 1);
             next.language = ['ja', 'zh', 'en'].includes(next.language) ? next.language : 'ja';
             return next;
@@ -2886,6 +2894,7 @@
             document.getElementById('soundBtn').classList.toggle('active', soundEnabled);
             document.getElementById('coordsBtn').classList.toggle('active', showCoords);
             document.getElementById('moveNumBtn').classList.toggle('active', showMoveNumbers);
+            document.getElementById('stoneShadingBtn').classList.toggle('active', stoneShadingEnabled);
             elements.menuMoveConfirmBtn.classList.toggle('active', moveConfirmEnabled);
             const label = boardThemes[boardThemeIndex].label[currentLanguage] || boardThemes[boardThemeIndex].label['ja'];
             document.getElementById('themeBtn').dataset.value = label;
@@ -2899,6 +2908,7 @@
             showCoords = settings.showCoords;
             showMoveNumbers = settings.showMoveNumbers;
             moveConfirmEnabled = settings.moveConfirmEnabled;
+            stoneShadingEnabled = settings.stoneShading;
             boardThemeIndex = settings.boardThemeIndex;
             currentLanguage = settings.language;
             syncViewSettingsControls();
@@ -4300,6 +4310,23 @@
             ctx.restore();
         }
 
+        // Subtle stone gradient: a soft top-left highlight fading to a slightly
+        // darker rim, for a gentle glass-bead sheen (kept understated).
+        function createStoneFill(x, y, r, isBlack) {
+            if (!stoneShadingEnabled) return isBlack ? '#20201e' : '#f7f4ee';
+            const g = ctx.createRadialGradient(x - r * 0.32, y - r * 0.37, r * 0.08, x, y, r);
+            if (isBlack) {
+                g.addColorStop(0, '#393530');
+                g.addColorStop(0.55, '#23201d');
+                g.addColorStop(1, '#171411');
+            } else {
+                g.addColorStop(0, '#ffffff');
+                g.addColorStop(0.55, '#f3eee4');
+                g.addColorStop(1, '#e2d9c8');
+            }
+            return g;
+        }
+
         function drawStones() {
             if (!state || !boardGeometry) return;
             const { padding, topPadding, cell } = boardGeometry;
@@ -4322,10 +4349,10 @@
                 
                 ctx.beginPath(); 
                 ctx.arc(x, y, cell * 0.45, 0, Math.PI * 2);
-                ctx.fillStyle = move.color === 'black' ? '#20201e' : '#f7f4ee';
+                ctx.fillStyle = createStoneFill(x, y, cell * 0.45, move.color === 'black');
                 ctx.fill();
                 ctx.lineWidth = 1;
-                ctx.strokeStyle = '#333'; 
+                ctx.strokeStyle = '#333';
                 ctx.stroke();
 
                 if (isHighlightedLastMove) {
@@ -4366,7 +4393,7 @@
                 ctx.globalAlpha = 0.7;
                 ctx.beginPath();
                 ctx.arc(x, y, cell * 0.45, 0, Math.PI * 2);
-                ctx.fillStyle = pendingMove.color === 'black' ? '#20201e' : '#f7f4ee';
+                ctx.fillStyle = createStoneFill(x, y, cell * 0.45, pendingMove.color === 'black');
                 ctx.fill();
                 if (showMoveNumbers) {
                     const moveText = String(pendingMove.number);
@@ -5122,6 +5149,14 @@
             renderBoard();
         }
 
+        function toggleStoneShading() {
+            closeControlMenus();
+            stoneShadingEnabled = !stoneShadingEnabled;
+            document.getElementById('stoneShadingBtn').classList.toggle('active', stoneShadingEnabled);
+            persistUserSettings({ stoneShading: stoneShadingEnabled });
+            renderBoard();
+        }
+
         function resetMovesView() {
             if (!state) return;
             clearConfirmMovePoint();
@@ -5249,6 +5284,7 @@
         bindPointerPress(document.getElementById('coordsBtn'), toggleCoords);
         bindPointerPress(document.getElementById('themeBtn'), cycleTheme);
         bindPointerPress(document.getElementById('moveNumBtn'), toggleMoveNumbers);
+        bindPointerPress(document.getElementById('stoneShadingBtn'), toggleStoneShading);
         elements.sendLogCommentBtn.addEventListener('click', submitLogComment);
         elements.logCommentInput.addEventListener('keydown', (event) => {
             if (event.key !== 'Enter' || event.isComposing) return;
