@@ -1099,12 +1099,14 @@
         }
 
         state.pairRenjuEnabled = nextEnabled;
-        clearBoardForNewMatch(ctx);
-        resetReadyFlags(ctx);
+        // Only the match-setup structure changes here (seats / turn order /
+        // ready / colours). The board (stones / result) is kept — like a seat
+        // change after a finished game — so a post-game position survives the
+        // toggle. maybeStartMatch -> clearBoardForNewMatch resets it when the
+        // next game actually begins.
         state.pairTurnOrder = [];
         state.pairTurnIndex = 0;
-        state.phase = 'waiting-guest';
-        state.status = 'waiting';
+        resetReadyFlags(ctx);
         rebuildColors(ctx);
     }
 
