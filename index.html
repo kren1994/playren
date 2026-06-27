@@ -1159,22 +1159,56 @@
             color: var(--accent-strong);
         }
 
+        /* Compose sits at the top (messages grow upward), kept understated: a
+           soft pill with the user's stone-colour badge, a borderless input and
+           a muted send that only lights up on hover. */
         .log-compose {
-            margin-top: 12px;
-            display: grid;
-            grid-template-columns: minmax(0, 1fr) auto;
+            margin: 0 0 10px;
+            display: flex;
+            align-items: center;
             gap: 8px;
+            /* left padding matches the chat item padding (12px) so the compose
+               badge and input line up vertically with the chat badges/messages */
+            padding: 4px 6px 4px 12px;
+            border-radius: 999px;
+            background: rgba(255, 255, 255, 0.45);
+            border: 1px solid rgba(74, 54, 34, 0.08);
         }
 
         .log-compose input {
+            flex: 1 1 auto;
             min-width: 0;
-            min-height: 40px;
-            padding: 8px 10px;
-            border-radius: 12px;
-            border: 1px solid rgba(74, 54, 34, 0.12);
-            background: rgba(255, 255, 255, 0.88);
+            min-height: 30px;
+            padding: 2px;
+            border: 0;
+            background: transparent;
             color: var(--text);
-            font-size: 14px;
+            font-size: 13px;
+        }
+
+        .log-compose input:focus {
+            outline: none;
+        }
+
+        .log-compose input::placeholder {
+            color: var(--muted);
+        }
+
+        .log-send {
+            flex: 0 0 auto;
+            border: 0;
+            background: transparent;
+            color: var(--muted);
+            font-size: 12.5px;
+            font-weight: 600;
+            padding: 4px 8px;
+            border-radius: 999px;
+            cursor: pointer;
+            transition: color 0.15s ease;
+        }
+
+        .log-send:hover {
+            color: var(--accent);
         }
 
         .log-author {
@@ -1718,11 +1752,12 @@
                 <aside class="sidebar">
                     <section class="card">
                         <h2 id="uiChatTitle">チャット</h2>
-                        <ul id="logList" class="log-list"></ul>
                         <div class="log-compose">
+                            <span id="composeAvatar" class="log-avatar" aria-hidden="true"></span>
                             <input id="logCommentInput" type="text" maxlength="140" placeholder="コメントを書く">
-                            <button id="sendLogCommentBtn" class="button button-secondary" type="button">投稿</button>
+                            <button id="sendLogCommentBtn" class="log-send" type="button">投稿</button>
                         </div>
+                        <ul id="logList" class="log-list"></ul>
                     </section>
 
                     <section id="spectatorCard" class="card spectator-card">
@@ -1917,6 +1952,7 @@
             logList: document.getElementById('logList'),
             logCommentInput: document.getElementById('logCommentInput'),
             sendLogCommentBtn: document.getElementById('sendLogCommentBtn'),
+            composeAvatar: document.getElementById('composeAvatar'),
             drawConfirm: document.getElementById('drawConfirm'),
             drawAcceptBtn: document.getElementById('drawAcceptBtn'),
             drawDeclineBtn: document.getElementById('drawDeclineBtn'),
@@ -4869,6 +4905,16 @@
             });
         }
 
+        // The compose badge mirrors the local player's stone colour (spectator =
+        // neutral), matching the chat badges.
+        function updateComposeAvatar() {
+            const me = state ? getParticipantById(localPeerId) : null;
+            const color = state?.colorsByPeerId?.[localPeerId] || '';
+            elements.composeAvatar.className = 'log-avatar'
+                + (color === 'black' ? ' log-avatar--black' : color === 'white' ? ' log-avatar--white' : '');
+            elements.composeAvatar.textContent = me ? (splitGraphemes(me.name || '')[0] || '?').toUpperCase() : '';
+        }
+
         function submitLogComment() {
             const text = normalizeCommentText(elements.logCommentInput.value);
             if (!text) {
@@ -4889,6 +4935,7 @@
             renderControls();
             renderSeats();
             renderLog();
+            updateComposeAvatar();
             renderDrawConfirm();
             renderTakebackConfirm();
             renderResignConfirm();
