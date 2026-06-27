@@ -1070,19 +1070,18 @@
             opacity: 0.7;
         }
 
-        /* Game end / timeout / draw: left card, set apart by a soft neutral tint. */
+        /* Game end / timeout / draw: a light left line (no card), but the result
+           text stays readable so the outcome isn't demoted to a faint note. */
         .log-item--result {
-            justify-self: start;
-            max-width: 92%;
-            padding: 8px 14px;
-            background: rgba(74, 54, 34, 0.06);
-            border: 1px solid rgba(74, 54, 34, 0.12);
-            border-radius: 14px;
+            justify-self: stretch;
+            padding: 3px 6px;
+            background: transparent;
+            border: 0;
         }
 
         .log-item--result .log-body {
             font-size: 13px;
-            font-weight: 700;
+            font-weight: 400;
             color: var(--text);
         }
 
