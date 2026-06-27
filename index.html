@@ -1399,6 +1399,8 @@
         @media (max-width: 1080px) {
             .layout {
                 grid-template-columns: 1fr;
+                /* Stacked: halve the gap between the board panel and the chat. */
+                row-gap: 9px;
             }
             .sidebar .card h2 {
                 display: none !important;
@@ -1410,6 +1412,14 @@
 
         /* スマホ向けレイアウト */
         @media (min-width: 721px) and (max-width: 1080px) {
+            /* Trim the gap above the board (app top → rectangle) to about half;
+               only the top side, so left/right/bottom spacing is unchanged. */
+            body {
+                padding-top: clamp(3px, 0.9vw, 9px);
+            }
+            .app-shell {
+                padding-top: clamp(5px, 1vw, 9px);
+            }
             .players,
             .board-controls {
                 width: min(100%, 680px);
