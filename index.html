@@ -4322,9 +4322,9 @@
                 
                 ctx.beginPath(); 
                 ctx.arc(x, y, cell * 0.45, 0, Math.PI * 2);
-                ctx.fillStyle = move.color === 'black' ? '#000' : '#fff'; 
+                ctx.fillStyle = move.color === 'black' ? '#20201e' : '#f7f4ee';
                 ctx.fill();
-                ctx.lineWidth = 1; 
+                ctx.lineWidth = 1;
                 ctx.strokeStyle = '#333'; 
                 ctx.stroke();
 
@@ -4366,7 +4366,7 @@
                 ctx.globalAlpha = 0.7;
                 ctx.beginPath();
                 ctx.arc(x, y, cell * 0.45, 0, Math.PI * 2);
-                ctx.fillStyle = pendingMove.color === 'black' ? '#000' : '#fff';
+                ctx.fillStyle = pendingMove.color === 'black' ? '#20201e' : '#f7f4ee';
                 ctx.fill();
                 if (showMoveNumbers) {
                     const moveText = String(pendingMove.number);
