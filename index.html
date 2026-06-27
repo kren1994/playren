@@ -4460,7 +4460,10 @@
 
             ctx.save();
             ctx.strokeStyle = 'rgba(63, 42, 19, 0.9)';
-            ctx.lineWidth = 1.2;
+            // Scale line width to the cell size so the grid stays light on small
+            // (mobile) boards while keeping ~1.2px on desktop. Floor keeps it
+            // visible; DPR scaling keeps thin lines crisp.
+            ctx.lineWidth = Math.max(0.7, cell * 0.028);
             for (let line = 0; line < BOARD_SIZE; line += 1) {
                 const x = padding + line * cell;
                 const y = topPadding + line * cell;
