@@ -1041,12 +1041,52 @@
             gap: 4px;
         }
 
-        /* Human chat: left-aligned white card. */
+        /* Human chat: a light, full-width card. */
         .log-item--chat {
-            justify-self: start;
-            max-width: 88%;
-            background: rgba(255, 255, 255, 0.94);
-            border-color: rgba(74, 54, 34, 0.10);
+            justify-self: stretch;
+            background: rgba(255, 255, 255, 0.55);
+            border-color: rgba(74, 54, 34, 0.07);
+        }
+
+        /* Indent the message under the name, leaving the badge gutter on the
+           left (badge 20px + 8px gap), so a group lines up in one column. */
+        .log-item--chat .log-body {
+            padding-left: 28px;
+        }
+
+        /* Consecutive messages from the same author drop the name header and
+           tuck in close, so a run reads as one grouped block. */
+        .log-item--grouped {
+            margin-top: -8px;
+        }
+
+        /* Initial badge tinted by the author's stone colour (spectator = neutral). */
+        .log-avatar {
+            flex: 0 0 auto;
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 10.5px;
+            font-weight: 700;
+            line-height: 1;
+            background: var(--muted);
+            color: #fff;
+            border: 1px solid transparent;
+        }
+
+        .log-avatar--black {
+            background: #20201e;
+            color: #f3efe8;
+            border-color: rgba(0, 0, 0, 0.25);
+        }
+
+        .log-avatar--white {
+            background: #f7f4ee;
+            color: #2f2418;
+            border-color: rgba(74, 54, 34, 0.32);
         }
 
         /* Join / leave / reconnect / disconnect: faint left-aligned note line. */
@@ -1087,8 +1127,8 @@
 
         .log-head {
             display: flex;
-            justify-content: space-between;
-            gap: 10px;
+            align-items: center;
+            gap: 8px;
             font-size: 12px;
         }
 
@@ -4770,24 +4810,40 @@
                 return;
             }
 
-            logs.forEach((entry) => {
+            // Map current author names to their stone colour for the badge tint.
+            const colorByName = {};
+            Object.values(state?.participantsById || {}).forEach((p) => {
+                if (p && p.name != null) colorByName[p.name] = state.colorsByPeerId?.[p.id] || '';
+            });
+
+            logs.forEach((entry, idx) => {
                 const item = document.createElement('li');
-                // Three visual tiers: human chat (left white card), presence
-                // notes (centered faint), and game-end results (centered pill).
+                // Tiers: human chat (light full-width card) vs game-end result
+                // (faint line). Consecutive same-author comments are grouped:
+                // the run's first item keeps the name + badge, the rest drop it.
                 const isComment = entry.kind === 'comment';
                 const isResult = entry.action === 'copy-renjuportal-kifu';
+                const author = isComment ? String(entry.text || '').split('\n')[0] : '';
+                const prev = logs[idx - 1];
+                const grouped = isComment && prev && prev.kind === 'comment'
+                    && String(prev.text || '').split('\n')[0] === author;
                 item.className = 'log-item ' + (isComment
-                    ? 'log-item--chat'
+                    ? ('log-item--chat' + (grouped ? ' log-item--grouped' : ''))
                     : isResult ? 'log-item--result' : 'log-item--note');
 
                 const head = document.createElement('div');
                 head.className = 'log-head';
-                if (entry.kind === 'comment') {
-                    const [authorName] = String(entry.text || '').split('\n');
-                    const author = document.createElement('span');
-                    author.className = 'log-author';
-                    author.textContent = authorName;
-                    head.append(author);
+                if (isComment && !grouped) {
+                    const color = colorByName[author] || '';
+                    const badge = document.createElement('span');
+                    badge.className = 'log-avatar'
+                        + (color === 'black' ? ' log-avatar--black' : color === 'white' ? ' log-avatar--white' : '');
+                    badge.textContent = (splitGraphemes(author)[0] || '?').toUpperCase();
+                    head.append(badge);
+                    const authorEl = document.createElement('span');
+                    authorEl.className = 'log-author';
+                    authorEl.textContent = author;
+                    head.append(authorEl);
                 }
 
                 const body = document.createElement('div');
