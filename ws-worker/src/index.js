@@ -188,7 +188,8 @@ export class RoomRelay {
       }
       const departed = this.finalizeDeparture(token, now);
       if (departed) { gameChanged = true; presence.push(...departed); }
-      if (this.model.hostToken === token) {
+      // Host stays put during play; a non-game host drop hands off now.
+      if (this.model.hostToken === token && !this.isGamePlaying()) {
         this.electHost();
         rosterChanged = true;
       }
@@ -206,6 +207,12 @@ export class RoomRelay {
         this.applyClockEffect(result.effects.clock, now);
         gameChanged = true;
         timedOut = true;
+        // The game just ended; if the host is gone, hand off now.
+        if (!this.isHostConnected()) {
+          this.electHost();
+          this.syncHostIntoGame();
+          rosterChanged = true;
+        }
       }
     }
 
@@ -305,6 +312,7 @@ export class RoomRelay {
     if (!intent || typeof intent !== 'object') return;
 
     const now = Date.now();
+    const wasPlaying = this.isGamePlaying();
     const { error, effects } = applyIntent(this.model.game, token, intent, { now });
     if (error) {
       const sock = this.findSocketByToken(token);
@@ -313,11 +321,20 @@ export class RoomRelay {
     }
 
     this.applyClockEffect(effects.clock, now);
-    await this.persist(['game', 'clockArmed', 'clockDeadlineAt']);
+    // Host stays put during play; if the game just ended (resign / draw) with
+    // the host disconnected, hand off now.
+    let rosterChanged = false;
+    if (wasPlaying && !this.isGamePlaying() && !this.isHostConnected()) {
+      this.electHost();
+      this.syncHostIntoGame();
+      rosterChanged = true;
+    }
+    await this.persist(['game', 'hostToken', 'clockArmed', 'clockDeadlineAt']);
     await this.rescheduleAlarm();
     // Carry the applied action so clients can play the right sound / highlight
     // (stone, swap / draw / takeback notification) without re-deriving it.
     this.broadcastGameState(null, { lastAction: { kind: intent.kind, actorPeerId: token } });
+    if (rosterChanged) this.broadcastRoster(null);
   }
 
   async handleBye(socket, token) {
@@ -328,7 +345,8 @@ export class RoomRelay {
     }
     if (this.model.pendingDrop[token] != null) delete this.model.pendingDrop[token];
     const presence = this.finalizeDeparture(token, Date.now());
-    if (this.model.hostToken === token) {
+    // Host stays put during play; a non-game host bye hands off now.
+    if (this.model.hostToken === token && !this.isGamePlaying()) {
       this.electHost();
       rosterChanged = true;
     }
@@ -405,6 +423,18 @@ export class RoomRelay {
     this.model.seqCounter += 1;
     this.model.members[token] = { name, joinSeq: this.model.seqCounter };
     return true;
+  }
+
+  isGamePlaying() {
+    return Boolean(this.model.game && this.model.game.status === 'playing');
+  }
+
+  // The host counts as connected only with a live socket and no pending drop.
+  isHostConnected() {
+    const token = this.model.hostToken;
+    if (!token) return false;
+    if (this.model.pendingDrop[token] != null) return false;
+    return Boolean(this.findSocketByToken(token));
   }
 
   electHost() {
