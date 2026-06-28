@@ -4340,7 +4340,7 @@
                 ctx.arc(x, y, cell * 0.45, 0, Math.PI * 2);
                 ctx.fillStyle = createStoneFill(x, y, cell * 0.45, move.color === 'black');
                 ctx.fill();
-                ctx.lineWidth = 1;
+                ctx.lineWidth = Math.max(0.6, Math.min(1, cell * 0.028));
                 ctx.strokeStyle = '#333';
                 ctx.stroke();
 
