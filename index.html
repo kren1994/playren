@@ -4588,10 +4588,16 @@
 
         const RULE_LABEL = 'Taraguchi-10';
 
+        function formatTimeSetting(minutes, increment) {
+            // CJK (分/秒) hugs the number; English (min/sec) needs a space before the unit.
+            const u = currentLanguage === 'en' ? ' ' : '';
+            return `${minutes}${u}${i18n('minute')} + ${increment}${u}${i18n('second')}`;
+        }
+
         function renderRoomSummary() {
             if (!state) {
                 const { baseMinutes, incrementSeconds } = readTimeSettingsFromInputs();
-                elements.roomSummary.textContent = `${RULE_LABEL} ・ ${baseMinutes}${i18n('minute')} +${incrementSeconds}${i18n('second')}`;
+                elements.roomSummary.textContent = `${RULE_LABEL} ・ ${formatTimeSetting(baseMinutes, incrementSeconds)}`;
                 elements.roomSummary.hidden = false;
                 return;
             }
@@ -4599,8 +4605,8 @@
             ensureSeatClockSettings();
             const left = state.seatClockSettings.black;
             const right = state.seatClockSettings.white;
-            const leftText = `${Math.round(left.baseSeconds / 60)}${i18n('minute')} +${left.incrementSeconds}${i18n('second')}`;
-            const rightText = `${Math.round(right.baseSeconds / 60)}${i18n('minute')} +${right.incrementSeconds}${i18n('second')}`;
+            const leftText = formatTimeSetting(Math.round(left.baseSeconds / 60), left.incrementSeconds);
+            const rightText = formatTimeSetting(Math.round(right.baseSeconds / 60), right.incrementSeconds);
             const timeText = state.timeHandicapEnabled ? `${leftText} / ${rightText}` : leftText;
             elements.roomSummary.textContent = `${RULE_LABEL} ・ ${timeText}`;
             elements.roomSummary.hidden = false;
