@@ -449,7 +449,6 @@
 
         /* Disconnected seated player: just lightly grey the name (the match
            keeps running; the clock and the grey name are the only cues). */
-        .player-card.disconnected .player-name,
         .player-slot.disconnected .player-name {
             opacity: 0.5;
         }
@@ -4673,15 +4672,9 @@
                 renderReadyMark(view.ready, participant);
             }
 
+            // Greying is per-slot (renderParticipant) so only the actual
+            // disconnected player dims — in pair renju a teammate stays normal.
             seatViews.forEach((view) => renderParticipant(view, state ? getSeatOccupant(view.seat) : null));
-            elements.blackPlayerCard.classList.toggle(
-                'disconnected',
-                getTeamPeerIds('black').some((peerId) => isParticipantDisconnected(getParticipantById(peerId)))
-            );
-            elements.whitePlayerCard.classList.toggle(
-                'disconnected',
-                getTeamPeerIds('white').some((peerId) => isParticipantDisconnected(getParticipantById(peerId)))
-            );
             const blackPeerId = getTeamPeerIds('black')[0] || '';
             const whitePeerId = getTeamPeerIds('white')[0] || '';
             elements.blackPlayerTimer.textContent = blackPeerId ? formatTime(getDisplayRemainingMs(blackPeerId)) : '';
