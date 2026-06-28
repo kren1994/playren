@@ -1365,7 +1365,7 @@
             }
             .players {
                 gap: 6px;
-                margin-bottom: 0;
+                margin-bottom: 4px;
             }
             .player-card {
                 padding: 4px 8px;
@@ -1442,7 +1442,7 @@
         @media (min-width: 721px) and (max-width: 1080px) and (orientation: landscape) {
             .players {
                 gap: 6px;
-                margin-bottom: 0;
+                margin-bottom: 4px;
             }
             .player-card {
                 padding: 4px 8px;
@@ -4193,9 +4193,12 @@
                 topMargin = Math.max(18, Math.round(size * ((25 / 620) + smallScreenTopOffset)));
                 rightMargin = Math.max(18, Math.round(size * (25 / 620)));
             } else {
+                // No coordinates: uniform margins on all four sides so the grid
+                // is centred (symmetric L/R and T/B) and fills the square — the
+                // smaller margin wins and the cell grows to take up the slack.
                 horizontalMargin = Math.max(15, Math.round(size * (20 / 620)));
                 bottomMargin = horizontalMargin;
-                topMargin = horizontalMargin + (window.innerWidth <= 599 ? Math.round(size * (5 / 620)) : 0);
+                topMargin = horizontalMargin;
                 rightMargin = horizontalMargin;
                 baseMargin = horizontalMargin;
             }
