@@ -91,10 +91,6 @@
                 constraint: null,
             };
         }
-        if (hasDisconnectedSeatedPlayer(ctx)) {
-            return { actorPeerId: '', allowBoardAction: false, boardActionKind: '', constraint: null };
-        }
-
         const blackPeerId = getBlackPeerId(ctx);
         const whitePeerId = getWhitePeerId(ctx);
         const lastMove = state.moves[state.moves.length - 1];

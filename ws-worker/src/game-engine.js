@@ -14,8 +14,6 @@ const GameCore = globalThis.GameCore;
 
 const CENTER = 7;
 const MAX_LOG_ITEMS = 64; // mirror index.html
-// Display countdown (ms) shown while a disconnected seated player may return.
-const DISCONNECT_GRACE_MS = 120000; // mirror index.html
 
 function nowIsoTime(now) {
   // HH:MM:SS, mirroring the browser's display-time field. Clients may re-render.
@@ -109,21 +107,13 @@ export function createRoom({ roomId, hostToken, hostName, settings, now = Date.n
   return state;
 }
 
-// Intents that must not be applied while a seated player is mid-disconnect
-// (the match is paused). Mirrors the browser's pausedBlockedActions.
-const PAUSE_BLOCKED = new Set([
-  'move', 'swap', 'choice2', 'draw', 'draw-response', 'takeback',
-  'takeback-response', 'resign', 'offer', 'select-offer', 'ready',
-]);
-
 function dispatch(ctx, peerId, action, now) {
   const state = ctx.state;
   if (!state || !action) return '';
   const kind = action.kind;
 
-  if (GameCore.hasDisconnectedSeatedPlayer(ctx) && PAUSE_BLOCKED.has(kind)) {
-    return ctx.i18n('errMatchPausedForDisconnect');
-  }
+  // A disconnected seated player no longer freezes play: the match keeps
+  // running and the normal clock decides if they time out.
 
   switch (kind) {
     case 'move': return GameCore.placeMove(ctx, peerId, action.x, action.y, now);
@@ -211,46 +201,21 @@ export function applyClockTimeout(state, options = {}) {
   return { applied: true, effects, state };
 }
 
-// A seated player who stayed disconnected past the grace countdown forfeits
-// (draw in pair-renju). Mirrors the host's periodicClockWork disconnect check.
-export function applyDisconnectForfeit(state, token, options = {}) {
-  const now = options.now ?? Date.now();
-  const effects = {};
-  const ctx = makeCtx(state, { now, effects });
-  if (!state || state.status !== 'playing') return { applied: false, effects, state };
-  const participant = GameCore.getParticipantById(ctx, token);
-  if (!participant || !participant.disconnectedAt) return { applied: false, effects, state };
-  if (!GameCore.isSeatedParticipant(ctx, participant)) return { applied: false, effects, state };
-  const winnerId = state.pairRenjuEnabled ? '' : GameCore.getOpponentPeerId(ctx, token);
-  GameCore.finishGame(
-    ctx,
-    winnerId,
-    ctx.messageSpec('msgDisconnectTimeout', participant.name),
-    ctx.messageSpec('msgAgreedEndLog')
-  );
-  state.version = (state.version || 0) + 1;
-  return { applied: true, effects, state };
-}
-
 // ---- presence -> participant lifecycle (the DO drives this) -------------
 // Mirrors the browser host's hello / close / bye reactions, mutating the
 // authoritative state. The DO calls these from its presence machinery.
 
 function markReconnectedInner(ctx, token, name) {
-  const state = ctx.state;
   const participant = GameCore.getParticipantById(ctx, token);
   if (!participant) return false;
   participant.name = name || participant.name;
   participant.token = token;
-  const wasDisconnected = Boolean(participant.disconnectedAt);
+  // Reconnect simply un-greys the name; the match never paused, so there is
+  // nothing to resume and no reconnect toast.
   delete participant.disconnectedAt;
   delete participant.disconnectedUntil;
   GameCore.ensureClockEntry(ctx, token);
   GameCore.rebuildColors(ctx);
-  if (wasDisconnected) {
-    GameCore.resumeMatchAfterReconnect(ctx); // re-arms clock via effects
-    ctx.notePresence('msgReconnected', participant.name);
-  }
   return true;
 }
 
@@ -273,8 +238,10 @@ export function joinParticipant(state, token, name, options = {}) {
   return { effects, state, isNew: true };
 }
 
-// A seated player who is mid-game is preserved (paused) rather than removed,
-// so they can reconnect. Returns { preserved, effects, state }.
+// A seated mid-game player is kept (not removed) so they can reconnect; we just
+// mark them disconnected to grey the name. The match keeps running (no pause,
+// no forfeit countdown, no toast) — the normal clock decides any time-out.
+// Returns { preserved, effects, state }.
 export function preserveDisconnected(state, token, options = {}) {
   const now = options.now ?? Date.now();
   const effects = {};
@@ -285,11 +252,7 @@ export function preserveDisconnected(state, token, options = {}) {
   if (!wasSeated || state.status !== 'playing' || (state.moves || []).length === 0) {
     return { preserved: false, effects, state };
   }
-  if (participant.disconnectedAt) return { preserved: true, effects, state };
-  participant.disconnectedAt = now;
-  participant.disconnectedUntil = now + DISCONNECT_GRACE_MS;
-  GameCore.pauseMatchForDisconnect(ctx, token); // sets effects.clock armed:false
-  ctx.notePresence('msgDisconnected', participant.name);
+  if (!participant.disconnectedAt) participant.disconnectedAt = now;
   return { preserved: true, effects, state };
 }
 

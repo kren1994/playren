@@ -447,12 +447,11 @@
             pointer-events: none;
         }
 
+        /* Disconnected seated player: just lightly grey the name (the match
+           keeps running; the clock and the grey name are the only cues). */
         .player-card.disconnected .player-name,
-        .player-card.disconnected .player-timer,
-        .player-card.disconnected .player-ready,
-        .player-slot.disconnected .player-name,
-        .player-slot.disconnected .player-ready {
-            opacity: 0.32;
+        .player-slot.disconnected .player-name {
+            opacity: 0.5;
         }
 
         .player-timer {
@@ -3225,16 +3224,6 @@
             return GameCore.isParticipantDisconnected(participant);
         }
 
-        function getDisconnectedRemainingSeconds(participant) {
-            if (!isParticipantDisconnected(participant)) return 0;
-            const remaining = Math.max(0, (participant.disconnectedUntil || 0) - Date.now());
-            return Math.ceil(remaining / 1000);
-        }
-
-        function hasDisconnectedSeatedPlayer() {
-            return GameCore.hasDisconnectedSeatedPlayer(gameCoreCtx());
-        }
-
         // The participant id IS the token now, so a returning host finds itself
         // directly — no id reconciliation or placeholder juggling needed.
         function getPeerName(peerId) {
@@ -3808,14 +3797,6 @@
             if (!state) return;
             if (!peer || !localPeerId) {
                 showToast(i18n('errUnconnected'));
-                return;
-            }
-            const pausedBlockedActions = [
-                'move', 'swap', 'choice2', 'draw', 'draw-response', 'takeback', 'takeback-response',
-                'resign', 'offer', 'select-offer', 'ready'
-            ];
-            if (hasDisconnectedSeatedPlayer() && pausedBlockedActions.includes(action.kind)) {
-                showToast(i18n('errMatchPausedForDisconnect'));
                 return;
             }
             if (action.kind === 'move') {
@@ -4546,11 +4527,6 @@
                 renderBoard();
                 return;
             }
-            if (hasDisconnectedSeatedPlayer() && !canUseReviewBoard()) {
-                clearConfirmMovePoint();
-                showToast(i18n('errMatchPausedForDisconnect'));
-                return;
-            }
             if (canUseReviewBoard()) {
                 confirmOrSendBoardAction('review-move', point);
                 return;
@@ -4658,22 +4634,14 @@
             ];
             const activePeerId = state?.clocks?.activePeerId || '';
 
-            function formatDisconnectTime(seconds) {
-                const minutes = Math.floor(seconds / 60);
-                return `${minutes}:${String(seconds % 60).padStart(2, '0')}`;
-            }
-
             function renderParticipant(view, participant) {
                 view.name.textContent = participant ? participant.name : i18n('playerNotJoined');
                 view.name.classList.toggle('host-name', isHostParticipant(participant));
                 const disconnected = isParticipantDisconnected(participant);
-                view.status.textContent = disconnected
-                    ? i18n(
-                        'playerDisconnected',
-                        formatDisconnectTime(getDisconnectedRemainingSeconds(participant))
-                    )
-                    : '';
-                view.status.hidden = !disconnected;
+                // No status text / countdown: a disconnected player only greys
+                // their name (via the .disconnected class); play continues.
+                view.status.textContent = '';
+                view.status.hidden = true;
                 view.slot.classList.toggle('disconnected', disconnected);
                 view.slot.classList.toggle('active', Boolean(participant && participant.id === activePeerId && state?.status === 'playing'));
                 renderReadyMark(view.ready, participant);
@@ -4815,7 +4783,7 @@
         function renderControls() {
             const localParticipant = getParticipantById(localPeerId);
             const isPlaying = Boolean(state && state.status === 'playing');
-            const canManageResult = Boolean(state && state.status === 'playing' && !hasDisconnectedSeatedPlayer() && isSeatedParticipant(localParticipant));
+            const canManageResult = Boolean(state && state.status === 'playing' && isSeatedParticipant(localParticipant));
             
             elements.menuSwapSeatColorsBtn.hidden = isPlaying;
             elements.menuTimeSettingsBtn.hidden = isPlaying;

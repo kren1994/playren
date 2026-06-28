@@ -2,14 +2,15 @@ import {
   createRoom,
   applyIntent,
   applyClockTimeout,
-  applyDisconnectForfeit,
   joinParticipant,
   preserveDisconnected,
   removeParticipant,
 } from './game-engine.js';
 
 const PROTOCOL_VERSION = 2;
-const PRESENCE_GRACE_MS = 4000;
+// Grace before a dropped socket is treated as disconnected (greys the name).
+// Generous so a quick app-switch (e.g. checking a message) isn't flagged.
+const PRESENCE_GRACE_MS = 10000;
 // Slack before declaring a clock timeout, to absorb in-flight moves / latency.
 const CLOCK_LATENCY_GRACE_MS = 800;
 
@@ -194,21 +195,6 @@ export class RoomRelay {
     }
 
     if (rosterChanged) this.syncHostIntoGame();
-
-    // A disconnected seated player who never returned forfeits on countdown.
-    if (this.model.game && this.model.game.status === 'playing') {
-      for (const participant of Object.values(this.model.game.participantsById || {})) {
-        if (participant && participant.disconnectedAt && participant.disconnectedUntil
-            && now >= participant.disconnectedUntil) {
-          const result = applyDisconnectForfeit(this.model.game, participant.id, { now });
-          if (result.applied) {
-            this.applyClockEffect(result.effects.clock, now);
-            gameChanged = true;
-          }
-          break;
-        }
-      }
-    }
 
     // Clock timeout: armed, the game is still live, and past the deadline.
     let timedOut = false;
@@ -444,11 +430,6 @@ export class RoomRelay {
     const deadlines = Object.values(this.model.pendingDrop);
     if (this.model.clockArmed && this.model.clockDeadlineAt) {
       deadlines.push(this.model.clockDeadlineAt);
-    }
-    if (this.model.game && this.model.game.status === 'playing') {
-      for (const participant of Object.values(this.model.game.participantsById || {})) {
-        if (participant && participant.disconnectedUntil) deadlines.push(participant.disconnectedUntil);
-      }
     }
     if (deadlines.length === 0) {
       await this.state.storage.deleteAlarm();
