@@ -970,6 +970,10 @@
             flex-wrap: wrap;
         }
 
+        #roomSummary {
+            padding-left: 12px;
+        }
+
         .compact-time-editor {
             display: inline-flex;
             align-items: center;
@@ -4582,10 +4586,12 @@
             sendAction({ kind: 'review-undo' });
         }
 
+        const RULE_LABEL = 'Taraguchi-10';
+
         function renderRoomSummary() {
             if (!state) {
                 const { baseMinutes, incrementSeconds } = readTimeSettingsFromInputs();
-                elements.roomSummary.textContent = `${baseMinutes} ${i18n('minute')} + ${incrementSeconds} ${i18n('second')}`;
+                elements.roomSummary.textContent = `${RULE_LABEL} ・ ${baseMinutes} ${i18n('minute')} + ${incrementSeconds} ${i18n('second')}`;
                 elements.roomSummary.hidden = false;
                 return;
             }
@@ -4595,7 +4601,8 @@
             const right = state.seatClockSettings.white;
             const leftText = `${Math.round(left.baseSeconds / 60)} ${i18n('minute')} + ${left.incrementSeconds} ${i18n('second')}`;
             const rightText = `${Math.round(right.baseSeconds / 60)} ${i18n('minute')} + ${right.incrementSeconds} ${i18n('second')}`;
-            elements.roomSummary.textContent = state.timeHandicapEnabled ? `${leftText} / ${rightText}` : leftText;
+            const timeText = state.timeHandicapEnabled ? `${leftText} / ${rightText}` : leftText;
+            elements.roomSummary.textContent = `${RULE_LABEL} ・ ${timeText}`;
             elements.roomSummary.hidden = false;
         }
 
