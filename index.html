@@ -5077,7 +5077,6 @@
         }
 
         function toggleMoveConfirm() {
-            closeControlMenus();
             moveConfirmEnabled = !moveConfirmEnabled;
             elements.menuMoveConfirmBtn.classList.toggle('active', moveConfirmEnabled);
             persistUserSettings({ moveConfirmEnabled });
@@ -5097,14 +5096,12 @@
         }
 
         function cycleLanguage() {
-            closeControlMenus();
             currentLanguage = currentLanguage === 'ja' ? 'zh' : currentLanguage === 'zh' ? 'en' : 'ja';
             persistUserSettings({ language: currentLanguage });
             applyLanguage();
         }
 
         function toggleSound() {
-            closeControlMenus();
             soundEnabled = !soundEnabled;
             document.getElementById('soundBtn').classList.toggle('active', soundEnabled);
             persistUserSettings({ soundEnabled });
@@ -5115,7 +5112,6 @@
         }
 
         function toggleCoords() {
-            closeControlMenus();
             showCoords = !showCoords;
             document.getElementById('coordsBtn').classList.toggle('active', showCoords);
             persistUserSettings({ showCoords });
@@ -5123,7 +5119,6 @@
         }
 
         function cycleTheme() {
-            closeControlMenus();
             boardThemeIndex = (boardThemeIndex + 1) % boardThemes.length;
             const label = boardThemes[boardThemeIndex].label[currentLanguage] || boardThemes[boardThemeIndex].label['ja'];
             document.getElementById('themeBtn').dataset.value = label;
@@ -5132,7 +5127,6 @@
         }
 
         function toggleMoveNumbers() {
-            closeControlMenus();
             showMoveNumbers = !showMoveNumbers;
             document.getElementById('moveNumBtn').classList.toggle('active', showMoveNumbers);
             persistUserSettings({ showMoveNumbers });
@@ -5140,7 +5134,6 @@
         }
 
         function toggleStoneShading() {
-            closeControlMenus();
             stoneShadingEnabled = !stoneShadingEnabled;
             document.getElementById('stoneShadingBtn').classList.toggle('active', stoneShadingEnabled);
             persistUserSettings({ stoneShading: stoneShadingEnabled });
