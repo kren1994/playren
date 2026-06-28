@@ -4230,8 +4230,12 @@
             if (!elements.boardCanvas) return;
             const rect = elements.boardCanvas.getBoundingClientRect();
             if (!rect.width || !rect.height) return;
+            // Pin to the board's bottom-center, but clamp into the viewport so a
+            // board taller than the screen (e.g. landscape phones) can't push the
+            // dialog below the fold where it would be invisible.
+            const y = Math.min(rect.bottom, window.innerHeight - 16);
             document.documentElement.style.setProperty('--confirm-dialog-x', `${rect.left + rect.width / 2}px`);
-            document.documentElement.style.setProperty('--confirm-dialog-y', `${rect.bottom}px`);
+            document.documentElement.style.setProperty('--confirm-dialog-y', `${y}px`);
         }
 
         function drawConstraintHighlight(descriptor) {
