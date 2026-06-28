@@ -898,6 +898,8 @@
         .control-menu-popup[hidden] { display: none !important; }
         .control-menu.align-right .control-menu-popup { right: 0; }
         .control-menu:not(.align-right) .control-menu-popup { left: 0; }
+        .control-menu-divider { height: 1px; margin: 4px 10px; background: rgba(74, 54, 34, 0.12); }
+        .control-menu-divider[hidden] { display: none; }
         
         .board-controls .control-menu-item {
             width: 100%; text-align: left; padding: 12px 14px; font-size: 13px; font-weight: 600;
@@ -1717,6 +1719,7 @@
                                 </button>
                                 <div id="actionMenu" class="control-menu-popup" hidden>
                                     <button id="menuPairRenjuBtn" class="control-menu-item" type="button">ペア連珠</button>
+                                    <div id="actionMenuDivider" class="control-menu-divider" role="separator"></div>
                                     <button id="menuSwapSeatColorsBtn" class="control-menu-item" type="button">色を交換</button>
                                     <button id="menuTimeSettingsBtn" class="control-menu-item" type="button">時間設定</button>
                                     <button id="menuResignBtn" class="control-menu-item" type="button">終局</button>
@@ -1758,10 +1761,12 @@
                                     </button>
                                     <button id="soundBtn" class="control-menu-item active" type="button">効果音</button>
                                     <button id="menuMoveConfirmBtn" class="control-menu-item" type="button">着手確認</button>
+                                    <div class="control-menu-divider" role="separator"></div>
                                     <button id="coordsBtn" class="control-menu-item active" type="button">座標</button>
+                                    <button id="moveNumBtn" class="control-menu-item active" type="button">手数</button>
+                                    <div class="control-menu-divider" role="separator"></div>
                                     <button id="themeBtn" class="control-menu-item board-theme-item" type="button" data-value="茶">盤面色</button>
                                     <button id="stoneShadingBtn" class="control-menu-item" type="button">石の陰影</button>
-                                    <button id="moveNumBtn" class="control-menu-item active" type="button">手数</button>
                                 </div>
                             </div>
                         </div>
@@ -1991,6 +1996,7 @@
             menuPairRenjuBtn: document.getElementById('menuPairRenjuBtn'),
             menuSwapSeatColorsBtn: document.getElementById('menuSwapSeatColorsBtn'),
             menuTimeSettingsBtn: document.getElementById('menuTimeSettingsBtn'),
+            actionMenuDivider: document.getElementById('actionMenuDivider'),
             timeSettingsDialog: document.getElementById('timeSettingsDialog'),
             timeHandicapInput: document.getElementById('timeHandicapInput'),
             timeLeftBaseInput: document.getElementById('timeLeftBaseInput'),
@@ -4808,6 +4814,7 @@
             elements.menuSwapSeatColorsBtn.hidden = isPlaying;
             elements.menuTimeSettingsBtn.hidden = isPlaying;
             elements.menuPairRenjuBtn.hidden = isPlaying;
+            elements.actionMenuDivider.hidden = isPlaying;
             elements.menuResignBtn.hidden = !isPlaying;
             elements.menuDrawBtn.hidden = !isPlaying;
             elements.menuTakebackBtn.hidden = !isPlaying;
