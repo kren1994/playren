@@ -1117,10 +1117,11 @@
         }
 
         /* Game end / timeout / draw: a light left line (no card), but the result
-           text stays readable so the outcome isn't demoted to a faint note. */
+           text stays readable so the outcome isn't demoted to a faint note.
+           Left padding matches the chat badge edge (12px) so it lines up. */
         .log-item--result {
             justify-self: stretch;
-            padding: 3px 6px;
+            padding: 3px 6px 3px 12px;
             background: transparent;
             border: 0;
         }
