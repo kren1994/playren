@@ -4447,7 +4447,8 @@
             // Scale line width to the cell size so the grid stays light on small
             // (mobile) boards while keeping ~1.2px on desktop. Floor keeps it
             // visible; DPR scaling keeps thin lines crisp.
-            ctx.lineWidth = Math.max(0.7, cell * 0.028);
+            const gridLineWidth = Math.max(0.7, cell * 0.028);
+            ctx.lineWidth = gridLineWidth;
             for (let line = 0; line < BOARD_SIZE; line += 1) {
                 const x = padding + line * cell;
                 const y = topPadding + line * cell;
@@ -4461,6 +4462,10 @@
                 ctx.lineTo(x, topPadding + (BOARD_SIZE - 1) * cell);
                 ctx.stroke();
             }
+
+            // Slightly thicker outer frame (traditional board look).
+            ctx.lineWidth = gridLineWidth * 1.5;
+            ctx.strokeRect(padding, topPadding, (BOARD_SIZE - 1) * cell, (BOARD_SIZE - 1) * cell);
 
             STAR_POINTS.forEach(([x, y]) => {
                 ctx.beginPath();
@@ -4617,7 +4622,7 @@
             context.font = `700 100px ${style.fontFamily}`;
             const fitSample = '漢漢漢漢漢漢';
             const sampleWidth = context.measureText(fitSample).width;
-            const fontSize = Math.max(11, Math.min(14, Math.floor(availableWidth * 100 / sampleWidth)));
+            const fontSize = Math.max(11, Math.min(12, Math.floor(availableWidth * 100 / sampleWidth)));
             players.style.setProperty('--mobile-player-name-size', `${fontSize}px`);
         }
 
