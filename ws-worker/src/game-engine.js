@@ -268,3 +268,21 @@ export function removeParticipant(state, token, options = {}) {
   if (participant) ctx.notePresence('msgLeft', name);
   return { effects, state };
 }
+
+// At game end, fully remove any participant still greyed out (disconnectedAt
+// set). Frees their seat for the next match. Emits "left" toasts and returns
+// { removed: [tokens], effects, state }.
+export function removeDisconnectedParticipants(state, options = {}) {
+  const now = options.now ?? Date.now();
+  const effects = {};
+  const ctx = makeCtx(state, { now, effects });
+  const tokens = Object.entries(state.participantsById || {})
+    .filter(([, p]) => p && p.disconnectedAt)
+    .map(([id]) => id);
+  for (const token of tokens) {
+    const name = state.participantsById[token]?.name || '';
+    GameCore.removeParticipant(ctx, token, ''); // no log text; toast below
+    ctx.notePresence('msgLeft', name);
+  }
+  return { removed: tokens, effects, state };
+}

@@ -5,6 +5,7 @@ import {
   joinParticipant,
   preserveDisconnected,
   removeParticipant,
+  removeDisconnectedParticipants,
 } from './game-engine.js';
 
 const PROTOCOL_VERSION = 2;
@@ -207,12 +208,10 @@ export class RoomRelay {
         this.applyClockEffect(result.effects.clock, now);
         gameChanged = true;
         timedOut = true;
-        // The game just ended; if the host is gone, hand off now.
-        if (!this.isHostConnected()) {
-          this.electHost();
-          this.syncHostIntoGame();
-          rosterChanged = true;
-        }
+        // The game just ended: drop greyed-out players, hand off host if gone.
+        const ended = this.onGameEnded(now);
+        if (ended.presence.length) presence.push(...ended.presence);
+        if (ended.rosterChanged) rosterChanged = true;
       }
     }
 
@@ -321,19 +320,20 @@ export class RoomRelay {
     }
 
     this.applyClockEffect(effects.clock, now);
-    // Host stays put during play; if the game just ended (resign / draw) with
-    // the host disconnected, hand off now.
+    // Host stays put during play; if the game just ended (resign / draw), drop
+    // greyed-out players and hand off host if it's gone.
+    const extra = { lastAction: { kind: intent.kind, actorPeerId: token } };
     let rosterChanged = false;
-    if (wasPlaying && !this.isGamePlaying() && !this.isHostConnected()) {
-      this.electHost();
-      this.syncHostIntoGame();
-      rosterChanged = true;
+    if (wasPlaying && !this.isGamePlaying()) {
+      const ended = this.onGameEnded(now);
+      if (ended.presence.length) extra.presence = ended.presence;
+      rosterChanged = ended.rosterChanged;
     }
     await this.persist(['game', 'hostToken', 'clockArmed', 'clockDeadlineAt']);
     await this.rescheduleAlarm();
     // Carry the applied action so clients can play the right sound / highlight
     // (stone, swap / draw / takeback notification) without re-deriving it.
-    this.broadcastGameState(null, { lastAction: { kind: intent.kind, actorPeerId: token } });
+    this.broadcastGameState(null, extra);
     if (rosterChanged) this.broadcastRoster(null);
   }
 
@@ -427,6 +427,22 @@ export class RoomRelay {
 
   isGamePlaying() {
     return Boolean(this.model.game && this.model.game.status === 'playing');
+  }
+
+  // Run once when the game transitions out of 'playing': drop any greyed-out
+  // (disconnected) participants to free their seats, and hand off host if it's
+  // gone. Returns { presence, rosterChanged } for the caller to broadcast.
+  onGameEnded(now) {
+    const presence = [];
+    const result = removeDisconnectedParticipants(this.model.game, { now });
+    if (result.effects.presence) presence.push(...result.effects.presence);
+    let rosterChanged = false;
+    if (!this.isHostConnected()) {
+      this.electHost();
+      rosterChanged = true;
+    }
+    if (rosterChanged || result.removed.length) this.syncHostIntoGame();
+    return { presence, rosterChanged };
   }
 
   // The host counts as connected only with a live socket and no pending drop.
