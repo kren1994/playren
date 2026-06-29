@@ -816,13 +816,29 @@
         resetReadyFlags(ctx);
         setPhase(ctx, 'finished');
         resetReviewMoves(ctx);
+        // A completed game makes the next match a candidate for color alternation
+        // (suppressed later if a player departs or someone swaps manually).
+        state.swapColorsOnNextMatch = true;
     }
 
     function maybeStartMatch(ctx) {
         const state = ctx.state;
         if (!state || !['waiting-guest', 'finished'].includes(state.phase)
             || !allRequiredSeatsOccupied(ctx) || !allSeatedPlayersReady(ctx)) return;
+        // From the 2nd game on, auto-alternate black/white vs the PREVIOUS GAME'S
+        // STARTING colors (an in-game Swap can change seatColors mid-game, so we
+        // must not derive this from the end state). Suppressed by departure/manual.
+        const alternateColors = state.phase === 'finished' && state.swapColorsOnNextMatch;
         clearBoardForNewMatch(ctx);
+        ensureSeatColors(ctx);
+        if (alternateColors && state.matchStartColors) {
+            state.seatColors.black = state.matchStartColors.white;
+            state.seatColors.white = state.matchStartColors.black;
+            rebuildColors(ctx);
+        }
+        state.swapColorsOnNextMatch = false;
+        // Snapshot the colors THIS match starts with, for the next alternation.
+        state.matchStartColors = { black: state.seatColors.black, white: state.seatColors.white };
         resetReadyFlags(ctx);
         initializePairTurnOrder(ctx);
         setPhase(ctx, 'opening-move-1');
@@ -1007,6 +1023,12 @@
             config: settings,
             pairRenjuEnabled: false,
             timeHandicapEnabled: false,
+            // When true, the next match auto-swaps black/white (alternation).
+            // Set on game end; cleared by a departure or a manual color swap.
+            swapColorsOnNextMatch: false,
+            // seatColors snapshot at the START of the current match. Alternation
+            // swaps from this (not the end state, which an in-game Swap can flip).
+            matchStartColors: null,
             seatClockSettings: {
                 black: { baseSeconds: settings.baseSeconds, incrementSeconds: settings.incrementSeconds },
                 white: { baseSeconds: settings.baseSeconds, incrementSeconds: settings.incrementSeconds },
@@ -1149,6 +1171,9 @@
         ensureClockEntry(ctx, targetPeerId);
         const afterSeatedIds = getActiveSeatKeys(ctx).map((seat) => state.seats[seat]).filter(Boolean);
         const seatingChanged = beforeSeatedIds.join(':') !== afterSeatedIds.join(':');
+        // A change to who occupies the playing seats means it's not the same pair
+        // replaying: don't auto-alternate colors for the next game.
+        if (seatingChanged) state.swapColorsOnNextMatch = false;
 
         if (
             state.status === 'playing'
@@ -1156,6 +1181,7 @@
             && isPlayingSeat(ctx, currentSeat)
         ) {
             finishGame(ctx, '', null, ctx.messageSpec('msgAgreedEndLog'));
+            state.swapColorsOnNextMatch = false; // departure mid-game: suppress next
             return '';
         }
 
@@ -1196,6 +1222,9 @@
         const participant = getParticipantById(ctx, peerId);
         if (!participant) return;
         const wasSeated = isSeatedParticipant(ctx, participant);
+        // A seated player leaving means the pair changed: suppress next-game
+        // color alternation.
+        if (wasSeated) state.swapColorsOnNextMatch = false;
         if (isPlayingSeat(ctx, participant.seat)) state.seats[participant.seat] = null;
         delete state.participantsById[peerId];
         delete state.colorsByPeerId[peerId];

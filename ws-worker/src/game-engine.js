@@ -142,6 +142,8 @@ function dispatch(ctx, peerId, action, now) {
       if (state.status === 'playing') return ctx.i18n('errCannotSwap');
       GameCore.swapSeatColors(ctx);
       GameCore.resetReadyFlags(ctx);
+      // A manual swap overrides auto-alternation for the next game.
+      state.swapColorsOnNextMatch = false;
       ctx.notePresence('msgColorsSwappedBy', ctx.getPeerName(peerId), peerId);
       return '';
     case 'pair-renju':
