@@ -55,8 +55,9 @@ export default {
 
 // The Durable Object is now the authoritative game server (Phase C.2). It owns
 // the room state, applies client intents through the shared game-core engine,
-// runs the clock deadline, and broadcasts the full state. "host" is just an
-// admin role (settings); seating / readiness / moves are each player's own.
+// runs the clock deadline, and broadcasts the full state. There is no host:
+// seating / readiness / moves and the room settings are open to any participant
+// (settings only while not playing).
 export class RoomRelay {
   constructor(state, env) {
     this.state = state;
@@ -75,18 +76,17 @@ export class RoomRelay {
   // ---- model (durable) ---------------------------------------------------
   // game:          authoritative room state (null until first hello creates it)
   // members:       { [token]: { name, joinSeq } }   connected OR within grace
-  // hostToken:     string (elected; mirrored into game.hostPeerId as admin)
   // seqCounter:    number
   // pendingDrop:   { [token]: deadlineMs }          sockets gone, awaiting grace
   // clockArmed:    bool        the active player's clock is running
   // clockDeadlineAt:ms         absolute time the running clock times out
+  // (No host: any participant may change room settings while not playing.)
 
   async ensureLoaded() {
     if (this.loaded) return;
     const stored = await this.state.storage.get([
       'game',
       'members',
-      'hostToken',
       'seqCounter',
       'pendingDrop',
       'clockArmed',
@@ -96,7 +96,6 @@ export class RoomRelay {
     this.model = {
       game: stored.get('game') || null,
       members: stored.get('members') || {},
-      hostToken: stored.get('hostToken') || '',
       seqCounter: stored.get('seqCounter') || 0,
       pendingDrop: stored.get('pendingDrop') || {},
       clockArmed: stored.get('clockArmed') || false,
@@ -189,14 +188,7 @@ export class RoomRelay {
       }
       const departed = this.finalizeDeparture(token, now);
       if (departed) { gameChanged = true; presence.push(...departed); }
-      // Host stays put during play; a non-game host drop hands off now.
-      if (this.model.hostToken === token && !this.isGamePlaying()) {
-        this.electHost();
-        rosterChanged = true;
-      }
     }
-
-    if (rosterChanged) this.syncHostIntoGame();
 
     // Clock timeout: armed, the game is still live, and past the deadline.
     let timedOut = false;
@@ -208,14 +200,13 @@ export class RoomRelay {
         this.applyClockEffect(result.effects.clock, now);
         gameChanged = true;
         timedOut = true;
-        // The game just ended: drop greyed-out players, hand off host if gone.
+        // The game just ended: drop greyed-out players to free their seats.
         const ended = this.onGameEnded(now);
         if (ended.presence.length) presence.push(...ended.presence);
-        if (ended.rosterChanged) rosterChanged = true;
       }
     }
 
-    await this.persist(['pendingDrop', 'members', 'hostToken', 'game', 'clockArmed', 'clockDeadlineAt']);
+    await this.persist(['pendingDrop', 'members', 'game', 'clockArmed', 'clockDeadlineAt']);
     await this.rescheduleAlarm();
     if (gameChanged || timedOut) this.broadcastGameState(null, presence.length ? { presence } : undefined);
     if (rosterChanged) this.broadcastRoster(null);
@@ -259,10 +250,9 @@ export class RoomRelay {
     }
 
     const now = Date.now();
-    let hostAssigned = false;
     let joinPresence = null;
     if (!this.model.game) {
-      // First arrival creates the room (creator seated black, host/admin).
+      // First arrival creates the room (creator just seated black; no host).
       this.model.game = createRoom({
         roomId: this.model.roomName || message.roomId || '',
         hostToken: token,
@@ -270,23 +260,15 @@ export class RoomRelay {
         settings: parseSettings(message.settings),
         now,
       });
-      this.model.hostToken = token;
-      hostAssigned = true;
     } else {
       // Returning or new participant joins the existing authoritative game.
       const result = joinParticipant(this.model.game, token, name, { now });
       this.applyClockEffect(result.effects.clock, now);
       joinPresence = result.effects.presence || null;
-      if (!this.model.hostToken) {
-        this.model.hostToken = token;
-        hostAssigned = true;
-      }
     }
 
-    this.syncHostIntoGame();
-
     await this.persist([
-      'game', 'members', 'seqCounter', 'pendingDrop', 'hostToken',
+      'game', 'members', 'seqCounter', 'pendingDrop',
       'clockArmed', 'clockDeadlineAt', 'roomName',
     ]);
     await this.rescheduleAlarm();
@@ -294,7 +276,7 @@ export class RoomRelay {
     this.send(socket, {
       type: 'welcome',
       protocol: PROTOCOL_VERSION,
-      you: { token, role: this.model.hostToken === token ? 'host' : 'member' },
+      you: { token },
       roster: this.roster(),
     });
     this.send(socket, { type: 'game-state', state: this.model.game, serverNow: now });
@@ -302,7 +284,7 @@ export class RoomRelay {
     // Joining changed presence/participants; refresh everyone else and toast
     // the join/reconnect to them (not to the joiner).
     this.broadcastGameState(socket, joinPresence && joinPresence.length ? { presence: joinPresence } : undefined);
-    if (membershipChanged || hostAssigned) this.broadcastRoster(socket);
+    if (membershipChanged) this.broadcastRoster(socket);
   }
 
   async handleIntent(token, message) {
@@ -320,21 +302,21 @@ export class RoomRelay {
     }
 
     this.applyClockEffect(effects.clock, now);
-    // Host stays put during play; if the game just ended (resign / draw), drop
-    // greyed-out players and hand off host if it's gone.
     const extra = { lastAction: { kind: intent.kind, actorPeerId: token } };
-    let rosterChanged = false;
+    const presence = [];
+    // Setting-change toasts (time / pair-renju / color swap) ride along.
+    if (effects.presence) presence.push(...effects.presence);
+    // If the game just ended (resign / draw), drop any greyed-out players.
     if (wasPlaying && !this.isGamePlaying()) {
       const ended = this.onGameEnded(now);
-      if (ended.presence.length) extra.presence = ended.presence;
-      rosterChanged = ended.rosterChanged;
+      if (ended.presence.length) presence.push(...ended.presence);
     }
-    await this.persist(['game', 'hostToken', 'clockArmed', 'clockDeadlineAt']);
+    if (presence.length) extra.presence = presence;
+    await this.persist(['game', 'clockArmed', 'clockDeadlineAt']);
     await this.rescheduleAlarm();
     // Carry the applied action so clients can play the right sound / highlight
     // (stone, swap / draw / takeback notification) without re-deriving it.
     this.broadcastGameState(null, extra);
-    if (rosterChanged) this.broadcastRoster(null);
   }
 
   async handleBye(socket, token) {
@@ -345,14 +327,8 @@ export class RoomRelay {
     }
     if (this.model.pendingDrop[token] != null) delete this.model.pendingDrop[token];
     const presence = this.finalizeDeparture(token, Date.now());
-    // Host stays put during play; a non-game host bye hands off now.
-    if (this.model.hostToken === token && !this.isGamePlaying()) {
-      this.electHost();
-      rosterChanged = true;
-    }
-    if (rosterChanged) this.syncHostIntoGame();
 
-    await this.persist(['game', 'members', 'pendingDrop', 'hostToken', 'clockArmed', 'clockDeadlineAt']);
+    await this.persist(['game', 'members', 'pendingDrop', 'clockArmed', 'clockDeadlineAt']);
     await this.rescheduleAlarm();
     if (presence) this.broadcastGameState(socket, presence.length ? { presence } : undefined);
     if (rosterChanged) this.broadcastRoster(socket);
@@ -392,15 +368,6 @@ export class RoomRelay {
     return removed.effects.presence || [];
   }
 
-  syncHostIntoGame() {
-    if (!this.model.game) return;
-    const host = this.model.hostToken;
-    this.model.game.hostPeerId = host || '';
-    for (const participant of Object.values(this.model.game.participantsById || {})) {
-      if (participant) participant.isHost = Boolean(host) && participant.id === host;
-    }
-  }
-
   // Translate an engine clock effect into the DO's deadline timer.
   applyClockEffect(clock, now) {
     if (!clock) return;
@@ -430,46 +397,12 @@ export class RoomRelay {
   }
 
   // Run once when the game transitions out of 'playing': drop any greyed-out
-  // (disconnected) participants to free their seats, and hand off host if it's
-  // gone. Returns { presence, rosterChanged } for the caller to broadcast.
+  // (disconnected) participants to free their seats. Returns { presence }.
   onGameEnded(now) {
     const presence = [];
     const result = removeDisconnectedParticipants(this.model.game, { now });
     if (result.effects.presence) presence.push(...result.effects.presence);
-    let rosterChanged = false;
-    if (!this.isHostConnected()) {
-      this.electHost();
-      rosterChanged = true;
-    }
-    if (rosterChanged || result.removed.length) this.syncHostIntoGame();
-    return { presence, rosterChanged };
-  }
-
-  // The host counts as connected only with a live socket and no pending drop.
-  isHostConnected() {
-    const token = this.model.hostToken;
-    if (!token) return false;
-    if (this.model.pendingDrop[token] != null) return false;
-    return Boolean(this.findSocketByToken(token));
-  }
-
-  electHost() {
-    let best = '';
-    let bestSeq = Infinity;
-    for (const socket of this.state.getWebSockets()) {
-      const meta = socket.deserializeAttachment() || {};
-      const token = meta.token;
-      if (!token) continue;
-      const member = this.model.members[token];
-      if (!member) continue;
-      if (this.model.pendingDrop[token] != null) continue;
-      const seq = member.joinSeq ?? Infinity;
-      if (seq < bestSeq) {
-        bestSeq = seq;
-        best = token;
-      }
-    }
-    this.model.hostToken = best;
+    return { presence };
   }
 
   async rescheduleAlarm() {
@@ -486,7 +419,6 @@ export class RoomRelay {
 
   roster() {
     return {
-      hostToken: this.model.hostToken,
       members: Object.entries(this.model.members).map(([token, member]) => ({
         token,
         name: member.name,

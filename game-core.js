@@ -998,6 +998,8 @@
     // it takes a small deps object (i18n + createLogEntry) instead of ctx.
 
     function createInitialState(params, deps) {
+        // hostId/hostToken are kept as param names for the creator's identity;
+        // there is no host role anymore (the creator is just seated black).
         const { roomId, hostId, hostName, settings, hostToken = '' } = params;
         const initialMs = settings.baseSeconds * 1000;
         return {
@@ -1009,10 +1011,9 @@
                 black: { baseSeconds: settings.baseSeconds, incrementSeconds: settings.incrementSeconds },
                 white: { baseSeconds: settings.baseSeconds, incrementSeconds: settings.incrementSeconds },
             },
-            hostPeerId: hostId,
             joinOrder: [hostId],
             participantsById: {
-                [hostId]: { id: hostId, name: hostName, seat: 'black', isHost: true, token: hostToken },
+                [hostId]: { id: hostId, name: hostName, seat: 'black', token: hostToken },
             },
             seats: {
                 black: hostId,

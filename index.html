@@ -407,17 +407,6 @@
             white-space: nowrap;
         }
 
-        .host-name {
-            text-decoration-line: underline;
-            text-decoration-color: var(--accent);
-            text-decoration-thickness: 1px;
-            text-underline-offset: 3px;
-        }
-
-        .player-name.host-name {
-            text-underline-offset: 1px;
-        }
-
         .player-identity {
             flex: 1;
             min-width: 0;
@@ -2362,6 +2351,10 @@
                 msgLeft: (name) => `${name} が退室しました。`,
                 msgDisconnected: (name) => `${name} の接続が切れました。復帰を待っています。`,
                 msgReconnected: (name) => `${name} が復帰しました。`,
+                msgTimeChangedBy: (name) => `${name} が持ち時間を変更しました。`,
+                msgColorsSwappedBy: (name) => `${name} が手番の色を交換しました。`,
+                msgPairRenjuOnBy: (name) => `${name} がペア連珠を有効にしました。`,
+                msgPairRenjuOffBy: (name) => `${name} がペア連珠を無効にしました。`,
                 msgDisconnectTimeout: (name) => `${name} が時間内に復帰できませんでした。`,
                 playerDisconnected: (time) => `切断 ${time}`,
                 errMatchPausedForDisconnect: '相手の再接続待ちです。',
@@ -2486,6 +2479,10 @@
                 msgLeft: (name) => `${name} 退出了房间。`,
                 msgDisconnected: (name) => `${name} 的连接已断开，正在等待重连。`,
                 msgReconnected: (name) => `${name} 已重新连接。`,
+                msgTimeChangedBy: (name) => `${name} 修改了用时设置。`,
+                msgColorsSwappedBy: (name) => `${name} 交换了执子颜色。`,
+                msgPairRenjuOnBy: (name) => `${name} 开启了双人连珠。`,
+                msgPairRenjuOffBy: (name) => `${name} 关闭了双人连珠。`,
                 msgDisconnectTimeout: (name) => `${name} 未能在限定时间内重连。`,
                 playerDisconnected: (time) => `断线 ${time}`,
                 errMatchPausedForDisconnect: '正在等待对手重新连接。',
@@ -2610,6 +2607,10 @@
                 msgLeft: (name) => `${name} left the room.`,
                 msgDisconnected: (name) => `${name} disconnected. Waiting for reconnect.`,
                 msgReconnected: (name) => `${name} reconnected.`,
+                msgTimeChangedBy: (name) => `${name} changed the time settings.`,
+                msgColorsSwappedBy: (name) => `${name} swapped the stone colors.`,
+                msgPairRenjuOnBy: (name) => `${name} turned on pair renju.`,
+                msgPairRenjuOffBy: (name) => `${name} turned off pair renju.`,
                 msgDisconnectTimeout: (name) => `${name} did not reconnect in time.`,
                 playerDisconnected: (time) => `OFF ${time}`,
                 errMatchPausedForDisconnect: 'Waiting for the opponent to reconnect.',
@@ -3222,9 +3223,6 @@
             return GameCore.getParticipantById(gameCoreCtx(), peerId);
         }
 
-        function isHostParticipant(participant) {
-            return Boolean(state && participant && participant.id === state.hostPeerId);
-        }
 
         function getDisplayName(participant) {
             if (!participant) return i18n('playerNotJoined');
@@ -3396,8 +3394,8 @@
         }
 
         // Single entry point for joining/reconnecting. The server (Durable
-        // Object) decides who is host and reports presence; this client just
-        // reacts to 'host-changed' and relayed messages.
+        // Object) owns the game and reports presence; this client just adopts
+        // the broadcast state and relayed messages.
         function connectToRoom() {
             if (!roomId || !localPlayerToken) return;
             clearReconnectTimer();
@@ -3419,20 +3417,19 @@
             });
 
             // The Durable Object owns the game. We only adopt the authoritative
-            // state it broadcasts and reflect our role (host = admin label).
+            // state it broadcasts. Every participant is equal (no host).
             thisPeer.on('game-state', ({ state: nextState, serverNow, lastAction, presence }) => {
                 if (peer !== thisPeer) return;
                 handleGameState(nextState, serverNow, lastAction);
                 if (Array.isArray(presence)) {
                     presence.forEach((p) => {
-                        if (p && p.messageKey) showPresenceToast(i18n(p.messageKey, p.messageArg));
+                        if (!p || !p.messageKey) return;
+                        // A setting-change toast carries `by` (actor token); skip
+                        // showing it to the person who made the change.
+                        if (p.by && p.by === localPeerId) return;
+                        showPresenceToast(i18n(p.messageKey, p.messageArg));
                     });
                 }
-            });
-
-            thisPeer.on('host-changed', () => {
-                if (peer !== thisPeer) return;
-                applyRole();
             });
 
             thisPeer.on('roster', () => {
@@ -3483,12 +3480,11 @@
             });
         }
 
-        // "host" is now only an admin label (the elected member who may change
-        // time / pair-renju / seat colors). All authority is in the Durable
-        // Object; this just tracks which role the server assigned us.
+        // No host/admin role: every participant is equal. localMode only tracks
+        // idle (lobby) vs in-room. All authority is in the Durable Object.
         function applyRole() {
             if (!peer) return;
-            localMode = peer.role === 'host' ? 'host' : 'guest';
+            localMode = 'guest';
             elements.leaveRoomBtn.disabled = false;
             render();
         }
@@ -3518,7 +3514,7 @@
             if (typeof serverNow === 'number' && serverNow > 0) {
                 clockOffsetMs = serverNow - Date.now();
             }
-            if (peer) localMode = peer.role === 'host' ? 'host' : 'guest';
+            if (peer) localMode = 'guest';
             const previousState = state;
             state = nextState;
             ensurePairRenjuState();
@@ -3853,7 +3849,7 @@
 
         function openTimeSettingsDialog() {
             closeControlMenus();
-            if (!state || localMode !== 'host') return;
+            if (!state) return;
             if (state.status === 'playing') {
                 showToast(i18n('errChangeTimePlaying'));
                 return;
@@ -3952,7 +3948,7 @@
         }
 
         function applyTimeSettingsDialog() {
-            if (!state || localMode !== 'host') return;
+            if (!state) return;
             if (state.status === 'playing') {
                 closeTimeSettingsDialog();
                 showToast(i18n('errChangeTimePlaying'));
@@ -4668,7 +4664,6 @@
 
             function renderParticipant(view, participant) {
                 view.name.textContent = participant ? participant.name : i18n('playerNotJoined');
-                view.name.classList.toggle('host-name', isHostParticipant(participant));
                 const disconnected = isParticipantDisconnected(participant);
                 // No status text / countdown: a disconnected player only greys
                 // their name (via the .disconnected class); play continues.
@@ -4781,20 +4776,14 @@
                 return;
             }
 
-            const participants = Object.values(state.participantsById || {}).sort((left, right) => {
-                const leftIsHost = isHostParticipant(left);
-                const rightIsHost = isHostParticipant(right);
-                if (leftIsHost && !rightIsHost) return -1;
-                if (!leftIsHost && rightIsHost) return 1;
-                return left.name.localeCompare(right.name, 'ja');
-            });
+            const participants = Object.values(state.participantsById || {})
+                .sort((left, right) => left.name.localeCompare(right.name, 'ja'));
 
             participants.forEach((participant) => {
                 if (participant.seat !== 'spectator') return;
                 const item = document.createElement('li');
                 item.className = 'spectator-item';
                 item.textContent = getDisplayName(participant);
-                item.classList.toggle('host-name', isHostParticipant(participant));
                 elements.spectatorList.appendChild(item);
             });
 
@@ -4818,9 +4807,8 @@
             elements.menuResignBtn.hidden = !isPlaying;
             elements.menuDrawBtn.hidden = !isPlaying;
             elements.menuTakebackBtn.hidden = !isPlaying;
-            elements.menuSwapSeatColorsBtn.disabled = localMode !== 'host';
-            elements.menuTimeSettingsBtn.disabled = localMode !== 'host';
-            elements.menuPairRenjuBtn.disabled = localMode !== 'host';
+            // No host: room settings are open to everyone (only gated by !playing,
+            // which already hides these three while a game is in progress).
             elements.menuPairRenjuBtn.classList.toggle('active', Boolean(state?.pairRenjuEnabled));
             elements.menuMoveConfirmBtn.classList.toggle('active', moveConfirmEnabled);
             elements.menuDrawBtn.disabled = !canManageResult || Boolean(state?.drawOfferByPeerId);
@@ -5099,7 +5087,7 @@
 
         function togglePairRenjuFromMenu() {
             closeControlMenus();
-            if (!state || localMode !== 'host' || state.status === 'playing') return;
+            if (!state || state.status === 'playing') return;
             sendAction({ kind: 'pair-renju', enabled: !state.pairRenjuEnabled });
         }
 

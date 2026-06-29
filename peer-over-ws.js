@@ -3,8 +3,8 @@
 
     // Must match PROTOCOL_VERSION in ws-worker/src/index.js.
     // v2: the Durable Object is the authoritative game server. Clients send
-    // intents and render the full state the server broadcasts. There is no more
-    // host-mesh / DataConnection emulation; "host" is just an admin role.
+    // intents and render the full state the server broadcasts. There is no
+    // host-mesh / DataConnection emulation and no host role; all peers are equal.
     const PROTOCOL_VERSION = 2;
 
     // Self-heal keepalive. The Durable Object auto-responds to 'ping' with
@@ -54,8 +54,6 @@
 
             this._emitter = createEmitter();
             this._ready = false;
-            this.role = '';
-            this.hostToken = '';
             this._roster = new Map();
 
             this._terminal = false; // displaced / protocol-mismatch: do not reconnect
@@ -308,19 +306,11 @@
         _applyRoster(roster) {
             if (!roster || typeof roster !== 'object') return;
 
-            const prevHostToken = this.hostToken;
-            this.hostToken = String(roster.hostToken || '');
-
             const members = Array.isArray(roster.members) ? roster.members : [];
             this._roster = new Map(
                 members.map((m) => [String(m.token || ''), String(m.name || '')])
             );
 
-            this.role = this.hostToken === this._token ? 'host' : 'member';
-
-            if (this.hostToken !== prevHostToken) {
-                this._emitter.emit('host-changed', this.hostToken);
-            }
             this._emitter.emit('roster', roster);
         }
     }

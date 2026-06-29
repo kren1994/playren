@@ -63,10 +63,12 @@ export function makeCtx(state, { now = Date.now(), effects } = {}) {
     // Presence (join / leave / disconnect / reconnect) is ephemeral: collected
     // into effects so the DO can broadcast a transient toast instead of letting
     // it pile up in the persistent chat log.
-    notePresence: (messageKey, messageArg) => {
+    notePresence: (messageKey, messageArg, by) => {
       if (!effects) return;
       if (!effects.presence) effects.presence = [];
-      effects.presence.push({ messageKey, messageArg });
+      const entry = { messageKey, messageArg };
+      if (by) entry.by = by; // actor token: clients skip their own change toast
+      effects.presence.push(entry);
     },
     startClockFor: (peerId, ts) => {
       if (!state || !peerId) {
@@ -135,24 +137,26 @@ function dispatch(ctx, peerId, action, now) {
     case 'review-reset': return GameCore.resetReviewMovesForPeer(ctx, peerId);
     case 'review-branch-base': return GameCore.returnReviewToBranchBase(ctx, peerId);
     case 'swap-seat-colors':
-      if (peerId !== state.hostPeerId) return ctx.i18n('errUnconnected');
+      // No host: anyone may change room settings while not playing. The change
+      // is announced to others via an ephemeral toast (notePresence).
       if (state.status === 'playing') return ctx.i18n('errCannotSwap');
       GameCore.swapSeatColors(ctx);
       GameCore.resetReadyFlags(ctx);
+      ctx.notePresence('msgColorsSwappedBy', ctx.getPeerName(peerId), peerId);
       return '';
     case 'pair-renju':
-      if (peerId !== state.hostPeerId) return ctx.i18n('errUnconnected');
       if (state.status === 'playing') return ctx.i18n('errCannotSwap');
       GameCore.setPairRenjuEnabled(ctx, Boolean(action.enabled));
+      ctx.notePresence(action.enabled ? 'msgPairRenjuOnBy' : 'msgPairRenjuOffBy', ctx.getPeerName(peerId), peerId);
       return '';
     case 'time-settings':
-      if (peerId !== state.hostPeerId) return ctx.i18n('errUnconnected');
       if (state.status === 'playing') return ctx.i18n('errChangeTimePlaying');
       GameCore.applyTimeSettings(ctx, {
         timeHandicapEnabled: Boolean(action.timeHandicapEnabled),
         black: action.black,
         white: action.white,
       });
+      ctx.notePresence('msgTimeChangedBy', ctx.getPeerName(peerId), peerId);
       return '';
     case 'seat-change': {
       const isSelf = action.targetPeerId === peerId && GameCore.canSelfChangeSeat(ctx, peerId, action.seat);
@@ -230,7 +234,7 @@ export function joinParticipant(state, token, name, options = {}) {
     markReconnectedInner(ctx, token, name);
     return { effects, state, isNew: false };
   }
-  state.participantsById[token] = { id: token, name, seat: 'spectator', isHost: false, token };
+  state.participantsById[token] = { id: token, name, seat: 'spectator', token };
   if (!Array.isArray(state.joinOrder)) state.joinOrder = [];
   if (!state.joinOrder.includes(token)) state.joinOrder.push(token);
   GameCore.ensureClockEntry(ctx, token);
