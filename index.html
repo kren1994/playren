@@ -2363,7 +2363,8 @@
                 msgTimeout: (name) => `${name} が時間切れになりました。`,
                 msgTimeoutLog: '時間切れです。',
                 msgAgreedEndLog: '終局しました。',
-                msgDrawLog: '満局になりました。'
+                msgDrawLog: '満局になりました。',
+                movePrefix: (n) => `${n} 手で`
             },
             zh: {
                 lobbyTitle: '联机对战',
@@ -2491,7 +2492,8 @@
                 msgTimeout: (name) => `${name} 超时。`,
                 msgTimeoutLog: '超时。',
                 msgAgreedEndLog: '对局结束。',
-                msgDrawLog: '和棋。'
+                msgDrawLog: '和棋。',
+                movePrefix: (n) => `第 ${n} 手，`
             },
             en: {
                 lobbyTitle: 'Game Room',
@@ -2619,7 +2621,8 @@
                 msgTimeout: (name) => `${name} lost on time.`,
                 msgTimeoutLog: 'Lost on time.',
                 msgAgreedEndLog: 'Game ended.',
-                msgDrawLog: 'Draw.'
+                msgDrawLog: 'Draw.',
+                movePrefix: (n) => `${n} moves: `
             }
         };
 
@@ -4914,9 +4917,13 @@
 
                 const body = document.createElement('div');
                 body.className = 'log-body';
-                const bodyText = entry.kind === 'comment'
+                let bodyText = entry.kind === 'comment'
                     ? String(entry.text || '').split('\n').slice(1).join('\n')
                     : (entry.messageKey ? i18n(entry.messageKey, entry.messageArg) : entry.text);
+                // Prefix the end message with the move count (e.g. "68 手で時間切れです。").
+                if (isResult && entry.messageKey && Array.isArray(entry.moves) && entry.moves.length > 0) {
+                    bodyText = i18n('movePrefix', entry.moves.length) + bodyText;
+                }
                 body.textContent = bodyText;
                 if (entry.kind === 'system' && entry.action === 'copy-renjuportal-kifu') {
                     const action = document.createElement('button');
