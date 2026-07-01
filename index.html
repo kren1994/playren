@@ -31,6 +31,10 @@
 
         html {
             -webkit-touch-callout: none;
+            /* Stop iOS Safari (iPad/iPhone) from auto-inflating text beyond the
+               CSS size — otherwise seat names balloon and cards grow on sit. */
+            -webkit-text-size-adjust: 100%;
+            text-size-adjust: 100%;
         }
         
         body {
