@@ -1248,6 +1248,27 @@
         }
     }
 
+    // Force every seated player to the spectator bench (non-playing only). The
+    // board is left as-is; the next match clears it. Seating changed -> no
+    // color alternation for the next game.
+    function resetSeats(ctx) {
+        const state = ctx.state;
+        if (!state) return;
+        for (const seat of ['black', 'white', 'blackBottom', 'whiteBottom']) {
+            const peerId = state.seats[seat];
+            if (!peerId) continue;
+            const participant = getParticipantById(ctx, peerId);
+            if (participant) participant.seat = 'spectator';
+            state.readyByPeerId[peerId] = false;
+            state.seats[seat] = null;
+        }
+        rebuildColors(ctx);
+        state.swapColorsOnNextMatch = false;
+        state.phase = 'waiting-guest';
+        state.status = 'waiting';
+        ctx.stopClock();
+    }
+
     function addComment(ctx, peerId, text) {
         const state = ctx.state;
         if (!state) return ctx.i18n('errUnconnected');
@@ -1362,6 +1383,7 @@
         assignSeat,
         applyTimeSettings,
         removeParticipant,
+        resetSeats,
         addComment,
         pauseMatchForDisconnect,
         resumeMatchAfterReconnect,

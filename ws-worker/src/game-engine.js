@@ -151,6 +151,11 @@ function dispatch(ctx, peerId, action, now) {
       GameCore.setPairRenjuEnabled(ctx, Boolean(action.enabled));
       ctx.notePresence(action.enabled ? 'msgPairRenjuOnBy' : 'msgPairRenjuOffBy', ctx.getPeerName(peerId), peerId);
       return '';
+    case 'reset-seats':
+      if (state.status === 'playing') return ctx.i18n('errCannotSwap');
+      GameCore.resetSeats(ctx);
+      ctx.notePresence('msgSeatsResetBy', ctx.getPeerName(peerId), peerId);
+      return '';
     case 'time-settings':
       if (state.status === 'playing') return ctx.i18n('errChangeTimePlaying');
       GameCore.applyTimeSettings(ctx, {

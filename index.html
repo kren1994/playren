@@ -522,6 +522,14 @@
             gap: 10px;
         }
 
+        .confirm-message {
+            margin: 0;
+            text-align: center;
+            font-size: 14px;
+            line-height: 1.6;
+            white-space: pre-line; /* honor the \n line break in the message */
+        }
+
         #timeSettingsDialog {
             display: flex;
             align-items: center;
@@ -1708,6 +1716,7 @@
                                 </button>
                                 <div id="actionMenu" class="control-menu-popup" hidden>
                                     <button id="menuPairRenjuBtn" class="control-menu-item" type="button">ペア連珠</button>
+                                    <button id="menuResetSeatsBtn" class="control-menu-item" type="button">対局席リセット</button>
                                     <div id="actionMenuDivider" class="control-menu-divider" role="separator"></div>
                                     <button id="menuSwapSeatColorsBtn" class="control-menu-item" type="button">色を交換</button>
                                     <button id="menuTimeSettingsBtn" class="control-menu-item" type="button">時間設定</button>
@@ -1821,6 +1830,16 @@
             <div class="confirm-actions">
                 <button id="resignCancelBtn" class="button button-secondary" type="button">キャンセル</button>
                 <button id="resignConfirmBtn" class="button button-primary" type="button">終局</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="genericConfirm" class="confirm-backdrop" hidden>
+        <div class="confirm-card" role="dialog" aria-modal="true">
+            <p id="genericConfirmMessage" class="confirm-message"></p>
+            <div class="confirm-actions">
+                <button id="genericConfirmCancelBtn" class="button button-secondary" type="button">キャンセル</button>
+                <button id="genericConfirmOkBtn" class="button button-primary" type="button">OK</button>
             </div>
         </div>
     </div>
@@ -1985,7 +2004,12 @@
             menuPairRenjuBtn: document.getElementById('menuPairRenjuBtn'),
             menuSwapSeatColorsBtn: document.getElementById('menuSwapSeatColorsBtn'),
             menuTimeSettingsBtn: document.getElementById('menuTimeSettingsBtn'),
+            menuResetSeatsBtn: document.getElementById('menuResetSeatsBtn'),
             actionMenuDivider: document.getElementById('actionMenuDivider'),
+            genericConfirm: document.getElementById('genericConfirm'),
+            genericConfirmMessage: document.getElementById('genericConfirmMessage'),
+            genericConfirmOkBtn: document.getElementById('genericConfirmOkBtn'),
+            genericConfirmCancelBtn: document.getElementById('genericConfirmCancelBtn'),
             timeSettingsDialog: document.getElementById('timeSettingsDialog'),
             timeHandicapInput: document.getElementById('timeHandicapInput'),
             timeLeftBaseInput: document.getElementById('timeLeftBaseInput'),
@@ -2355,6 +2379,12 @@
                 msgColorsSwappedBy: (name) => `${name} が手番の色を交換しました。`,
                 msgPairRenjuOnBy: (name) => `${name} がペア連珠を有効にしました。`,
                 msgPairRenjuOffBy: (name) => `${name} がペア連珠を無効にしました。`,
+                msgSeatsResetBy: (name) => `${name} が対局席をリセットしました。`,
+                menuResetSeats: '対局席リセット',
+                confirmPairRenju: 'ペア連珠を切り替えますか？',
+                confirmResetSeats: '対局席をリセットしますか？\n（全員が観戦席に移動します）',
+                confirmOk: 'OK',
+                confirmCancel: 'キャンセル',
                 msgDisconnectTimeout: (name) => `${name} が時間内に復帰できませんでした。`,
                 playerDisconnected: (time) => `切断 ${time}`,
                 errMatchPausedForDisconnect: '相手の再接続待ちです。',
@@ -2484,6 +2514,12 @@
                 msgColorsSwappedBy: (name) => `${name} 交换了执子颜色。`,
                 msgPairRenjuOnBy: (name) => `${name} 开启了双人连珠。`,
                 msgPairRenjuOffBy: (name) => `${name} 关闭了双人连珠。`,
+                msgSeatsResetBy: (name) => `${name} 重置了对局座位。`,
+                menuResetSeats: '座位重置',
+                confirmPairRenju: '要切换双人连珠吗？',
+                confirmResetSeats: '要重置对局座位吗？\n（所有人将移至观战席）',
+                confirmOk: '确定',
+                confirmCancel: '取消',
                 msgDisconnectTimeout: (name) => `${name} 未能在限定时间内重连。`,
                 playerDisconnected: (time) => `断线 ${time}`,
                 errMatchPausedForDisconnect: '正在等待对手重新连接。',
@@ -2613,6 +2649,12 @@
                 msgColorsSwappedBy: (name) => `${name} swapped the stone colors.`,
                 msgPairRenjuOnBy: (name) => `${name} turned on pair renju.`,
                 msgPairRenjuOffBy: (name) => `${name} turned off pair renju.`,
+                msgSeatsResetBy: (name) => `${name} reset the seats.`,
+                menuResetSeats: 'Reset Seats',
+                confirmPairRenju: 'Toggle pair renju?',
+                confirmResetSeats: 'Reset the seats?\n(Everyone moves to the spectator bench)',
+                confirmOk: 'OK',
+                confirmCancel: 'Cancel',
                 msgDisconnectTimeout: (name) => `${name} did not reconnect in time.`,
                 playerDisconnected: (time) => `OFF ${time}`,
                 errMatchPausedForDisconnect: 'Waiting for the opponent to reconnect.',
@@ -2707,6 +2749,7 @@
             elements.menuTakebackBtn.textContent = i18n('menuTakeback');
             elements.menuMoveConfirmBtn.textContent = i18n('menuMoveConfirm');
             elements.menuPairRenjuBtn.textContent = i18n('menuPairRenju');
+            elements.menuResetSeatsBtn.textContent = i18n('menuResetSeats');
             elements.menuSwapSeatColorsBtn.textContent = i18n('menuSwapSeatColors');
             elements.menuTimeSettingsBtn.textContent = i18n('menuTimeSettings');
             elements.uiTimeHandicapLabel.textContent = i18n('timeHandicap');
@@ -2739,7 +2782,9 @@
             
             elements.resignCancelBtn.textContent = i18n('resignCancel');
             elements.resignConfirmBtn.textContent = i18n('resignConfirm');
-            
+            elements.genericConfirmCancelBtn.textContent = i18n('confirmCancel');
+            elements.genericConfirmOkBtn.textContent = i18n('confirmOk');
+
             refreshLocalizedResultText();
             render();
             requestAnimationFrame(updateTimeSeatDividerPosition);
@@ -4806,6 +4851,7 @@
             elements.menuSwapSeatColorsBtn.hidden = isPlaying;
             elements.menuTimeSettingsBtn.hidden = isPlaying;
             elements.menuPairRenjuBtn.hidden = isPlaying;
+            elements.menuResetSeatsBtn.hidden = isPlaying;
             elements.actionMenuDivider.hidden = isPlaying;
             elements.menuResignBtn.hidden = !isPlaying;
             elements.menuDrawBtn.hidden = !isPlaying;
@@ -5092,10 +5138,35 @@
             sendAction({ kind: 'swap-seat-colors' });
         }
 
+        // Simple reusable confirm (reuses the board-anchored confirm dialog).
+        let genericConfirmOnOk = null;
+        function openConfirm(message, onOk) {
+            genericConfirmOnOk = typeof onOk === 'function' ? onOk : null;
+            elements.genericConfirmMessage.textContent = message;
+            elements.genericConfirm.hidden = false;
+            updateConfirmDialogPosition();
+        }
+        function closeGenericConfirm() {
+            elements.genericConfirm.hidden = true;
+            genericConfirmOnOk = null;
+        }
+
         function togglePairRenjuFromMenu() {
             closeControlMenus();
             if (!state || state.status === 'playing') return;
-            sendAction({ kind: 'pair-renju', enabled: !state.pairRenjuEnabled });
+            openConfirm(i18n('confirmPairRenju'), () => {
+                if (!state || state.status === 'playing') return;
+                sendAction({ kind: 'pair-renju', enabled: !state.pairRenjuEnabled });
+            });
+        }
+
+        function resetSeatsFromMenu() {
+            closeControlMenus();
+            if (!state || state.status === 'playing') return;
+            openConfirm(i18n('confirmResetSeats'), () => {
+                if (!state || state.status === 'playing') return;
+                sendAction({ kind: 'reset-seats' });
+            });
         }
 
         function cycleLanguage() {
@@ -5264,7 +5335,14 @@
         bindPointerPress(elements.menuMoveConfirmBtn, toggleMoveConfirm);
         bindPointerPress(elements.menuSwapSeatColorsBtn, swapSeatColorsFromMenu);
         bindPointerPress(elements.menuPairRenjuBtn, togglePairRenjuFromMenu);
+        bindPointerPress(elements.menuResetSeatsBtn, resetSeatsFromMenu);
         bindPointerPress(elements.menuTimeSettingsBtn, openTimeSettingsDialog);
+        bindPointerPress(elements.genericConfirmOkBtn, () => {
+            const onOk = genericConfirmOnOk;
+            closeGenericConfirm();
+            if (onOk) onOk();
+        });
+        bindPointerPress(elements.genericConfirmCancelBtn, closeGenericConfirm);
         bindPointerPress(document.getElementById('langBtn'), cycleLanguage);
         bindPointerPress(document.getElementById('soundBtn'), toggleSound);
         bindPointerPress(document.getElementById('coordsBtn'), toggleCoords);
