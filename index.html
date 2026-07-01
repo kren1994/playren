@@ -31,10 +31,6 @@
 
         html {
             -webkit-touch-callout: none;
-            /* Stop iOS Safari (iPad/iPhone) from auto-inflating text beyond the
-               CSS size — otherwise seat names balloon and cards grow on sit. */
-            -webkit-text-size-adjust: 100%;
-            text-size-adjust: 100%;
         }
         
         body {
@@ -1443,6 +1439,12 @@
                 width: min(100%, 680px);
                 max-width: 680px;
                 margin: 0 auto;
+            }
+            /* Player-name sizing was landscape-only, so iPad PORTRAIT inherited a
+               large default and the seat card grew on sit. Apply to both orients. */
+            .player-name {
+                font-size: 12px;
+                min-height: 1.1em;
             }
         }
 
