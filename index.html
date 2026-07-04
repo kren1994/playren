@@ -1070,6 +1070,22 @@
             border-radius: var(--radius-xl);
         }
 
+        /* One surface for the whole sidebar: sections separated by hairlines
+           and whitespace instead of nested boxes. */
+        .card.sidebar-card {
+            padding: 0;
+            overflow: hidden; /* clip section hover tint to the rounded corners */
+        }
+
+        .side-section {
+            padding: 14px 16px;
+            min-width: 0;
+        }
+
+        .side-section + .side-section {
+            border-top: 1px solid rgba(74, 54, 34, 0.1);
+        }
+
         .card h2 {
             margin: 0 0 12px;
             font-size: 15px;
@@ -1095,7 +1111,8 @@
         }
 
         #roomSummary {
-            padding-left: 12px;
+            padding-left: 0;
+            font-size: 13.5px;
         }
 
         .compact-time-editor {
@@ -1132,13 +1149,9 @@
         }
 
         .spectator-item {
-            padding: 10px 12px;
-            border-radius: 14px;
-            background: rgba(255, 255, 255, 0.66);
-            border: 1px solid rgba(74, 54, 34, 0.08);
+            padding: 3px 0;
             margin: 0;
-            font-size: 14px;
-            min-height: 40px;
+            font-size: 13.5px;
             box-sizing: border-box;
         }
 
@@ -1146,21 +1159,25 @@
         .log-list {
             list-style: none;
             margin: 0;
-            padding: 0;
             display: grid;
             align-content: start; /* ここで縦に伸びるのを防ぐ */
             gap: 10px;
             max-height: 260px;
             overflow: auto;
-            padding-right: 4px;
+            /* left inset lines the chat badges up with the compose badge */
+            padding: 0 4px 0 12px;
         }
 
-        .move-item,
-        .log-item {
+        .move-item {
             padding: 10px 12px;
             border-radius: 14px;
             background: rgba(255, 255, 255, 0.62);
             border: 1px solid rgba(74, 54, 34, 0.08);
+        }
+
+        /* Log rows are flat: whitespace does the separating, not boxes. */
+        .log-item {
+            padding: 2px 0;
         }
 
         .log-item {
@@ -1168,11 +1185,9 @@
             gap: 4px;
         }
 
-        /* Human chat: a light, full-width card. */
+        /* Human chat: a plain full-width row. */
         .log-item--chat {
             justify-self: stretch;
-            background: rgba(255, 255, 255, 0.55);
-            border-color: rgba(74, 54, 34, 0.07);
         }
 
         /* Indent the message under the name, leaving the badge gutter on the
@@ -1184,7 +1199,7 @@
         /* Consecutive messages from the same author drop the name header and
            tuck in close, so a run reads as one grouped block. */
         .log-item--grouped {
-            margin-top: -8px;
+            margin-top: -6px;
         }
 
         /* Initial badge tinted by the author's stone colour (spectator = neutral). */
@@ -1226,9 +1241,7 @@
         /* Join / leave / reconnect / disconnect: faint left-aligned note line. */
         .log-item--note {
             justify-self: stretch;
-            padding: 2px 4px 2px 6px;
-            background: transparent;
-            border: 0;
+            padding: 2px 4px 2px 0;
             color: var(--muted);
         }
 
@@ -1249,9 +1262,7 @@
            Left padding matches the chat badge edge (12px) so it lines up. */
         .log-item--result {
             justify-self: stretch;
-            padding: 3px 6px 3px 12px;
-            background: transparent;
-            border: 0;
+            padding: 3px 6px 3px 0;
         }
 
         .log-item--result .log-body {
@@ -1305,14 +1316,14 @@
                badge and input line up vertically with the chat badges/messages */
             padding: 4px 6px 4px 12px;
             border-radius: 999px;
-            background: rgba(255, 255, 255, 0.45);
-            border: 1px solid rgba(74, 54, 34, 0.08);
-            transition: border-color 0.18s ease, background 0.18s ease;
+            background: rgba(74, 54, 34, 0.055);
+            border: 0;
+            transition: background 0.18s ease, box-shadow 0.18s ease;
         }
 
         .log-compose:focus-within {
-            border-color: rgba(23, 89, 74, 0.3);
-            background: rgba(255, 255, 255, 0.75);
+            background: rgba(255, 255, 255, 0.8);
+            box-shadow: inset 0 0 0 1px rgba(23, 89, 74, 0.25);
         }
 
         /* Send only lights up once there is something to send. */
@@ -1484,14 +1495,21 @@
                 max-height: min(calc(100vh - 24px), 760px);
                 overflow-y: auto; 
             }
-            .sidebar > .card:nth-child(1) {
-                flex: 0 1 420px;
+            .sidebar > .sidebar-card {
                 display: flex;
                 flex-direction: column;
                 min-height: 0;
-                max-height: 420px;
             }
-            .sidebar > .card:nth-child(1) .log-list {
+            /* Chat keeps a stable height so the sidebar balances the board;
+               the list fills it and scrolls internally. */
+            .side-chat {
+                height: 420px;
+                flex: 0 1 auto;
+                display: flex;
+                flex-direction: column;
+                min-height: 0;
+            }
+            .side-chat .log-list {
                 flex: 1 1 auto;
                 max-height: none;
                 overflow-y: auto;
@@ -1945,27 +1963,29 @@
                 </section>
 
                 <aside class="sidebar">
-                    <section class="card">
-                        <h2 id="uiChatTitle">チャット</h2>
-                        <div class="log-compose">
-                            <span id="composeAvatar" class="log-avatar" aria-hidden="true"></span>
-                            <input id="logCommentInput" type="text" maxlength="140" placeholder="コメントを書く">
-                            <button id="sendLogCommentBtn" class="log-send" type="button">投稿</button>
-                        </div>
-                        <ul id="logList" class="log-list"></ul>
-                    </section>
+                    <div class="card sidebar-card">
+                        <section class="side-section side-chat">
+                            <h2 id="uiChatTitle">チャット</h2>
+                            <div class="log-compose">
+                                <span id="composeAvatar" class="log-avatar" aria-hidden="true"></span>
+                                <input id="logCommentInput" type="text" maxlength="140" placeholder="コメントを書く">
+                                <button id="sendLogCommentBtn" class="log-send" type="button">投稿</button>
+                            </div>
+                            <ul id="logList" class="log-list"></ul>
+                        </section>
 
-                    <section id="spectatorCard" class="card spectator-card">
-                        <h2 id="uiSpectatorTitle">観戦席</h2>
-                        <ul id="spectatorList" class="spectator-list"></ul>
-                    </section>
+                        <section id="spectatorCard" class="side-section spectator-card">
+                            <h2 id="uiSpectatorTitle">観戦席</h2>
+                            <ul id="spectatorList" class="spectator-list"></ul>
+                        </section>
 
-                    <section class="card info-card">
-                        <h2 id="uiInfoTitle">対局情報</h2>
-                        <div class="info-topline">
-                            <p id="roomSummary">5 分 + 3 秒</p>
-                        </div>
-                    </section>
+                        <section class="side-section info-card">
+                            <h2 id="uiInfoTitle">対局情報</h2>
+                            <div class="info-topline">
+                                <p id="roomSummary">5 分 + 3 秒</p>
+                            </div>
+                        </section>
+                    </div>
                 </aside>
             </main>
         </section>
