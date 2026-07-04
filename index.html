@@ -9,7 +9,7 @@
     <style>
         :root {
             --bg: #f3efe6;
-            --bg-accent: #e2d5bc;
+            --bg-accent: #e8ddc9;
             --panel: rgba(255, 252, 246, 0.88);
             --panel-strong: #fffaf1;
             --line: rgba(74, 54, 34, 0.18);
@@ -238,11 +238,13 @@
             gap: 12px;
         }
 
+        /* Paper-flat: the page background IS the surface. Panels and cards
+           keep only their layout role; floating layers (menus, dialogs,
+           toasts, chips) are the only elements that carry their own surface. */
         .panel,
         .card {
-            border: 1px solid var(--line);
-            background: var(--panel);
-            backdrop-filter: blur(10px);
+            border: 0;
+            background: transparent;
         }
 
         .player-name,
@@ -356,12 +358,20 @@
         }
 
         /* Seats form a flat strip in the control-bar grammar: no boxes, one
-           inset hairline between the black and white seats. */
+           inset hairline between the black and white seats. Both strips hug
+           the board's actual width (published by resizeBoard). */
         .players {
             display: grid;
             grid-template-columns: repeat(2, minmax(0, 1fr));
             gap: 0;
             margin-bottom: 5px;
+        }
+
+        .players,
+        .board-controls {
+            width: min(100%, var(--board-size, 100%));
+            margin-left: auto;
+            margin-right: auto;
         }
 
         .players .player-card + .player-card::after {
@@ -963,20 +973,23 @@
             margin: 0 auto;
         }
 
+        /* The board is the one raised object on the page: a plank resting on
+           paper, same idiom as the lobby mark. */
         .board-wrap {
             position: relative;
-            border-radius: 26px;
+            border-radius: 6px;
             overflow: visible;
             padding: 0;
             box-sizing: border-box;
             background: transparent;
-            box-shadow: none;
+            box-shadow: 0 16px 40px rgba(63, 43, 21, 0.18);
         }
 
         #boardCanvas {
             width: 100%;
             height: 100%;
             display: block;
+            border-radius: 6px;
             cursor: pointer;
             touch-action: none; /* ズーム等を防ぐ */
         }
@@ -985,7 +998,6 @@
             display: grid;
             grid-template-columns: auto minmax(0, 1fr) auto;
             gap: 8px;
-            width: 100%;
             box-sizing: border-box;
             align-items: center;
             margin-top: 5px;
@@ -1651,7 +1663,7 @@
             }
             .players,
             .board-controls {
-                width: min(100%, 680px);
+                width: min(100%, var(--board-size, 680px));
                 max-width: 680px;
                 margin-left: auto;
                 margin-right: auto;
@@ -1732,9 +1744,8 @@
 
             .players {
                 grid-template-columns: repeat(2, minmax(0, 1fr));
-                gap: 6px;
+                gap: 0;
                 margin-bottom: 8px;
-                padding: 0 4px;
             }
 
             .layout {
@@ -1815,9 +1826,7 @@
                 gap: 10px;
             }
 
-            /* The outer panel is transparent at this width, so the bar keeps
-               its own light surface against the page background. */
-            .board-controls { padding: 4px 6px; gap: 4px; margin-top: 4px; border-radius: 12px; background: var(--panel); }
+            .board-controls { padding: 4px 6px; gap: 4px; margin-top: 4px; border-radius: 12px; }
             .menu-icon-btn { width: 42px; height: 46px; }
             .nav-btn { height: 46px; }
             /* When space runs out (<360px), let the rarely-used ±4 buttons
@@ -4503,6 +4512,9 @@
 
             wrap.style.width = size + 'px';
             wrap.style.height = size + 'px';
+            // Publish the board's edge so the flat seat/control strips can
+            // align themselves to it (they have no panel to contain them).
+            document.documentElement.style.setProperty('--board-size', size + 'px');
 
             const dpr = window.devicePixelRatio || 1;
             elements.boardCanvas.width = Math.floor(size * dpr);
