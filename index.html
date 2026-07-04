@@ -1062,8 +1062,12 @@
             padding: 0; display: inline-flex; align-items: center; justify-content: center;
             text-align: center; line-height: 1; height: 42px;
         }
+        /* Step (single move) is tapped the most and gets the widest target;
+           reset (jump to latest) sits in between; branch (±4) keeps its
+           original width. */
         .nav-btn.branch { width: 3.5em; letter-spacing: -0.08em; }
-        .nav-btn.step { width: 3.5em; }
+        .nav-btn.step { width: 4.6em; }
+        .nav-btn.reset { width: 3.8em; }
 
         .sidebar {
             display: grid;
@@ -1742,7 +1746,8 @@
             .menu-icon-btn { width: 42px; height: 42px; }
             .nav-btn { height: 42px; }
             .nav-btn.branch { width: 2.8em; }
-            .nav-btn.step { width: 2.8em; }
+            .nav-btn.step { width: 3.6em; }
+            .nav-btn.reset { width: 3em; }
 
             .toast {
                 right: 10px;
@@ -1905,7 +1910,7 @@
                         <div class="ctrl-center">
                             <button class="nav-btn branch" type="button" onclick="goMoves(-4)">&lt;&lt;</button>
                             <button class="nav-btn step" type="button" onclick="goMoves(-1)">&lt;</button>
-                            <button class="nav-btn step" type="button" onclick="resetMovesView()" aria-label="最新/終局図">
+                            <button class="nav-btn reset" type="button" onclick="resetMovesView()" aria-label="最新/終局図">
                                 <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
                                     <path d="M17.65 6.35A7.95 7.95 0 0 0 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08A5.99 5.99 0 0 1 12 18c-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/>
                                 </svg>
