@@ -1111,7 +1111,7 @@
         }
 
         #roomSummary {
-            padding-left: 0;
+            padding-left: 12px; /* line up with the chat column's left edge */
             font-size: 13.5px;
         }
 
@@ -1139,13 +1139,14 @@
         .spectator-list {
             list-style: none;
             margin: 0;
-            padding: 0;
             display: grid;
             align-content: start;
             gap: 8px;
             max-height: 88px;
             overflow-y: auto;
-            padding-right: 4px;
+            /* same left inset as the chat column, so all sidebar text shares
+               one baseline */
+            padding: 0 4px 0 12px;
         }
 
         .spectator-item {
