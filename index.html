@@ -4,6 +4,7 @@
     <link rel="icon" href="data:,">
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="theme-color" content="#f3efe6">
     <title>playren | 対局所</title>
     <style>
         :root {
@@ -31,7 +32,21 @@
 
         html {
             -webkit-touch-callout: none;
+            -webkit-font-smoothing: antialiased;
         }
+
+        /* Keyboard focus: one consistent accent ring app-wide. */
+        :focus-visible {
+            outline: 2px solid rgba(23, 89, 74, 0.55);
+            outline-offset: 2px;
+        }
+
+        /* Motion preference is honored at each animation's declaration site:
+           decorative animations are gated behind (prefers-reduced-motion:
+           no-preference). Do NOT add a universal `* { transition-duration }`
+           override here — transition-property defaults to `all`, so it turns
+           every layout change into a (tiny) async transition and breaks
+           resizeBoard's measurements while crossing breakpoints. */
         
         body {
             margin: 0;
@@ -60,35 +75,77 @@
             display: none !important;
         }
 
+        /* Lobby: one vertically centered composition — board mark, wordmark,
+           title, then the join card. No chrome it doesn't need. */
         .lobby-screen {
-            display: grid;
-            gap: 18px;
+            position: relative;
+            min-height: calc(100dvh - 2 * var(--shell-padding) - 2 * clamp(6px, 1.8vw, 18px));
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: clamp(22px, 4vh, 34px);
+            padding-bottom: 4vh; /* slight lift: optical centre sits above true centre */
+            box-sizing: border-box;
         }
 
-        .lobby-head {
-            position: relative;
-            padding: 20px 22px;
-            border-radius: var(--radius-xl);
-            border: 1px solid var(--line);
-            background: rgba(255, 252, 246, 0.72);
-            backdrop-filter: blur(12px);
-            box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.45);
+        .lobby-hero {
+            display: grid;
+            justify-items: center;
+            gap: 6px;
             text-align: center;
+        }
+
+        .lobby-board {
+            width: clamp(76px, 12vw, 92px);
+            height: auto;
+            margin-bottom: 12px;
+            filter: drop-shadow(0 14px 26px rgba(63, 43, 21, 0.22));
         }
 
         .lobby-title {
             margin: 0;
-            padding: 0 52px;
-            font-size: clamp(30px, 4.6vw, 48px);
-            line-height: 0.98;
-            letter-spacing: -0.04em;
+            font-size: clamp(32px, 5vw, 42px);
+            font-weight: 700;
+            line-height: 1.1;
+            letter-spacing: 0.14em;
+            text-indent: 0.14em; /* re-center: letter-spacing adds a trailing gap */
+        }
+
+        /* Small wordmark above the title: quiet brand identity. */
+        .lobby-kicker {
+            margin: 0;
+            font-size: 12px;
+            font-weight: 700;
+            letter-spacing: 0.34em;
+            text-indent: 0.34em;
+            text-transform: lowercase;
+            color: var(--muted);
+        }
+
+        /* Gentle rise-in when the lobby appears. */
+        @media (prefers-reduced-motion: no-preference) {
+            .lobby-hero,
+            .lobby-grid .panel {
+                animation: lobby-rise 0.45s cubic-bezier(0.2, 0.7, 0.3, 1) backwards;
+            }
+
+            .lobby-grid .panel {
+                animation-delay: 0.08s;
+            }
+
+            @keyframes lobby-rise {
+                from {
+                    opacity: 0;
+                    transform: translateY(10px);
+                }
+            }
         }
 
         .lobby-lang-btn {
             position: absolute;
-            top: 50%;
-            right: 18px;
-            transform: translateY(-50%);
+            top: 4px;
+            right: 4px;
             min-width: 42px;
             height: 42px;
             padding: 0 12px;
@@ -110,7 +167,7 @@
 
         .lobby-lang-btn:hover {
             background: rgba(255, 255, 255, 1);
-            transform: translateY(calc(-50% - 1px));
+            transform: translateY(-1px);
         }
 
         .language-icon {
@@ -130,9 +187,14 @@
             justify-content: center;
         }
         
+        .lobby-grid {
+            width: 100%;
+        }
+
         .lobby-grid .panel {
             width: 100%;
-            max-width: 360px;
+            max-width: 372px;
+            padding: 22px 22px 16px;
         }
 
         .lobby-help {
@@ -155,6 +217,18 @@
         .game-screen {
             display: grid;
             gap: 14px;
+        }
+
+        /* Opacity-only fade when entering the room (transform would disturb
+           the board-size measurement on first layout). */
+        @media (prefers-reduced-motion: no-preference) {
+            .game-screen {
+                animation: screen-fade 0.3s ease;
+            }
+
+            @keyframes screen-fade {
+                from { opacity: 0; }
+            }
         }
 
         .game-topbar {
@@ -246,6 +320,10 @@
             transform: translateY(-1px);
         }
 
+        .button:active {
+            transform: translateY(0) scale(0.985);
+        }
+
         .button:disabled {
             opacity: 0.45;
             cursor: not-allowed;
@@ -255,6 +333,15 @@
         .button-primary {
             background: linear-gradient(135deg, var(--accent), var(--accent-strong));
             color: #f9fbf8;
+            box-shadow: 0 4px 14px rgba(15, 67, 56, 0.22);
+        }
+
+        .button-primary:hover {
+            box-shadow: 0 7px 18px rgba(15, 67, 56, 0.26);
+        }
+
+        .button-primary:active {
+            box-shadow: 0 2px 8px rgba(15, 67, 56, 0.2);
         }
 
         .button-secondary {
@@ -284,6 +371,7 @@
             display: flex;
             align-items: center;
             gap: 8px;
+            transition: background-color 0.25s ease, border-color 0.25s ease, box-shadow 0.25s ease;
         }
 
         .player-card.active {
@@ -448,7 +536,30 @@
             font-weight: 800;
             letter-spacing: -0.04em;
             font-variant-numeric: tabular-nums;
+            transition: color 0.3s ease;
         }
+
+        /* Time pressure: amber under 30s, red under 5s; the running clock
+           breathes so the urgency is visible in peripheral vision. */
+        .player-timer.time-low {
+            color: var(--warn);
+        }
+
+        .player-timer.time-critical {
+            color: var(--danger);
+        }
+
+        @media (prefers-reduced-motion: no-preference) {
+            .player-timer.time-critical.time-running {
+                animation: clock-breathe 1s ease-in-out infinite;
+            }
+
+            @keyframes clock-breathe {
+                0%, 100% { opacity: 1; }
+                50% { opacity: 0.45; }
+            }
+        }
+
 
         .player-ready {
             display: inline-flex;
@@ -495,6 +606,18 @@
             padding: 20px;
             background: rgba(0, 0, 0, 0.05);
             z-index: 30;
+        }
+
+        @media (prefers-reduced-motion: no-preference) {
+            .confirm-backdrop {
+                animation: dialog-fade 0.16s ease-out;
+            }
+
+            /* Opacity only: the card is positioned via transform, so animating
+               transform here would knock it out of place. */
+            @keyframes dialog-fade {
+                from { opacity: 0; }
+            }
         }
 
         .confirm-card {
@@ -879,6 +1002,7 @@
             transition: transform 0.18s ease, background 0.18s ease;
         }
         .board-controls button:hover { background: rgba(255, 255, 255, 1); transform: translateY(-1px); }
+        .board-controls button:active { transform: scale(0.95); }
         .board-controls button:disabled { opacity: 0.45; cursor: not-allowed; transform: none; }
         
         .menu-icon-btn {
@@ -891,6 +1015,15 @@
             position: absolute; bottom: calc(100% + 8px); min-width: 144px; display: flex; flex-direction: column; gap: 0;
             padding: 5px; border: 1px solid var(--line); border-radius: 14px; background: rgba(255, 252, 246, 0.98);
             box-shadow: var(--shadow); z-index: 20;
+        }
+        @media (prefers-reduced-motion: no-preference) {
+            .control-menu-popup {
+                transform-origin: bottom center;
+                animation: menu-pop 0.16s cubic-bezier(0.2, 0.8, 0.3, 1);
+            }
+            @keyframes menu-pop {
+                from { opacity: 0; transform: translateY(5px) scale(0.97); }
+            }
         }
         .control-menu-popup[hidden] { display: none !important; }
         .control-menu.align-right .control-menu-popup { right: 0; }
@@ -1181,6 +1314,17 @@
             border-radius: 999px;
             background: rgba(255, 255, 255, 0.45);
             border: 1px solid rgba(74, 54, 34, 0.08);
+            transition: border-color 0.18s ease, background 0.18s ease;
+        }
+
+        .log-compose:focus-within {
+            border-color: rgba(23, 89, 74, 0.3);
+            background: rgba(255, 255, 255, 0.75);
+        }
+
+        /* Send only lights up once there is something to send. */
+        .log-compose.has-text .log-send {
+            color: var(--accent);
         }
 
         .log-compose input {
@@ -1613,18 +1757,41 @@
 <body>
     <div class="app-shell">
         <section id="lobbyScreen" class="screen lobby-screen">
-            <header class="lobby-head">
+            <button id="lobbyLangBtn" class="lobby-lang-btn" type="button" aria-label="言語">
+                <svg class="language-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                    <circle cx="12" cy="12" r="10"></circle>
+                    <path d="M2 12h20"></path>
+                    <path d="M12 2a15.3 15.3 0 0 1 0 20"></path>
+                    <path d="M12 2a15.3 15.3 0 0 0 0 20"></path>
+                </svg>
+                <span class="language-code">JA</span>
+            </button>
+
+            <div class="lobby-hero">
+                <svg class="lobby-board" viewBox="0 0 96 96" aria-hidden="true">
+                    <defs>
+                        <linearGradient id="lobbyWood" x1="0" y1="0" x2="1" y2="1">
+                            <stop offset="0" stop-color="#e3c98c"></stop>
+                            <stop offset="1" stop-color="#bc8f51"></stop>
+                        </linearGradient>
+                    </defs>
+                    <rect x="1.5" y="1.5" width="93" height="93" rx="16" fill="url(#lobbyWood)"></rect>
+                    <g stroke="rgba(63, 42, 19, 0.5)" stroke-width="1">
+                        <path d="M16 16h64M16 32h64M16 48h64M16 64h64M16 80h64"></path>
+                        <path d="M16 16v64M32 16v64M48 16v64M64 16v64M80 16v64"></path>
+                    </g>
+                    <!-- 長星の3手目まで: 黒・白・黒が斜めに並ぶ -->
+                    <g fill="#26211e">
+                        <circle cx="32" cy="64" r="6.8"></circle>
+                        <circle cx="64" cy="32" r="6.8"></circle>
+                    </g>
+                    <g fill="#f8f5ef" stroke="rgba(47, 36, 24, 0.4)" stroke-width="1">
+                        <circle cx="48" cy="48" r="6.8"></circle>
+                    </g>
+                </svg>
+                <p class="lobby-kicker" aria-hidden="true">playren</p>
                 <h1 class="lobby-title" id="uiLobbyTitle">対局所</h1>
-                <button id="lobbyLangBtn" class="lobby-lang-btn" type="button" aria-label="言語">
-                    <svg class="language-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-                        <circle cx="12" cy="12" r="10"></circle>
-                        <path d="M2 12h20"></path>
-                        <path d="M12 2a15.3 15.3 0 0 1 0 20"></path>
-                        <path d="M12 2a15.3 15.3 0 0 0 0 20"></path>
-                    </svg>
-                    <span class="language-code">JA</span>
-                </button>
-            </header>
+            </div>
 
             <div class="lobby-grid">
                 <section class="panel">
@@ -3646,6 +3813,21 @@
             return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
         }
 
+        const TIME_LOW_MS = 30000;
+        const TIME_CRITICAL_MS = 5000;
+
+        // Colour the clock as it runs down (amber → red); the running clock
+        // additionally breathes via .time-running (see CSS).
+        function updateTimerUrgency(element, peerId) {
+            const playing = Boolean(state && state.status === 'playing' && peerId);
+            const remaining = playing ? getDisplayRemainingMs(peerId) : Infinity;
+            const running = playing
+                && getClockKeyForPeer(state.clocks.activePeerId) === getClockKeyForPeer(peerId);
+            element.classList.toggle('time-low', playing && remaining <= TIME_LOW_MS && remaining > TIME_CRITICAL_MS);
+            element.classList.toggle('time-critical', playing && remaining <= TIME_CRITICAL_MS);
+            element.classList.toggle('time-running', running);
+        }
+
         function getDisplayRemainingMs(peerId) {
             if (!state || !peerId) return 0;
             const clockKey = getClockKeyForPeer(peerId);
@@ -4505,11 +4687,6 @@
             ctx.fillStyle = boardGradient;
             ctx.fillRect(0, 0, size, size);
 
-            ctx.fillStyle = 'rgba(255,255,255,0.08)';
-            for (let index = 0; index < 8; index += 1) {
-                ctx.fillRect(index * size / 8, 0, 1, size);
-            }
-
             ctx.save();
             ctx.strokeStyle = 'rgba(63, 42, 19, 0.9)';
             // Scale line width to the cell size so the grid stays light on small
@@ -4738,6 +4915,8 @@
             const whitePeerId = getTeamPeerIds('white')[0] || '';
             elements.blackPlayerTimer.textContent = blackPeerId ? formatTime(getDisplayRemainingMs(blackPeerId)) : '';
             elements.whitePlayerTimer.textContent = whitePeerId ? formatTime(getDisplayRemainingMs(whitePeerId)) : '';
+            updateTimerUrgency(elements.blackPlayerTimer, blackPeerId);
+            updateTimerUrgency(elements.whitePlayerTimer, whitePeerId);
 
             if (state) ensureSeatColors();
             const blackCardColor = state?.seatColors?.black || 'black';
@@ -5014,6 +5193,13 @@
             }
             sendAction({ kind: 'comment', text });
             elements.logCommentInput.value = '';
+            updateComposeHasText();
+        }
+
+        function updateComposeHasText() {
+            const composeRow = elements.logCommentInput.closest('.log-compose');
+            if (!composeRow) return;
+            composeRow.classList.toggle('has-text', Boolean(elements.logCommentInput.value.trim()));
         }
 
         function render() {
@@ -5280,6 +5466,13 @@
         elements.roomCodeInput.addEventListener('keydown', (e) => {
             if (e.key === 'Enter') joinRoom();
         });
+        // Enter on the name field flows forward: to the room code, or straight
+        // to joining when the code is already filled in.
+        elements.nameInput.addEventListener('keydown', (e) => {
+            if (e.key !== 'Enter' || e.isComposing) return;
+            if (elements.roomCodeInput.value.trim()) joinRoom();
+            else elements.roomCodeInput.focus();
+        });
         
         elements.leaveRoomBtn.addEventListener('click', leaveRoom);
         function bindSeatSurface(element, handler) {
@@ -5359,6 +5552,7 @@
         bindPointerPress(document.getElementById('moveNumBtn'), toggleMoveNumbers);
         bindPointerPress(document.getElementById('stoneShadingBtn'), toggleStoneShading);
         elements.sendLogCommentBtn.addEventListener('click', submitLogComment);
+        elements.logCommentInput.addEventListener('input', updateComposeHasText);
         elements.logCommentInput.addEventListener('keydown', (event) => {
             if (event.key !== 'Enter' || event.isComposing) return;
             event.preventDefault();
@@ -5373,6 +5567,7 @@
             scheduleMobilePlayerNameSize();
             requestAnimationFrame(updateTimeSeatDividerPosition);
         });
+
 
         window.addEventListener('pagehide', () => {
             notifyHostLeaving();
