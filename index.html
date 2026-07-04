@@ -539,25 +539,14 @@
             transition: color 0.3s ease;
         }
 
-        /* Time pressure: amber under 30s, red under 5s; the running clock
-           breathes so the urgency is visible in peripheral vision. */
+        /* Time pressure: amber under 10s, red under 5s. Colour only — no
+           blinking, so a player under pressure can stay focused on the board. */
         .player-timer.time-low {
             color: var(--warn);
         }
 
         .player-timer.time-critical {
             color: var(--danger);
-        }
-
-        @media (prefers-reduced-motion: no-preference) {
-            .player-timer.time-critical.time-running {
-                animation: clock-breathe 1s ease-in-out infinite;
-            }
-
-            @keyframes clock-breathe {
-                0%, 100% { opacity: 1; }
-                50% { opacity: 0.45; }
-            }
         }
 
 
@@ -3820,19 +3809,15 @@
             return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
         }
 
-        const TIME_LOW_MS = 30000;
+        const TIME_LOW_MS = 10000;
         const TIME_CRITICAL_MS = 5000;
 
-        // Colour the clock as it runs down (amber → red); the running clock
-        // additionally breathes via .time-running (see CSS).
+        // Colour the clock as it runs down (amber → red).
         function updateTimerUrgency(element, peerId) {
             const playing = Boolean(state && state.status === 'playing' && peerId);
             const remaining = playing ? getDisplayRemainingMs(peerId) : Infinity;
-            const running = playing
-                && getClockKeyForPeer(state.clocks.activePeerId) === getClockKeyForPeer(peerId);
             element.classList.toggle('time-low', playing && remaining <= TIME_LOW_MS && remaining > TIME_CRITICAL_MS);
             element.classList.toggle('time-critical', playing && remaining <= TIME_CRITICAL_MS);
-            element.classList.toggle('time-running', running);
         }
 
         function getDisplayRemainingMs(peerId) {
