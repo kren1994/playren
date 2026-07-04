@@ -4544,21 +4544,59 @@
             ctx.restore();
         }
 
-        // Subtle stone gradient: a soft top-left highlight fading to a slightly
-        // darker rim, for a gentle glass-bead sheen (kept understated).
+        // Subtle stone gradient: a soft top-left highlight rolling off into a
+        // darker rim. The gradient runs slightly past the stone edge (r * 1.04)
+        // so the contour dissolves instead of ending on a hard band.
         function createStoneFill(x, y, r, isBlack) {
             if (!stoneShadingEnabled) return isBlack ? '#20201e' : '#f7f4ee';
-            const g = ctx.createRadialGradient(x - r * 0.32, y - r * 0.37, r * 0.08, x, y, r);
+            const g = ctx.createRadialGradient(x - r * 0.36, y - r * 0.42, r * 0.06, x, y, r * 1.04);
             if (isBlack) {
-                g.addColorStop(0, '#393530');
-                g.addColorStop(0.55, '#23201d');
-                g.addColorStop(1, '#171411');
+                g.addColorStop(0, '#4e4941');
+                g.addColorStop(0.35, '#312e29');
+                g.addColorStop(0.75, '#201d19');
+                g.addColorStop(1, '#14110d');
             } else {
                 g.addColorStop(0, '#ffffff');
-                g.addColorStop(0.7, '#f4efe6');
-                g.addColorStop(1, '#e7ddcb');
+                g.addColorStop(0.45, '#faf6ec');
+                g.addColorStop(0.85, '#eee4d0');
+                g.addColorStop(1, '#dccfb6');
             }
             return g;
+        }
+
+        // Stone body. Shading ON: a warm drop shadow and no hard outline, so
+        // the stone reads as sitting on the board rather than drawn on it.
+        // Shading OFF: the original flat disc with a thin ring (unchanged).
+        function drawStoneBody(x, y, r, isBlack) {
+            ctx.beginPath();
+            ctx.arc(x, y, r, 0, Math.PI * 2);
+            ctx.fillStyle = createStoneFill(x, y, r, isBlack);
+
+            if (!stoneShadingEnabled) {
+                ctx.fill();
+                ctx.lineWidth = Math.max(0.6, Math.min(1, r * 0.062));
+                ctx.strokeStyle = '#333';
+                ctx.stroke();
+                return;
+            }
+
+            ctx.save();
+            // Canvas shadow units ignore the CTM, so scale by DPR to keep the
+            // shadow proportional on high-density screens.
+            const dpr = window.devicePixelRatio || 1;
+            ctx.shadowColor = 'rgba(38, 24, 10, 0.32)';
+            ctx.shadowBlur = r * 0.45 * dpr;
+            ctx.shadowOffsetY = r * 0.16 * dpr;
+            ctx.fill();
+            ctx.restore();
+
+            // Hairline rim instead of the hard outline: just enough edge to
+            // keep white stones defined against pale board themes.
+            ctx.beginPath();
+            ctx.arc(x, y, r - 0.25, 0, Math.PI * 2);
+            ctx.lineWidth = Math.max(0.5, r * 0.03);
+            ctx.strokeStyle = isBlack ? 'rgba(0, 0, 0, 0.2)' : 'rgba(74, 54, 34, 0.28)';
+            ctx.stroke();
         }
 
         function drawStones() {
@@ -4581,13 +4619,7 @@
                     && move.y === lastMoveHighlight.y
                     && move.number === lastMoveHighlight.number;
                 
-                ctx.beginPath(); 
-                ctx.arc(x, y, cell * 0.45, 0, Math.PI * 2);
-                ctx.fillStyle = createStoneFill(x, y, cell * 0.45, move.color === 'black');
-                ctx.fill();
-                ctx.lineWidth = Math.max(0.6, Math.min(1, cell * 0.028));
-                ctx.strokeStyle = '#333';
-                ctx.stroke();
+                drawStoneBody(x, y, cell * 0.45, move.color === 'black');
 
                 if (isHighlightedLastMove) {
                     ctx.save();
@@ -4602,17 +4634,27 @@
                 if (showMoveNumbers) {
                     const moveText = String(index + 1);
                     const moveTextY = y + Math.max(1, Math.round(cell * 0.03));
-                    ctx.fillStyle = move.color === 'black' ? '#eee' : '#333';
                     const textLen = moveText.length;
                     const baseRatio = textLen >= 3 ? 0.3 : (textLen === 2 ? 0.38 : 0.41);
                     const fontSize = Math.max(10, Math.floor(cell * baseRatio));
                     ctx.font = `600 ${fontSize}px 'Segoe UI', 'Yu Gothic UI', Meiryo, sans-serif`;
-                    ctx.textAlign = 'center'; 
+                    ctx.textAlign = 'center';
                     ctx.textBaseline = 'middle';
-                    ctx.lineWidth = 2.5;
-                    ctx.strokeStyle = move.color === 'black' ? 'rgba(0, 0, 0, 0.55)' : 'rgba(255, 255, 255, 0.9)';
-                    ctx.strokeText(moveText, x, moveTextY);
-                    ctx.fillText(moveText, x, moveTextY);
+                    if (stoneShadingEnabled) {
+                        // Shaded stones: no halo — a translucent, ink-like
+                        // numeral lets the stone's sheen show through, so the
+                        // digit reads as printed on the stone, not pasted on.
+                        ctx.fillStyle = move.color === 'black'
+                            ? 'rgba(244, 238, 228, 0.85)'
+                            : 'rgba(66, 51, 34, 0.8)';
+                        ctx.fillText(moveText, x, moveTextY);
+                    } else {
+                        ctx.fillStyle = move.color === 'black' ? '#eee' : '#333';
+                        ctx.lineWidth = 2.5;
+                        ctx.strokeStyle = move.color === 'black' ? 'rgba(0, 0, 0, 0.55)' : 'rgba(255, 255, 255, 0.9)';
+                        ctx.strokeText(moveText, x, moveTextY);
+                        ctx.fillText(moveText, x, moveTextY);
+                    }
                 }
             });
 
@@ -4632,7 +4674,9 @@
                 if (showMoveNumbers) {
                     const moveText = String(pendingMove.number);
                     const moveTextY = y + Math.max(1, Math.round(cell * 0.03));
-                    ctx.fillStyle = pendingMove.color === 'black' ? '#eee' : '#333';
+                    ctx.fillStyle = stoneShadingEnabled
+                        ? (pendingMove.color === 'black' ? 'rgba(244, 238, 228, 0.85)' : 'rgba(66, 51, 34, 0.8)')
+                        : (pendingMove.color === 'black' ? '#eee' : '#333');
                     const textLen = moveText.length;
                     const baseRatio = textLen >= 3 ? 0.3 : (textLen === 2 ? 0.38 : 0.45);
                     const fontSize = Math.max(10, Math.floor(cell * baseRatio));
