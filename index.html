@@ -964,7 +964,9 @@
             box-sizing: border-box;
             align-items: center;
             margin-top: 5px;
-            padding: 8px;
+            /* Slim vertical padding: the buttons absorb it as tap height, so
+               the bar's outer height stays what it was with boxed buttons. */
+            padding: 4px 8px;
             background: var(--panel);
             border: 1px solid var(--line);
             border-radius: var(--radius-lg);
@@ -973,14 +975,40 @@
 
         .ctrl-left, .ctrl-center, .ctrl-right { display: flex; align-items: center; }
         .ctrl-left, .ctrl-right { gap: 6px; }
-        .ctrl-center { gap: 6px; justify-content: center; min-width: 0; }
+        /* Arrows sit edge-to-edge; hairlines (not gaps) separate them. */
+        .ctrl-center { gap: 0; justify-content: center; min-width: 0; }
         .control-menu { position: relative; }
-        
+
+        /* Hairlines fencing off the two menus from the arrow group. The
+           pseudo-elements become flex items, inset vertically per design. */
+        .ctrl-left::after,
+        .ctrl-right::before {
+            content: "";
+            width: 1px;
+            align-self: stretch;
+            margin: 12px 0;
+            background: rgba(74, 54, 34, 0.1);
+        }
+        /* The menu buttons run right up to their hairline: the old 8px gap is
+           absorbed as tap width, while padding + alignment keep the icon at
+           exactly its previous position. */
+        .ctrl-left .menu-icon-btn {
+            width: 50px;
+            justify-content: flex-start;
+            padding-left: 10px;
+        }
+        .ctrl-right .menu-icon-btn {
+            width: 50px;
+            justify-content: flex-end;
+            padding-right: 10px;
+        }
+
+        /* Flat buttons: no box, just a soft tint on hover/press. */
         .board-controls button {
             padding: 10px 12px;
-            border: 1px solid rgba(74, 54, 34, 0.12);
-            background: rgba(255, 255, 255, 0.85);
-            border-radius: 12px;
+            border: 0;
+            background: transparent;
+            border-radius: 10px;
             cursor: pointer;
             font-size: 14px;
             font-weight: bold;
@@ -988,16 +1016,28 @@
             white-space: nowrap;
             user-select: none;
             color: var(--text);
-            transition: transform 0.18s ease, background 0.18s ease;
+            transition: background 0.18s ease, transform 0.18s ease;
         }
-        .board-controls button:hover { background: rgba(255, 255, 255, 1); transform: translateY(-1px); }
-        .board-controls button:active { transform: scale(0.95); }
-        .board-controls button:disabled { opacity: 0.45; cursor: not-allowed; transform: none; }
+        .board-controls button:hover { background: rgba(23, 89, 74, 0.07); }
+        .board-controls button:active { background: rgba(23, 89, 74, 0.12); transform: scale(0.96); }
+        .board-controls button:disabled { opacity: 0.45; cursor: not-allowed; transform: none; background: transparent; }
+
+        /* Hairline between adjacent arrows, vertically inset. */
+        .ctrl-center .nav-btn { position: relative; }
+        .ctrl-center .nav-btn:not(:last-child)::after {
+            content: "";
+            position: absolute;
+            right: 0;
+            top: 25%;
+            bottom: 25%;
+            width: 1px;
+            background: rgba(74, 54, 34, 0.1);
+        }
         
         .menu-icon-btn {
-            width: 42px; height: 42px; padding: 0; display: inline-flex; align-items: center; justify-content: center;
+            width: 42px; height: 50px; padding: 0; display: inline-flex; align-items: center; justify-content: center;
         }
-        .menu-icon-btn.active { background: rgba(23, 89, 74, 0.1); border-color: rgba(23, 89, 74, 0.38); color: var(--accent-strong); }
+        .menu-icon-btn.active { background: rgba(23, 89, 74, 0.1); color: var(--accent-strong); }
         .control-icon { display: inline-flex; width: 22px; height: 22px; }
         .control-icon svg { width: 100%; height: 100%; fill: currentColor; }
         .control-menu-popup {
@@ -1049,14 +1089,14 @@
         
         .nav-btn {
             padding: 0; display: inline-flex; align-items: center; justify-content: center;
-            text-align: center; line-height: 1; height: 42px;
+            text-align: center; line-height: 1; height: 50px;
         }
         /* Step (single move) is tapped the most and gets the widest target;
-           reset (jump to latest) sits in between; branch (±4) keeps its
-           original width. */
-        .nav-btn.branch { width: 3.5em; letter-spacing: -0.08em; }
-        .nav-btn.step { width: 4.6em; }
-        .nav-btn.reset { width: 3.8em; }
+           reset (jump to latest) sits in between; branch (±4) is narrowest.
+           Widths absorb the removed 6px gaps so the group total stays put. */
+        .nav-btn.branch { width: 3.8em; letter-spacing: -0.08em; }
+        .nav-btn.step { width: 4.9em; }
+        .nav-btn.reset { width: 4.1em; }
 
         .sidebar {
             display: grid;
@@ -1750,14 +1790,14 @@
                 gap: 10px;
             }
 
-            .board-controls { padding: 6px; gap: 4px; margin-top: 4px; border-radius: 12px; }
-            .menu-icon-btn { width: 42px; height: 42px; }
-            .nav-btn { height: 42px; }
+            .board-controls { padding: 4px 6px; gap: 4px; margin-top: 4px; border-radius: 12px; }
+            .menu-icon-btn { width: 42px; height: 46px; }
+            .nav-btn { height: 46px; }
             /* When space runs out (<360px), let the rarely-used ±4 buttons
                give way first so the primary ＜/＞ keep the biggest target. */
-            .nav-btn.branch { width: 2.8em; min-width: 0; }
-            .nav-btn.step { width: 3.6em; min-width: 3em; }
-            .nav-btn.reset { width: 3em; min-width: 2.6em; }
+            .nav-btn.branch { width: 3.2em; min-width: 0; }
+            .nav-btn.step { width: 4em; min-width: 3.4em; }
+            .nav-btn.reset { width: 3.4em; min-width: 3em; }
 
             .toast {
                 right: 10px;
