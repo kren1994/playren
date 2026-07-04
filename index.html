@@ -239,8 +239,7 @@
         }
 
         .panel,
-        .card,
-        .player-card {
+        .card {
             border: 1px solid var(--line);
             background: var(--panel);
             backdrop-filter: blur(10px);
@@ -356,11 +355,39 @@
             border: 1px solid rgba(164, 75, 31, 0.18);
         }
 
+        /* Seats form a flat strip in the control-bar grammar: no boxes, one
+           inset hairline between the black and white seats. */
         .players {
             display: grid;
             grid-template-columns: repeat(2, minmax(0, 1fr));
-            gap: 8px;
+            gap: 0;
             margin-bottom: 5px;
+        }
+
+        .players .player-card + .player-card::after {
+            content: "";
+            position: absolute;
+            left: 0;
+            top: 18%;
+            bottom: 18%;
+            width: 1px;
+            background: rgba(74, 54, 34, 0.1);
+        }
+
+        /* The two cards form one strip: square off the shared seam so tints
+           read as one surface split by the hairline. */
+        .players .player-card:first-child {
+            border-radius: var(--radius-md) 0 0 var(--radius-md);
+        }
+
+        .players .player-card + .player-card {
+            border-radius: 0 var(--radius-md) var(--radius-md) 0;
+        }
+
+        /* Outside of play the seats carry a quiet resting fill (same idiom as
+           the chat compose pill) so joinable seats stay discoverable. */
+        .players.seats-idle .player-card {
+            background: rgba(74, 54, 34, 0.055);
         }
 
         .player-card {
@@ -374,10 +401,10 @@
             transition: background-color 0.25s ease, border-color 0.25s ease, box-shadow 0.25s ease;
         }
 
+        /* State paints the surface: no resting box, a soft tint marks the
+           seat whose clock is running. */
         .player-card.active {
-            border-color: rgba(23, 89, 74, 0.32);
-            box-shadow: inset 0 0 0 1px rgba(23, 89, 74, 0.18);
-            background: rgba(234, 247, 242, 0.92);
+            background: rgba(23, 89, 74, 0.08);
         }
 
         .player-slot {
@@ -387,8 +414,7 @@
         }
 
         .players.pair-renju .player-slot.active {
-            background: rgba(23, 89, 74, 0.09);
-            box-shadow: inset 0 0 0 1px rgba(23, 89, 74, 0.16);
+            background: rgba(23, 89, 74, 0.08);
         }
 
         .player-card.seat-action,
@@ -402,8 +428,7 @@
         .player-card.seat-action:hover,
         .player-slot.seat-action:hover,
         .spectator-card.seat-action:hover {
-            border-color: rgba(23, 89, 74, 0.28);
-            background: rgba(239, 248, 244, 0.92);
+            background: rgba(23, 89, 74, 0.07);
         }
 
         .player-card.seat-action:active,
@@ -965,12 +990,12 @@
             align-items: center;
             margin-top: 5px;
             /* Slim vertical padding: the buttons absorb it as tap height, so
-               the bar's outer height stays what it was with boxed buttons. */
+               the bar's outer height stays what it was with boxed buttons.
+               No box of its own — hairline segments floating under the board. */
             padding: 4px 8px;
-            background: var(--panel);
-            border: 1px solid var(--line);
+            background: transparent;
+            border: 0;
             border-radius: var(--radius-lg);
-            backdrop-filter: blur(10px);
         }
 
         .ctrl-left, .ctrl-center, .ctrl-right { display: flex; align-items: center; }
@@ -1790,7 +1815,9 @@
                 gap: 10px;
             }
 
-            .board-controls { padding: 4px 6px; gap: 4px; margin-top: 4px; border-radius: 12px; }
+            /* The outer panel is transparent at this width, so the bar keeps
+               its own light surface against the page background. */
+            .board-controls { padding: 4px 6px; gap: 4px; margin-top: 4px; border-radius: 12px; background: var(--panel); }
             .menu-icon-btn { width: 42px; height: 46px; }
             .nav-btn { height: 46px; }
             /* When space runs out (<360px), let the rarely-used ±4 buttons
@@ -4985,6 +5012,7 @@
         function renderPlayers() {
             const pairEnabled = Boolean(state?.pairRenjuEnabled);
             elements.blackPlayerCard.parentElement.classList.toggle('pair-renju', pairEnabled);
+            elements.blackPlayerCard.parentElement.classList.toggle('seats-idle', !state || state.status !== 'playing');
             const seatViews = [
                 { seat: 'black', slot: elements.blackPlayerSlot, name: elements.blackPlayerName, status: elements.blackPlayerStatus, ready: elements.blackReadyWrap },
                 { seat: 'white', slot: elements.whitePlayerSlot, name: elements.whitePlayerName, status: elements.whitePlayerStatus, ready: elements.whiteReadyWrap },
