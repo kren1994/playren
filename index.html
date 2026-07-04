@@ -1745,9 +1745,11 @@
             .board-controls { padding: 6px; gap: 4px; margin-top: 4px; border-radius: 12px; }
             .menu-icon-btn { width: 42px; height: 42px; }
             .nav-btn { height: 42px; }
-            .nav-btn.branch { width: 2.8em; }
-            .nav-btn.step { width: 3.6em; }
-            .nav-btn.reset { width: 3em; }
+            /* When space runs out (<360px), let the rarely-used ±4 buttons
+               give way first so the primary ＜/＞ keep the biggest target. */
+            .nav-btn.branch { width: 2.8em; min-width: 0; }
+            .nav-btn.step { width: 3.6em; min-width: 3em; }
+            .nav-btn.reset { width: 3em; min-width: 2.6em; }
 
             .toast {
                 right: 10px;
