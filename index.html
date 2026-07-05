@@ -1,18 +1,33 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-    <link rel="icon" href="data:,">
     <meta charset="UTF-8">
+    <link rel="icon" type="image/svg+xml" href="./icons/icon.svg">
+    <link rel="icon" type="image/png" sizes="192x192" href="./icons/icon-192.png">
+    <link rel="apple-touch-icon" href="./icons/apple-touch-icon.png">
+    <link rel="manifest" href="./manifest.webmanifest">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <meta name="theme-color" content="#f3efe6">
+    <meta name="theme-color" content="#f3efe6" media="(prefers-color-scheme: light)">
+    <meta name="theme-color" content="#1a1613" media="(prefers-color-scheme: dark)">
     <title>playren | 対局所</title>
     <style>
         :root {
             --bg: #f3efe6;
             --bg-accent: #e8ddc9;
+            --bg-glow: rgba(255, 255, 255, 0.68);
             --panel: rgba(255, 252, 246, 0.88);
             --panel-strong: #fffaf1;
+            --overlay: rgba(255, 252, 246, 0.65);
+            --backdrop: rgba(0, 0, 0, 0.05);
             --line: rgba(74, 54, 34, 0.18);
+            --hairline: rgba(74, 54, 34, 0.1);
+            --field: rgba(255, 255, 255, 0.85);
+            --field-line: rgba(74, 54, 34, 0.12);
+            --fill-soft: rgba(74, 54, 34, 0.055);
+            --tint-hover: rgba(23, 89, 74, 0.07);
+            --tint-active: rgba(23, 89, 74, 0.12);
+            --tint-state: rgba(23, 89, 74, 0.08);
+            --focus-ring: rgba(23, 89, 74, 0.45);
             --text: #2f2418;
             --muted: #7b6855;
             --accent: #17594a;
@@ -20,6 +35,9 @@
             --accent-soft: rgba(23, 89, 74, 0.12);
             --warn: #a44b1f;
             --danger: #8b2f28;
+            --shadow-color: rgba(63, 43, 21, 0.2);
+            --toast-bg: rgba(32, 26, 20, 0.9);
+            --toast-text: #f8f5ef;
             --shadow: 0 24px 60px rgba(63, 43, 21, 0.14);
             --radius-xl: 28px;
             --radius-lg: 18px;
@@ -30,6 +48,40 @@
             font-family: "Yu Gothic UI", "Hiragino Sans", Meiryo, sans-serif;
         }
 
+        /* 夜の和紙: dark charcoal paper; the wood board stays light and
+           becomes the single bright object in the room. */
+        @media (prefers-color-scheme: dark) {
+            :root {
+                --bg: #1a1613;
+                --bg-accent: #231d16;
+                --bg-glow: rgba(255, 244, 224, 0.05);
+                --panel: rgba(38, 32, 25, 0.92);
+                --panel-strong: #2a231b;
+                --overlay: rgba(34, 28, 22, 0.85);
+                --backdrop: rgba(0, 0, 0, 0.35);
+                --line: rgba(233, 218, 191, 0.16);
+                --hairline: rgba(233, 218, 191, 0.12);
+                --field: rgba(255, 255, 255, 0.07);
+                --field-line: rgba(233, 218, 191, 0.16);
+                --fill-soft: rgba(233, 218, 191, 0.07);
+                --tint-hover: rgba(99, 199, 170, 0.09);
+                --tint-active: rgba(99, 199, 170, 0.16);
+                --tint-state: rgba(99, 199, 170, 0.13);
+                --focus-ring: rgba(99, 199, 170, 0.5);
+                --text: #ece3d3;
+                --muted: #a3947d;
+                --accent: #46a98c;
+                --accent-strong: #63c7aa;
+                --accent-soft: rgba(99, 199, 170, 0.16);
+                --warn: #d98f52;
+                --danger: #e0796a;
+                --shadow-color: rgba(0, 0, 0, 0.5);
+                --toast-bg: rgba(24, 20, 16, 0.95);
+                --toast-text: #f0e8da;
+                --shadow: 0 24px 60px rgba(0, 0, 0, 0.5);
+            }
+        }
+
         html {
             -webkit-touch-callout: none;
             -webkit-font-smoothing: antialiased;
@@ -37,7 +89,7 @@
 
         /* Keyboard focus: one consistent accent ring app-wide. */
         :focus-visible {
-            outline: 2px solid rgba(23, 89, 74, 0.55);
+            outline: 2px solid var(--focus-ring);
             outline-offset: 2px;
         }
 
@@ -52,7 +104,7 @@
             margin: 0;
             min-height: 100%;
             background:
-                radial-gradient(circle at top, rgba(255, 255, 255, 0.68), transparent 42%),
+                radial-gradient(circle at top, var(--bg-glow), transparent 42%),
                 linear-gradient(180deg, var(--bg) 0%, var(--bg-accent) 100%);
             padding: clamp(6px, 1.8vw, 18px);
             box-sizing: border-box;
@@ -100,7 +152,7 @@
             width: clamp(76px, 12vw, 92px);
             height: auto;
             margin-bottom: 12px;
-            filter: drop-shadow(0 14px 26px rgba(63, 43, 21, 0.22));
+            filter: drop-shadow(0 14px 26px var(--shadow-color));
         }
 
         .lobby-title {
@@ -149,9 +201,9 @@
             min-width: 42px;
             height: 42px;
             padding: 0 12px;
-            border: 1px solid rgba(74, 54, 34, 0.12);
+            border: 1px solid var(--field-line);
             border-radius: 999px;
-            background: rgba(255, 255, 255, 0.86);
+            background: var(--field);
             color: var(--text);
             cursor: pointer;
             font-size: 14px;
@@ -166,7 +218,7 @@
         }
 
         .lobby-lang-btn:hover {
-            background: rgba(255, 255, 255, 1);
+            background: var(--panel-strong);
             transform: translateY(-1px);
         }
 
@@ -290,15 +342,15 @@
             min-height: 46px;
             padding: 12px 14px;
             border-radius: 14px;
-            border: 1px solid rgba(74, 54, 34, 0.12);
-            background: rgba(255, 255, 255, 0.85);
+            border: 1px solid var(--field-line);
+            background: var(--field);
             color: var(--text);
             box-sizing: border-box;
         }
 
         .field input:focus {
-            outline: 2px solid rgba(23, 89, 74, 0.25);
-            border-color: rgba(23, 89, 74, 0.38);
+            outline: 2px solid var(--focus-ring);
+            border-color: var(--focus-ring);
         }
 
         .button-row {
@@ -346,9 +398,9 @@
         }
 
         .button-secondary {
-            background: rgba(255, 255, 255, 0.9);
+            background: var(--field);
             color: var(--text);
-            border: 1px solid rgba(74, 54, 34, 0.12);
+            border: 1px solid var(--field-line);
         }
 
         .button-warn {
@@ -381,7 +433,7 @@
             top: 18%;
             bottom: 18%;
             width: 1px;
-            background: rgba(74, 54, 34, 0.1);
+            background: var(--hairline);
         }
 
         /* The two cards form one strip: square off the shared seam so tints
@@ -397,7 +449,7 @@
         /* Outside of play the seats carry a quiet resting fill (same idiom as
            the chat compose pill) so joinable seats stay discoverable. */
         .players.seats-idle .player-card {
-            background: rgba(74, 54, 34, 0.055);
+            background: var(--fill-soft);
         }
 
         .player-card {
@@ -414,7 +466,7 @@
         /* State paints the surface: no resting box, a soft tint marks the
            seat whose clock is running. */
         .player-card.active {
-            background: rgba(23, 89, 74, 0.08);
+            background: var(--tint-state);
         }
 
         .player-slot {
@@ -424,7 +476,7 @@
         }
 
         .players.pair-renju .player-slot.active {
-            background: rgba(23, 89, 74, 0.08);
+            background: var(--tint-state);
         }
 
         .player-card.seat-action,
@@ -438,7 +490,7 @@
         .player-card.seat-action:hover,
         .player-slot.seat-action:hover,
         .spectator-card.seat-action:hover {
-            background: rgba(23, 89, 74, 0.07);
+            background: var(--tint-hover);
         }
 
         .player-card.seat-action:active,
@@ -459,7 +511,7 @@
         }
 
         .players.pair-renju .player-slot + .player-slot {
-            border-top: 1px solid rgba(74, 54, 34, 0.1);
+            border-top: 1px solid var(--hairline);
             border-radius: 0 0 10px 10px;
         }
 
@@ -481,7 +533,8 @@
             width: 10px;
             height: 10px;
             border-radius: 50%;
-            border: 1px solid rgba(47, 36, 24, 0.25);
+            /* var-based ring so the black stone dot stays visible on dark paper */
+            border: 1px solid var(--line);
             z-index: 1;
         }
 
@@ -547,9 +600,9 @@
             z-index: 2;
             transform: translate(-50%, -50%);
             padding: 4px 8px;
-            border: 1px solid rgba(74, 54, 34, 0.14);
+            border: 1px solid var(--field-line);
             border-radius: 999px;
-            background: rgba(255, 252, 246, 0.94);
+            background: var(--panel-strong);
             box-shadow: 0 3px 10px rgba(32, 26, 20, 0.12);
             color: var(--text);
             font-size: 11px;
@@ -602,7 +655,7 @@
             aspect-ratio: 1;
             box-sizing: border-box;
             border-radius: 50%;
-            border: 1px solid rgba(74, 54, 34, 0.16);
+            border: 1px solid var(--field-line);
             display: inline-flex;
             align-items: center;
             justify-content: center;
@@ -610,7 +663,7 @@
             line-height: 1;
             font-weight: 800;
             color: rgba(47, 36, 24, 0.32);
-            background: rgba(255, 255, 255, 0.72);
+            background: var(--field);
         }
 
         .ready-mark.passive {
@@ -628,7 +681,7 @@
             position: fixed;
             inset: 0;
             padding: 20px;
-            background: rgba(0, 0, 0, 0.05);
+            background: var(--backdrop);
             z-index: 30;
         }
 
@@ -650,8 +703,8 @@
             max-width: min(100%, 360px);
             padding: 16px;
             border-radius: 20px;
-            border: 1px solid rgba(74, 54, 34, 0.1);
-            background: rgba(255, 252, 246, 0.65);
+            border: 1px solid var(--hairline);
+            background: var(--overlay);
             backdrop-filter: blur(2px);
             box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
             display: grid;
@@ -697,7 +750,7 @@
             max-height: calc(100vh - 24px);
             max-height: calc(100dvh - 24px);
             padding: 16px;
-            background: rgba(255, 252, 246, 0.94);
+            background: var(--panel-strong);
             backdrop-filter: blur(10px);
             box-sizing: border-box;
             overflow-y: auto;
@@ -766,7 +819,7 @@
             bottom: 0;
             width: 1px;
             transform: translateX(-0.5px);
-            background: rgba(74, 54, 34, 0.14);
+            background: var(--field-line);
             pointer-events: none;
         }
 
@@ -833,8 +886,8 @@
             min-height: 34px;
             padding: 6px 10px 6px 3px;
             border-radius: 10px;
-            border: 1px solid rgba(74, 54, 34, 0.14);
-            background: rgba(255, 255, 255, 0.9);
+            border: 1px solid var(--field-line);
+            background: var(--field);
             color: var(--text);
             box-sizing: border-box;
             text-align: right;
@@ -853,8 +906,8 @@
             height: 34px;
             padding: 0;
             border-radius: 10px;
-            border: 1px solid rgba(74, 54, 34, 0.14);
-            background: rgba(255, 255, 255, 0.9);
+            border: 1px solid var(--field-line);
+            background: var(--field);
             color: var(--text);
             font-size: 18px;
             font-family: inherit;
@@ -865,7 +918,7 @@
         }
 
         .time-step-button:active {
-            background: rgba(23, 89, 74, 0.1);
+            background: var(--tint-active);
         }
 
         .time-step-button:disabled {
@@ -884,7 +937,7 @@
         .time-settings-card > .confirm-actions {
             justify-content: flex-end;
             padding-top: 12px;
-            border-top: 1px solid rgba(74, 54, 34, 0.08);
+            border-top: 1px solid var(--hairline);
         }
 
         @media (max-width: 480px) {
@@ -982,7 +1035,7 @@
             padding: 0;
             box-sizing: border-box;
             background: transparent;
-            box-shadow: 0 16px 40px rgba(63, 43, 21, 0.18);
+            box-shadow: 0 16px 40px var(--shadow-color);
         }
 
         #boardCanvas {
@@ -1024,7 +1077,7 @@
             width: 1px;
             align-self: stretch;
             margin: 12px 0;
-            background: rgba(74, 54, 34, 0.1);
+            background: var(--hairline);
         }
         /* The menu buttons run right up to their hairline: the old 8px gap is
            absorbed as tap width, while padding + alignment keep the icon at
@@ -1055,8 +1108,8 @@
             color: var(--text);
             transition: background 0.18s ease, transform 0.18s ease;
         }
-        .board-controls button:hover { background: rgba(23, 89, 74, 0.07); }
-        .board-controls button:active { background: rgba(23, 89, 74, 0.12); transform: scale(0.96); }
+        .board-controls button:hover { background: var(--tint-hover); }
+        .board-controls button:active { background: var(--tint-active); transform: scale(0.96); }
         .board-controls button:disabled { opacity: 0.45; cursor: not-allowed; transform: none; background: transparent; }
 
         /* Hairline between adjacent arrows, vertically inset. */
@@ -1068,18 +1121,18 @@
             top: 25%;
             bottom: 25%;
             width: 1px;
-            background: rgba(74, 54, 34, 0.1);
+            background: var(--hairline);
         }
         
         .menu-icon-btn {
             width: 42px; height: 50px; padding: 0; display: inline-flex; align-items: center; justify-content: center;
         }
-        .menu-icon-btn.active { background: rgba(23, 89, 74, 0.1); color: var(--accent-strong); }
+        .menu-icon-btn.active { background: var(--tint-active); color: var(--accent-strong); }
         .control-icon { display: inline-flex; width: 22px; height: 22px; }
         .control-icon svg { width: 100%; height: 100%; fill: currentColor; }
         .control-menu-popup {
             position: absolute; bottom: calc(100% + 8px); min-width: 144px; display: flex; flex-direction: column; gap: 0;
-            padding: 5px; border: 1px solid var(--line); border-radius: 14px; background: rgba(255, 252, 246, 0.98);
+            padding: 5px; border: 1px solid var(--line); border-radius: 14px; background: var(--panel-strong);
             box-shadow: var(--shadow); z-index: 20;
         }
         @media (prefers-reduced-motion: no-preference) {
@@ -1094,7 +1147,7 @@
         .control-menu-popup[hidden] { display: none !important; }
         .control-menu.align-right .control-menu-popup { right: 0; }
         .control-menu:not(.align-right) .control-menu-popup { left: 0; }
-        .control-menu-divider { height: 1px; margin: 4px 10px; background: rgba(74, 54, 34, 0.12); }
+        .control-menu-divider { height: 1px; margin: 4px 10px; background: var(--field-line); }
         .control-menu-divider[hidden] { display: none; }
         
         .board-controls .control-menu-item {
@@ -1102,7 +1155,7 @@
             color: var(--text); background: transparent; border: none; box-shadow: none; border-radius: 10px; outline: none;
             display: flex; align-items: center; justify-content: space-between; gap: 10px;
         }
-        .board-controls .control-menu-item:hover { background: rgba(23, 89, 74, 0.08); transform: none; }
+        .board-controls .control-menu-item:hover { background: var(--tint-hover); transform: none; }
         .board-controls .control-menu-item::after { content: ''; width: 1em; flex: 0 0 1em; }
         .board-controls .control-menu-item.active::after { content: '✓'; color: var(--muted); }
         .board-controls .control-menu-item.board-theme-item::after,
@@ -1160,7 +1213,7 @@
         }
 
         .side-section + .side-section {
-            border-top: 1px solid rgba(74, 54, 34, 0.1);
+            border-top: 1px solid var(--hairline);
         }
 
         .card h2 {
@@ -1249,8 +1302,8 @@
         .move-item {
             padding: 10px 12px;
             border-radius: 14px;
-            background: rgba(255, 255, 255, 0.62);
-            border: 1px solid rgba(74, 54, 34, 0.08);
+            background: var(--field);
+            border: 1px solid var(--hairline);
         }
 
         /* Log rows are flat: whitespace does the separating, not boxes. */
@@ -1394,14 +1447,14 @@
                badge and input line up vertically with the chat badges/messages */
             padding: 4px 6px 4px 12px;
             border-radius: 999px;
-            background: rgba(74, 54, 34, 0.055);
+            background: var(--fill-soft);
             border: 0;
             transition: background 0.18s ease, box-shadow 0.18s ease;
         }
 
         .log-compose:focus-within {
-            background: rgba(255, 255, 255, 0.8);
-            box-shadow: inset 0 0 0 1px rgba(23, 89, 74, 0.25);
+            background: var(--panel-strong);
+            box-shadow: inset 0 0 0 1px var(--focus-ring);
         }
 
         /* Send only lights up once there is something to send. */
@@ -1460,7 +1513,7 @@
             max-width: min(420px, calc(100vw - 36px));
             padding: 14px 16px;
             border-radius: 16px;
-            background: rgba(32, 26, 20, 0.9);
+            background: var(--toast-bg);
             color: #f8f5ef;
             box-shadow: 0 18px 36px rgba(24, 17, 12, 0.28);
             opacity: 0;
@@ -1494,7 +1547,7 @@
             max-width: min(360px, calc(100vw - 32px));
             padding: 5px 12px;
             border-radius: 999px;
-            background: rgba(255, 255, 255, 0.95);
+            background: var(--panel-strong);
             color: var(--muted);
             border: 1px solid var(--line);
             font-size: 12.5px;
@@ -1578,17 +1631,17 @@
                 flex-direction: column;
                 min-height: 0;
             }
-            /* Chat keeps a stable height so the sidebar balances the board;
-               the list fills it and scrolls internally. */
+            /* Chat grows with its content up to a cap, then scrolls inside —
+               on flat paper an empty fixed-height block would read as a hole. */
             .side-chat {
-                height: 420px;
+                max-height: 420px;
                 flex: 0 1 auto;
                 display: flex;
                 flex-direction: column;
                 min-height: 0;
             }
             .side-chat .log-list {
-                flex: 1 1 auto;
+                flex: 0 1 auto;
                 max-height: none;
                 overflow-y: auto;
             }
@@ -4822,6 +4875,12 @@
             boardGradient.addColorStop(1, theme.grad2);
             ctx.fillStyle = boardGradient;
             ctx.fillRect(0, 0, size, size);
+
+            // Faint rim so pale board themes (white / gray) keep an edge
+            // against the flat paper background; invisible on wood tones.
+            ctx.strokeStyle = 'rgba(74, 54, 34, 0.16)';
+            ctx.lineWidth = 1;
+            ctx.strokeRect(0.5, 0.5, size - 1, size - 1);
 
             ctx.save();
             ctx.strokeStyle = 'rgba(63, 42, 19, 0.9)';
