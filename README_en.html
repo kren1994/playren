@@ -3,64 +3,103 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="icon" type="image/svg+xml" href="./icons/icon.svg">
+  <meta name="theme-color" content="#f3efe6" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#1a1613" media="(prefers-color-scheme: dark)">
   <title>playren Help</title>
   <style>
     :root {
-      --text: #222;
-      --muted: #666;
-      --line: #ddd;
+      --bg: #f3efe6;
+      --bg-accent: #e8ddc9;
+      --glow: rgba(255, 255, 255, 0.68);
+      --text: #2f2418;
+      --muted: #7b6855;
+      --hairline: rgba(74, 54, 34, 0.14);
       --accent: #17594a;
+      --accent-strong: #0f4338;
+      --fill-soft: rgba(74, 54, 34, 0.055);
+      --shadow-color: rgba(63, 43, 21, 0.2);
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #1a1613;
+        --bg-accent: #231d16;
+        --glow: rgba(255, 244, 224, 0.05);
+        --text: #ece3d3;
+        --muted: #a3947d;
+        --hairline: rgba(233, 218, 191, 0.14);
+        --accent: #46a98c;
+        --accent-strong: #63c7aa;
+        --fill-soft: rgba(233, 218, 191, 0.07);
+        --shadow-color: rgba(0, 0, 0, 0.5);
+      }
     }
     * { box-sizing: border-box; }
     body {
       margin: 0;
       color: var(--text);
+      background:
+        radial-gradient(circle at top, var(--glow), transparent 42%),
+        linear-gradient(180deg, var(--bg) 0%, var(--bg-accent) 100%);
+      background-attachment: fixed;
       font-family: "Yu Gothic UI", "Hiragino Sans", Meiryo, sans-serif;
-      line-height: 1.7;
-      font-size: 13.5px;
-      padding: 24px;
+      line-height: 1.8;
+      font-size: 14px;
+      padding: clamp(24px, 5vw, 48px) 24px 64px;
+      -webkit-font-smoothing: antialiased;
     }
     .wrap {
-      max-width: 900px;
+      max-width: 760px;
       margin: 0 auto;
+    }
+    .brand {
+      width: 64px;
+      height: 64px;
+      display: block;
+      margin: 0 0 14px;
+      filter: drop-shadow(0 10px 20px var(--shadow-color));
     }
     h1 {
       margin: 0 0 6px;
-      font-size: 28px;
-      letter-spacing: 0.01em;
+      font-size: 30px;
+      letter-spacing: 0.06em;
     }
     .lead {
-      margin: 0 0 20px;
+      margin: 0 0 28px;
       color: var(--muted);
     }
     h2 {
-      margin: 18px 0 10px;
-      font-size: 18px;
-      border-bottom: 1px solid var(--line);
-      padding-bottom: 5px;
+      margin: 34px 0 12px;
+      font-size: 16px;
+      letter-spacing: 0.04em;
+      border-bottom: 1px solid var(--hairline);
+      padding-bottom: 8px;
     }
     ol, ul {
       margin: 0;
       padding-left: 22px;
     }
-    li { margin: 4px 0; }
+    li { margin: 6px 0; }
+    li::marker { color: var(--muted); }
     .note {
       margin-top: 14px;
       color: var(--muted);
       font-size: 12px;
     }
     .host-block {
-      margin-top: 6px;
-      padding: 10px 12px;
-      border: 1px solid var(--line);
-      border-left: 4px solid var(--accent);
-      border-radius: 8px;
-      background: #fafcfc;
+      margin-top: 8px;
+      padding: 12px 14px;
+      border: 0;
+      border-left: 3px solid var(--accent);
+      border-radius: 0 10px 10px 0;
+      background: var(--fill-soft);
     }
+    a { color: var(--accent-strong); }
   </style>
 </head>
 <body>
   <div class="wrap">
+    <img class="brand" src="./icons/icon.svg" alt="">
     <h1>playren</h1>
     <p class="lead">playren is a browser-based Renju game room for regular two-player games or four-player Pair Renju. Other participants can watch.</p>
 
