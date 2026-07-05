@@ -121,11 +121,13 @@
                 --toast-text: #f0e8da;
                 --shadow: 0 24px 60px rgba(0, 0, 0, 0.5);
         }
-        }
 
         html {
             -webkit-touch-callout: none;
             -webkit-font-smoothing: antialiased;
+            /* Solid canvas colour so overscroll / rubber-band areas beyond the
+               body gradient never flash white (glaring in dark mode). */
+            background: var(--bg-accent);
         }
 
         /* Keyboard focus: one consistent accent ring app-wide. */
@@ -147,6 +149,7 @@
             background:
                 radial-gradient(circle at top, var(--bg-glow), transparent 42%),
                 linear-gradient(180deg, var(--bg) 0%, var(--bg-accent) 100%);
+            background-color: var(--bg-accent);
             padding: clamp(6px, 1.8vw, 18px);
             box-sizing: border-box;
             overscroll-behavior-y: none;
