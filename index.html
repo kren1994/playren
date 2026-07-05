@@ -47,6 +47,7 @@
             --shadow-color: rgba(63, 43, 21, 0.2);
             --toast-bg: rgba(32, 26, 20, 0.9);
             --toast-text: #f8f5ef;
+            --board-dim: none;
             --shadow: 0 24px 60px rgba(63, 43, 21, 0.14);
             --radius-xl: 28px;
             --radius-lg: 18px;
@@ -88,6 +89,7 @@
                 --shadow-color: rgba(0, 0, 0, 0.5);
                 --toast-bg: rgba(24, 20, 16, 0.95);
                 --toast-text: #f0e8da;
+                --board-dim: brightness(0.93);
                 --shadow: 0 24px 60px rgba(0, 0, 0, 0.5);
             }
         }
@@ -119,6 +121,7 @@
                 --shadow-color: rgba(0, 0, 0, 0.5);
                 --toast-bg: rgba(24, 20, 16, 0.95);
                 --toast-text: #f0e8da;
+                --board-dim: brightness(0.93);
                 --shadow: 0 24px 60px rgba(0, 0, 0, 0.5);
         }
 
@@ -1112,6 +1115,7 @@
         }
 
         #boardCanvas {
+            filter: var(--board-dim);
             width: 100%;
             height: 100%;
             display: block;
@@ -2666,12 +2670,16 @@
             playNotificationSoundFile();
         }
 
+        // Palette rules: every theme stays a step darker than the white stone
+        // (~#f7f4ee) so stones always sit on top; gradients span a narrow
+        // luminance range so visibility is uniform across the board; all hues
+        // lean warm to stay in the paper world (gray = greige, white = 生成り).
         const boardThemes = [
-            { label: { ja: '茶', zh: '棕', en: 'Brown' }, grad1: '#e3c98c', grad2: '#bc8f51' },
-            { label: { ja: '緑', zh: '绿', en: 'Green' }, grad1: '#c4ddbe', grad2: '#9cc098' },
-            { label: { ja: '紫', zh: '紫', en: 'Purple' }, grad1: '#d8c6e3', grad2: '#b18ec3' },
-            { label: { ja: '灰', zh: '灰', en: 'Gray' }, grad1: '#efefef', grad2: '#cfcfcf' },
-            { label: { ja: '白', zh: '白', en: 'White' }, grad1: '#ffffff', grad2: '#e0e0e0' }
+            { label: { ja: '茶', zh: '棕', en: 'Brown' }, grad1: '#e0c185', grad2: '#c29457' },
+            { label: { ja: '緑', zh: '绿', en: 'Green' }, grad1: '#b9d2af', grad2: '#94b88c' },
+            { label: { ja: '紫', zh: '紫', en: 'Purple' }, grad1: '#cdbcdc', grad2: '#a98bbd' },
+            { label: { ja: '灰', zh: '灰', en: 'Gray' }, grad1: '#d9d3c7', grad2: '#b6ad9e' },
+            { label: { ja: '白', zh: '白', en: 'White' }, grad1: '#f0e9da', grad2: '#d9cfba' }
         ];
 
         const translations = {
