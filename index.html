@@ -9,6 +9,15 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <meta name="theme-color" content="#f3efe6" media="(prefers-color-scheme: light)">
     <meta name="theme-color" content="#1a1613" media="(prefers-color-scheme: dark)">
+    <script>
+        // Apply a manually chosen color scheme before first paint (no flash).
+        try {
+            const saved = JSON.parse(localStorage.getItem('playren:user-settings') || 'null');
+            if (saved && (saved.colorScheme === 'light' || saved.colorScheme === 'dark')) {
+                document.documentElement.dataset.theme = saved.colorScheme;
+            }
+        } catch (error) { /* first visit */ }
+    </script>
     <title>playren | 対局所</title>
     <style>
         :root {
@@ -49,9 +58,10 @@
         }
 
         /* 夜の和紙: dark charcoal paper; the wood board stays light and
-           becomes the single bright object in the room. */
+           becomes the single bright object in the room. Applied when the OS
+           prefers dark (unless the user forced light), or when forced dark. */
         @media (prefers-color-scheme: dark) {
-            :root {
+            :root:not([data-theme="light"]) {
                 --bg: #1a1613;
                 --bg-accent: #231d16;
                 --bg-glow: rgba(255, 244, 224, 0.05);
@@ -80,6 +90,37 @@
                 --toast-text: #f0e8da;
                 --shadow: 0 24px 60px rgba(0, 0, 0, 0.5);
             }
+        }
+
+        :root[data-theme="dark"] {
+                --bg: #1a1613;
+                --bg-accent: #231d16;
+                --bg-glow: rgba(255, 244, 224, 0.05);
+                --panel: rgba(38, 32, 25, 0.92);
+                --panel-strong: #2a231b;
+                --overlay: rgba(34, 28, 22, 0.85);
+                --backdrop: rgba(0, 0, 0, 0.35);
+                --line: rgba(233, 218, 191, 0.16);
+                --hairline: rgba(233, 218, 191, 0.12);
+                --field: rgba(255, 255, 255, 0.07);
+                --field-line: rgba(233, 218, 191, 0.16);
+                --fill-soft: rgba(233, 218, 191, 0.07);
+                --tint-hover: rgba(99, 199, 170, 0.09);
+                --tint-active: rgba(99, 199, 170, 0.16);
+                --tint-state: rgba(99, 199, 170, 0.13);
+                --focus-ring: rgba(99, 199, 170, 0.5);
+                --text: #ece3d3;
+                --muted: #a3947d;
+                --accent: #46a98c;
+                --accent-strong: #63c7aa;
+                --accent-soft: rgba(99, 199, 170, 0.16);
+                --warn: #d98f52;
+                --danger: #e0796a;
+                --shadow-color: rgba(0, 0, 0, 0.5);
+                --toast-bg: rgba(24, 20, 16, 0.95);
+                --toast-text: #f0e8da;
+                --shadow: 0 24px 60px rgba(0, 0, 0, 0.5);
+        }
         }
 
         html {
@@ -192,6 +233,25 @@
                     transform: translateY(10px);
                 }
             }
+        }
+
+        /* Corner controls (color scheme + language) share the top-right. */
+        .lobby-corner {
+            position: absolute;
+            top: 4px;
+            right: 4px;
+            display: flex;
+            gap: 8px;
+        }
+
+        .lobby-corner .lobby-lang-btn {
+            position: static;
+        }
+
+        .scheme-icon {
+            width: 17px;
+            height: 17px;
+            flex: 0 0 auto;
         }
 
         .lobby-lang-btn {
@@ -1901,15 +1961,32 @@
 <body>
     <div class="app-shell">
         <section id="lobbyScreen" class="screen lobby-screen">
-            <button id="lobbyLangBtn" class="lobby-lang-btn" type="button" aria-label="言語">
-                <svg class="language-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-                    <circle cx="12" cy="12" r="10"></circle>
-                    <path d="M2 12h20"></path>
-                    <path d="M12 2a15.3 15.3 0 0 1 0 20"></path>
-                    <path d="M12 2a15.3 15.3 0 0 0 0 20"></path>
-                </svg>
-                <span class="language-code">JA</span>
-            </button>
+            <div class="lobby-corner">
+                <button id="lobbyColorSchemeBtn" class="lobby-lang-btn" type="button" aria-label="配色">
+                    <svg class="scheme-icon scheme-icon-auto" viewBox="0 0 24 24" aria-hidden="true">
+                        <circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="2"></circle>
+                        <path d="M12 3a9 9 0 0 0 0 18z" fill="currentColor"></path>
+                    </svg>
+                    <svg class="scheme-icon scheme-icon-light" viewBox="0 0 24 24" aria-hidden="true" hidden>
+                        <circle cx="12" cy="12" r="4.5" fill="currentColor"></circle>
+                        <g stroke="currentColor" stroke-width="2" stroke-linecap="round">
+                            <path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3M5 5l2.1 2.1M16.9 16.9L19 19M19 5l-2.1 2.1M7.1 16.9L5 19"></path>
+                        </g>
+                    </svg>
+                    <svg class="scheme-icon scheme-icon-dark" viewBox="0 0 24 24" aria-hidden="true" hidden>
+                        <path d="M20.5 14.5A8.5 8.5 0 0 1 9.5 3.5a8.5 8.5 0 1 0 11 11z" fill="currentColor"></path>
+                    </svg>
+                </button>
+                <button id="lobbyLangBtn" class="lobby-lang-btn" type="button" aria-label="言語">
+                    <svg class="language-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                        <circle cx="12" cy="12" r="10"></circle>
+                        <path d="M2 12h20"></path>
+                        <path d="M12 2a15.3 15.3 0 0 1 0 20"></path>
+                        <path d="M12 2a15.3 15.3 0 0 0 0 20"></path>
+                    </svg>
+                    <span class="language-code">JA</span>
+                </button>
+            </div>
 
             <div class="lobby-hero">
                 <svg class="lobby-board" viewBox="0 0 96 96" aria-hidden="true">
@@ -2077,6 +2154,7 @@
                                             <span class="language-code">JA</span>
                                         </span>
                                     </button>
+                                    <button id="colorSchemeBtn" class="control-menu-item" type="button" data-value="自動">配色</button>
                                     <button id="soundBtn" class="control-menu-item active" type="button">効果音</button>
                                     <button id="menuMoveConfirmBtn" class="control-menu-item" type="button">着手確認</button>
                                     <div class="control-menu-divider" role="separator"></div>
@@ -2382,6 +2460,7 @@
         let stoneShadingEnabled = false;
         let moveConfirmEnabled = false;
         let boardThemeIndex = 0;
+        let colorSchemePreference = 'auto';
         let currentLanguage = 'ja';
         let displayMoveCount = -1;
         let pendingMove = null;
@@ -2609,6 +2688,10 @@
                 menuCoords: '座標',
                 menuStoneShading: '石の陰影',
                 menuTheme: '盤面色',
+                menuColorScheme: '配色',
+                colorSchemeAuto: '自動',
+                colorSchemeLight: 'ライト',
+                colorSchemeDark: 'ダーク',
                 menuMoveNum: '手数',
                 menuMoveConfirm: '着手確認',
                 menuPairRenju: 'ペア連珠',
@@ -2744,6 +2827,10 @@
                 menuCoords: '坐标',
                 menuStoneShading: '棋子阴影',
                 menuTheme: '棋盘色',
+                menuColorScheme: '配色',
+                colorSchemeAuto: '自动',
+                colorSchemeLight: '浅色',
+                colorSchemeDark: '深色',
                 menuMoveNum: '手数',
                 menuMoveConfirm: '落子确认',
                 menuPairRenju: '双人连珠',
@@ -2879,6 +2966,10 @@
                 menuCoords: 'Coords',
                 menuStoneShading: 'Shading',
                 menuTheme: 'Board Color',
+                menuColorScheme: 'Appearance',
+                colorSchemeAuto: 'Auto',
+                colorSchemeLight: 'Light',
+                colorSchemeDark: 'Dark',
                 menuMoveNum: 'Move Nos.',
                 menuMoveConfirm: 'Move Confirm',
                 menuPairRenju: 'Pair Renju',
@@ -3094,6 +3185,7 @@
             document.getElementById('coordsBtn').textContent = i18n('menuCoords');
             document.getElementById('stoneShadingBtn').textContent = i18n('menuStoneShading');
             document.getElementById('themeBtn').childNodes[0].nodeValue = i18n('menuTheme');
+            document.getElementById('colorSchemeBtn').childNodes[0].nodeValue = i18n('menuColorScheme');
             document.getElementById('moveNumBtn').textContent = i18n('menuMoveNum');
             syncViewSettingsControls();
             
@@ -3206,6 +3298,7 @@
                 moveConfirmEnabled: false,
                 stoneShading: false,
                 boardThemeIndex: 0,
+                colorScheme: 'auto',
                 language: 'ja',
             };
         }
@@ -3225,6 +3318,7 @@
             next.moveConfirmEnabled = next.moveConfirmEnabled === true;
             next.stoneShading = next.stoneShading === true;
             next.boardThemeIndex = clamp(Number(next.boardThemeIndex) || 0, 0, boardThemes.length - 1);
+            next.colorScheme = ['auto', 'light', 'dark'].includes(next.colorScheme) ? next.colorScheme : 'auto';
             next.language = ['ja', 'zh', 'en'].includes(next.language) ? next.language : 'ja';
             return next;
         }
@@ -3264,6 +3358,43 @@
             });
         }
 
+        const COLOR_SCHEME_ORDER = ['auto', 'light', 'dark'];
+        const THEME_META_COLORS = { light: '#f3efe6', dark: '#1a1613' };
+
+        function applyColorScheme() {
+            if (colorSchemePreference === 'auto') {
+                delete document.documentElement.dataset.theme;
+            } else {
+                document.documentElement.dataset.theme = colorSchemePreference;
+            }
+            // Keep the browser chrome color in step: per-media values when
+            // following the OS, pinned to the forced scheme otherwise.
+            document.querySelectorAll('meta[name="theme-color"]').forEach((meta) => {
+                if (colorSchemePreference === 'auto') {
+                    meta.content = (meta.media || '').includes('dark')
+                        ? THEME_META_COLORS.dark
+                        : THEME_META_COLORS.light;
+                } else {
+                    meta.content = THEME_META_COLORS[colorSchemePreference];
+                }
+            });
+        }
+
+        function colorSchemeLabel() {
+            const key = colorSchemePreference === 'light'
+                ? 'colorSchemeLight'
+                : (colorSchemePreference === 'dark' ? 'colorSchemeDark' : 'colorSchemeAuto');
+            return i18n(key);
+        }
+
+        function cycleColorScheme() {
+            const index = COLOR_SCHEME_ORDER.indexOf(colorSchemePreference);
+            colorSchemePreference = COLOR_SCHEME_ORDER[(index + 1) % COLOR_SCHEME_ORDER.length];
+            applyColorScheme();
+            persistUserSettings({ colorScheme: colorSchemePreference });
+            syncViewSettingsControls();
+        }
+
         function syncViewSettingsControls() {
             const languageCode = currentLanguage.toUpperCase();
             document.querySelectorAll('.language-code').forEach((item) => {
@@ -3279,6 +3410,16 @@
             elements.menuMoveConfirmBtn.classList.toggle('active', moveConfirmEnabled);
             const label = boardThemes[boardThemeIndex].label[currentLanguage] || boardThemes[boardThemeIndex].label['ja'];
             document.getElementById('themeBtn').dataset.value = label;
+
+            const schemeBtn = document.getElementById('colorSchemeBtn');
+            schemeBtn.dataset.value = colorSchemeLabel();
+            schemeBtn.setAttribute('aria-label', `${i18n('menuColorScheme')}: ${colorSchemeLabel()}`);
+            const lobbySchemeBtn = document.getElementById('lobbyColorSchemeBtn');
+            lobbySchemeBtn.setAttribute('aria-label', `${i18n('menuColorScheme')}: ${colorSchemeLabel()}`);
+            lobbySchemeBtn.title = `${i18n('menuColorScheme')}: ${colorSchemeLabel()}`;
+            lobbySchemeBtn.querySelector('.scheme-icon-auto').hidden = colorSchemePreference !== 'auto';
+            lobbySchemeBtn.querySelector('.scheme-icon-light').hidden = colorSchemePreference !== 'light';
+            lobbySchemeBtn.querySelector('.scheme-icon-dark').hidden = colorSchemePreference !== 'dark';
         }
 
         function applyCachedUserSettings() {
@@ -3291,6 +3432,8 @@
             moveConfirmEnabled = settings.moveConfirmEnabled;
             stoneShadingEnabled = settings.stoneShading;
             boardThemeIndex = settings.boardThemeIndex;
+            colorSchemePreference = settings.colorScheme;
+            applyColorScheme();
             currentLanguage = settings.language;
             syncViewSettingsControls();
         }
@@ -5727,6 +5870,14 @@
         bindPointerPress(document.getElementById('actionMenuBtn'), () => toggleControlMenu('action'));
         bindPointerPress(document.getElementById('viewMenuBtn'), () => toggleControlMenu('view'));
         bindPointerPress(elements.lobbyLangBtn, cycleLanguage);
+        bindPointerPress(document.getElementById('colorSchemeBtn'), cycleColorScheme);
+        bindPointerPress(document.getElementById('lobbyColorSchemeBtn'), cycleColorScheme);
+
+        // Following the OS ("auto"): keep the browser-chrome color in step
+        // when the OS scheme flips (visuals switch via CSS on their own).
+        window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
+            if (colorSchemePreference === 'auto') applyColorScheme();
+        });
         bindPointerPress(elements.menuResignBtn, resignFromMenu);
         bindPointerPress(elements.menuDrawBtn, offerDrawFromMenu);
         bindPointerPress(elements.menuTakebackBtn, requestTakebackFromMenu);
