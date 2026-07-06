@@ -504,6 +504,12 @@
            inset hairline between the black and white seats. Both strips hug
            the board's actual width (published by resizeBoard). */
         .players {
+            /* One fluid scale driven by the board's real width — replaces the
+               per-breakpoint hand-tuned sizes that drifted apart over time. */
+            --seat-dot: clamp(8px, calc(var(--board-size, 600px) * 0.016), 11px);
+            --seat-name: clamp(12px, calc(var(--board-size, 600px) * 0.022), 15px);
+            --seat-timer: clamp(14px, calc(var(--board-size, 600px) * 0.028), 20px);
+            --seat-pad-x: 14px;
             display: grid;
             grid-template-columns: repeat(2, minmax(0, 1fr));
             gap: 0;
@@ -544,13 +550,13 @@
         }
 
         .player-card {
-            padding: 8px 10px;
+            padding: 8px var(--seat-pad-x);
             border-radius: var(--radius-md);
             position: relative;
             overflow: hidden;
             display: flex;
             align-items: center;
-            gap: 8px;
+            gap: 10px;
             transition: background-color 0.25s ease, border-color 0.25s ease, box-shadow 0.25s ease;
         }
 
@@ -641,9 +647,9 @@
             position: absolute;
             top: 50%;
             transform: translateY(-50%);
-            left: 10px;
-            width: 10px;
-            height: 10px;
+            left: var(--seat-pad-x);
+            width: var(--seat-dot);
+            height: var(--seat-dot);
             border-radius: 50%;
             /* var-based ring so the black stone dot stays visible on dark paper */
             border: 1px solid var(--line);
@@ -666,8 +672,9 @@
             display: flex;
             justify-content: space-between;
             align-items: center;
-            gap: 12px;
-            padding-left: 24px;
+            gap: 10px;
+            /* clear the stone dot (drawn at the content-box start) + a gap */
+            padding-left: calc(var(--seat-dot) + 14px);
             width: 100%;
             min-width: 0;
             box-sizing: border-box;
@@ -687,7 +694,7 @@
             flex: 1;
             align-items: center;
             justify-content: space-between;
-            gap: 8px;
+            gap: 10px;
             min-width: 0;
         }
 
@@ -697,6 +704,8 @@
             overflow: hidden;
             text-overflow: ellipsis;
             white-space: nowrap;
+            /* fluid size; the JS fit-guard var only kicks in for long names */
+            font-size: var(--mobile-player-name-size, var(--seat-name));
         }
 
         .player-identity {
@@ -736,9 +745,10 @@
 
         .player-timer {
             flex: 0 0 auto;
-            font-size: clamp(16px, 2.8vw, 22px);
+            font-size: var(--seat-timer);
             font-weight: 800;
-            letter-spacing: -0.04em;
+            /* tabular-nums already meters the digits; no negative tracking */
+            letter-spacing: 0;
             font-variant-numeric: tabular-nums;
             transition: color 0.3s ease;
         }
@@ -1777,36 +1787,7 @@
                 gap: 6px;
             }
             .players {
-                gap: 6px;
                 margin-bottom: 4px;
-            }
-            .player-card {
-                padding: 4px 8px;
-            }
-            .player-head {
-                gap: 6px;
-                padding-left: 18px;
-            }
-            .player-card.black::before,
-            .player-card.white::before {
-                left: 7px;
-                width: 7px;
-                height: 7px;
-            }
-            .player-name {
-                font-size: 11px;
-                min-height: 1.1em;
-            }
-            .player-main {
-                gap: 5px;
-            }
-            .player-timer {
-                font-size: 15px;
-            }
-            .ready-mark {
-                width: 22px;
-                height: 22px;
-                font-size: 12px;
             }
             .board-container {
                 height: min(calc(100vh - 108px), 660px);
@@ -1850,49 +1831,11 @@
                 max-width: 680px;
                 margin: 0 auto;
             }
-            /* Name/timer sizing was landscape-only, so iPad PORTRAIT inherited a
-               large default and the seat card grew on sit. Apply to both orients. */
-            .player-name {
-                font-size: 12px;
-                min-height: 1.1em;
-            }
-            .player-timer {
-                font-size: 16px;
-            }
         }
 
         @media (min-width: 721px) and (max-width: 1080px) and (orientation: landscape) {
             .players {
-                gap: 6px;
                 margin-bottom: 4px;
-            }
-            .player-card {
-                padding: 4px 8px;
-            }
-            .player-head {
-                gap: 6px;
-                padding-left: 18px;
-            }
-            .player-card.black::before,
-            .player-card.white::before {
-                left: 7px;
-                width: 7px;
-                height: 7px;
-            }
-            .player-name {
-                font-size: 11px;
-                min-height: 1.1em;
-            }
-            .player-main {
-                gap: 5px;
-            }
-            .player-timer {
-                font-size: 15px;
-            }
-            .ready-mark {
-                width: 22px;
-                height: 22px;
-                font-size: 12px;
             }
         }
 
@@ -1944,32 +1887,9 @@
 
             .player-card {
                 min-width: 0;
-                padding: 6px 8px; /* 縦幅を小さく */
-                gap: 4px;
-            }
-
-            .player-head {
-                gap: 4px;
-                padding-left: 20px;
-            }
-
-            .player-main {
-                gap: 4px;
-            }
-
-            .player-identity {
-                gap: 3px;
-            }
-
-            .player-card.black::before,
-            .player-card.white::before {
-                left: 6px;
-                width: 8px;
-                height: 8px;
             }
 
             .player-name {
-                font-size: var(--mobile-player-name-size, 12px);
                 line-height: 1.2;
                 min-height: 0;
             }
@@ -1977,24 +1897,6 @@
             .player-status {
                 padding: 4px 7px;
                 font-size: 10px;
-            }
-
-            .player-timer {
-                font-size: clamp(11px, 3.2vw, 14px);
-                line-height: 1;
-            }
-
-            .player-ready {
-                flex-basis: 16px;
-                width: 16px;
-                height: 16px;
-            }
-            
-            .ready-mark {
-                flex-basis: 16px;
-                width: 16px;
-                height: 16px;
-                font-size: 9px;
             }
 
             .game-topbar {
@@ -5299,7 +5201,10 @@
             context.font = `700 100px ${style.fontFamily}`;
             const fitSample = '漢漢漢漢漢漢';
             const sampleWidth = context.measureText(fitSample).width;
-            const fontSize = Math.max(11, Math.min(12, Math.floor(availableWidth * 100 / sampleWidth)));
+            // Overflow guard only: cap at the fluid size the CSS would use, so
+            // this var never enlarges names — it only shrinks long ones.
+            const fluidPx = Math.max(12, Math.min(15, (boardGeometry?.size || 600) * 0.022));
+            const fontSize = Math.max(11, Math.min(fluidPx, Math.floor(availableWidth * 100 / sampleWidth)));
             players.style.setProperty('--mobile-player-name-size', `${fontSize}px`);
         }
 
