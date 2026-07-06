@@ -48,6 +48,8 @@
             --toast-bg: rgba(32, 26, 20, 0.9);
             --toast-text: #f8f5ef;
             --board-dim: none;
+            --stone-black-rim: rgba(47, 36, 24, 0.25);
+            --stone-white-rim: rgba(74, 54, 34, 0.35);
             --shadow: 0 24px 60px rgba(63, 43, 21, 0.14);
             --radius-xl: 28px;
             --radius-lg: 18px;
@@ -90,6 +92,8 @@
                 --toast-bg: rgba(24, 20, 16, 0.95);
                 --toast-text: #f0e8da;
                 --board-dim: brightness(0.93);
+                --stone-black-rim: rgba(233, 218, 191, 0.4);
+                --stone-white-rim: rgba(233, 218, 191, 0.2);
                 --shadow: 0 24px 60px rgba(0, 0, 0, 0.5);
             }
         }
@@ -122,6 +126,8 @@
                 --toast-bg: rgba(24, 20, 16, 0.95);
                 --toast-text: #f0e8da;
                 --board-dim: brightness(0.93);
+                --stone-black-rim: rgba(233, 218, 191, 0.4);
+                --stone-white-rim: rgba(233, 218, 191, 0.2);
                 --shadow: 0 24px 60px rgba(0, 0, 0, 0.5);
         }
 
@@ -625,10 +631,14 @@
 
         .player-card.black::before {
             background: #26211e;
+            /* rim brightens in dark mode so the black dot keeps a silhouette */
+            border-color: var(--stone-black-rim);
         }
 
         .player-card.white::before {
             background: #f8f5ef;
+            /* stronger rim in light mode: the white dot is near paper tone */
+            border-color: var(--stone-white-rim);
         }
 
         .player-head {
@@ -1440,13 +1450,14 @@
         .log-avatar--black {
             background: #20201e;
             color: #f3efe8;
-            border-color: rgba(0, 0, 0, 0.25);
+            /* rim brightens in dark mode so the black badge keeps a silhouette */
+            border-color: var(--stone-black-rim);
         }
 
         .log-avatar--white {
             background: #f7f4ee;
             color: #2f2418;
-            border-color: rgba(74, 54, 34, 0.32);
+            border-color: var(--stone-white-rim);
         }
 
         /* The compose badge is decorative; keep it fainter than the chat badges
@@ -2202,7 +2213,7 @@
                             <h2 id="uiChatTitle">チャット</h2>
                             <div class="log-compose">
                                 <span id="composeAvatar" class="log-avatar" aria-hidden="true"></span>
-                                <input id="logCommentInput" type="text" maxlength="140" placeholder="コメントを書く">
+                                <input id="logCommentInput" type="text" maxlength="140">
                                 <button id="sendLogCommentBtn" class="log-send" type="button">投稿</button>
                             </div>
                             <ul id="logList" class="log-list"></ul>
@@ -2701,7 +2712,6 @@
                 joinRoom: '入室',
                 helpLink: '使い方を見る',
                 chatTitle: 'チャット',
-                chatPlaceholder: 'コメントを書く',
                 chatSend: '投稿',
                 spectatorTitle: '観戦席',
                 infoTitle: '対局情報',
@@ -2840,7 +2850,6 @@
                 joinRoom: '进入',
                 helpLink: '查看用法',
                 chatTitle: '聊天',
-                chatPlaceholder: '输入评论',
                 chatSend: '发送',
                 spectatorTitle: '观战席',
                 infoTitle: '对局信息',
@@ -2979,7 +2988,6 @@
                 joinRoom: 'Enter Room',
                 helpLink: 'View Help',
                 chatTitle: 'Chat',
-                chatPlaceholder: 'Write a comment',
                 chatSend: 'Send',
                 spectatorTitle: 'Spectators',
                 infoTitle: 'Game Info',
@@ -3181,7 +3189,6 @@
             elements.lobbyHelpLink.href = getReadmeHref();
             
             elements.uiChatTitle.textContent = i18n('chatTitle');
-            elements.logCommentInput.placeholder = i18n('chatPlaceholder');
             elements.sendLogCommentBtn.textContent = i18n('chatSend');
             
             elements.uiSpectatorTitle.textContent = i18n('spectatorTitle');
