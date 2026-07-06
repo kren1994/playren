@@ -4983,6 +4983,21 @@
                 }
             });
 
+            // With move numbers hidden, keep a quiet dot on the newest visible
+            // stone so the last move stays identifiable after the 2s highlight
+            // ring fades (also anchors the cursor position while reviewing).
+            if (!showMoveNumbers && moves.length) {
+                const lastMove = moves[moves.length - 1];
+                const x = padding + lastMove.x * cell;
+                const y = topPadding + lastMove.y * cell;
+                ctx.beginPath();
+                ctx.arc(x, y, Math.max(2, cell * 0.1), 0, Math.PI * 2);
+                ctx.fillStyle = lastMove.color === 'black'
+                    ? 'rgba(244, 238, 228, 0.8)'
+                    : 'rgba(66, 51, 34, 0.75)';
+                ctx.fill();
+            }
+
             const canShowPendingMove = pendingMove
                 && state.status === 'playing'
                 && displayMoveCount === -1
