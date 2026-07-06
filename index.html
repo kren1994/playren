@@ -1432,6 +1432,13 @@
             padding: 0 4px 0 12px;
         }
 
+        /* While older messages continue below the fold, melt the cut edge
+           instead of cropping mid-line (class managed by updateLogFade). */
+        .log-list--fade {
+            -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - 24px), transparent);
+            mask-image: linear-gradient(to bottom, #000 calc(100% - 24px), transparent);
+        }
+
         .move-item {
             padding: 10px 12px;
             border-radius: 14px;
@@ -1798,8 +1805,13 @@
         @media (max-width: 1080px) {
             .layout {
                 grid-template-columns: 1fr;
-                /* Stacked: halve the gap between the board panel and the chat. */
-                row-gap: 9px;
+                /* Stacked: keep the chat close under the board so it can be
+                   glanced at while playing (phone / half-window PC). */
+                row-gap: 5px;
+            }
+            /* Trim only the panel's bottom so the board itself stays put. */
+            .game-screen .layout > .panel:first-child {
+                padding-bottom: 8px;
             }
             .sidebar .card h2 {
                 display: none !important;
@@ -1897,6 +1909,15 @@
             .player-status {
                 padding: 4px 7px;
                 font-size: 10px;
+            }
+
+            /* Slightly tighter chat rhythm on small screens. */
+            .log-list {
+                gap: 8px;
+            }
+
+            .log-body {
+                line-height: 1.5;
             }
 
             .game-topbar {
@@ -5516,6 +5537,16 @@
                 item.append(body);
                 elements.logList.appendChild(item);
             });
+            updateLogFade();
+        }
+
+        // Fade the list's bottom edge only while older messages actually
+        // continue below the fold; reading to the end lifts the fade.
+        function updateLogFade() {
+            const list = elements.logList;
+            const hasMoreBelow = list.scrollHeight > list.clientHeight + 1
+                && list.scrollTop + list.clientHeight < list.scrollHeight - 4;
+            list.classList.toggle('log-list--fade', hasMoreBelow);
         }
 
         // The compose badge mirrors the local player's stone colour (spectator =
@@ -5903,6 +5934,7 @@
         bindPointerPress(document.getElementById('moveNumBtn'), toggleMoveNumbers);
         bindPointerPress(document.getElementById('stoneShadingBtn'), toggleStoneShading);
         elements.sendLogCommentBtn.addEventListener('click', submitLogComment);
+        elements.logList.addEventListener('scroll', updateLogFade, { passive: true });
         elements.logCommentInput.addEventListener('input', updateComposeHasText);
         elements.logCommentInput.addEventListener('keydown', (event) => {
             if (event.key !== 'Enter' || event.isComposing) return;
