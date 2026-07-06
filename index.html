@@ -578,15 +578,28 @@
             transition: background-color 0.15s ease, border-color 0.15s ease, transform 0.15s ease;
         }
 
-        /* When "return to spectating" is available, the section carries the
-           same resting fill as joinable seats — tappable without hover. */
+        /* When "return to spectating" is available, an inset rounded fill
+           (same shape language as the compose pill) marks the tappable zone —
+           a full-bleed band read too heavy next to the chat's small pill. */
         .spectator-card.seat-action {
+            position: relative;
+        }
+
+        .spectator-card.seat-action::before {
+            content: "";
+            position: absolute;
+            inset: 6px 8px;
+            border-radius: 12px;
             background: var(--fill-soft);
+            pointer-events: none;
+        }
+
+        .spectator-card.seat-action:hover::before {
+            background: var(--tint-hover);
         }
 
         .player-card.seat-action:hover,
-        .player-slot.seat-action:hover,
-        .spectator-card.seat-action:hover {
+        .player-slot.seat-action:hover {
             background: var(--tint-hover);
         }
 
