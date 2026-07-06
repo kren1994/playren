@@ -1403,6 +1403,12 @@
             box-sizing: border-box;
         }
 
+        /* Empty states are notes, not content — same muted voice as the
+           room-info line. */
+        .spectator-item--empty {
+            color: var(--muted);
+        }
+
         .move-list,
         .log-list {
             list-style: none;
@@ -5438,7 +5444,7 @@
             elements.spectatorList.innerHTML = '';
             if (!state) {
                 const item = document.createElement('li');
-                item.className = 'spectator-item';
+                item.className = 'spectator-item spectator-item--empty';
                 item.textContent = i18n('spectatorEmpty');
                 elements.spectatorList.appendChild(item);
                 return;
@@ -5457,7 +5463,7 @@
 
             if (!elements.spectatorList.childElementCount) {
                 const item = document.createElement('li');
-                item.className = 'spectator-item';
+                item.className = 'spectator-item spectator-item--empty';
                 item.textContent = i18n('spectatorNone');
                 elements.spectatorList.appendChild(item);
             }
