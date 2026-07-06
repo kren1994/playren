@@ -1439,6 +1439,51 @@
             mask-image: linear-gradient(to bottom, #000 calc(100% - 24px), transparent);
         }
 
+        /* Quiet scrollbars, desktop only: invisible at rest, a hairline thumb
+           while the pointer is over the list (wheel-scrolling implies hover).
+           Touch devices keep their native auto-hiding overlay bars. Standard
+           properties serve Chrome/Firefox; the -webkit rules cover older
+           Safari, which ignores scrollbar-color. */
+        @media (hover: hover) and (pointer: fine) {
+            .log-list,
+            .spectator-list,
+            .sidebar {
+                scrollbar-width: thin;
+                scrollbar-color: transparent transparent;
+            }
+
+            .log-list:hover,
+            .spectator-list:hover,
+            .sidebar:hover {
+                scrollbar-color: var(--line) transparent;
+            }
+
+            .log-list::-webkit-scrollbar,
+            .spectator-list::-webkit-scrollbar,
+            .sidebar::-webkit-scrollbar {
+                width: 6px;
+            }
+
+            .log-list::-webkit-scrollbar-track,
+            .spectator-list::-webkit-scrollbar-track,
+            .sidebar::-webkit-scrollbar-track {
+                background: transparent;
+            }
+
+            .log-list::-webkit-scrollbar-thumb,
+            .spectator-list::-webkit-scrollbar-thumb,
+            .sidebar::-webkit-scrollbar-thumb {
+                background: transparent;
+                border-radius: 999px;
+            }
+
+            .log-list:hover::-webkit-scrollbar-thumb,
+            .spectator-list:hover::-webkit-scrollbar-thumb,
+            .sidebar:hover::-webkit-scrollbar-thumb {
+                background: var(--line);
+            }
+        }
+
         .move-item {
             padding: 10px 12px;
             border-radius: 14px;
