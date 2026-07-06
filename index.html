@@ -1813,6 +1813,14 @@
             .game-screen .layout > .panel:first-child {
                 padding-bottom: 8px;
             }
+            /* Stacked: the sidebar hugs the board's width like the seat and
+               control strips do, instead of growing with the window. */
+            .sidebar {
+                width: min(100%, var(--board-size, 680px));
+                margin-left: auto;
+                margin-right: auto;
+                box-sizing: border-box;
+            }
             .sidebar .card h2 {
                 display: none !important;
             }
@@ -1886,7 +1894,6 @@
 
             .sidebar {
                 grid-template-columns: 1fr;
-                padding: 0 4px;
             }
 
             .info-topline {
