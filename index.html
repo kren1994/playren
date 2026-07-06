@@ -4999,10 +4999,10 @@
                 const x = padding + lastMove.x * cell;
                 const y = topPadding + lastMove.y * cell;
                 ctx.beginPath();
-                ctx.arc(x, y, Math.max(2, cell * 0.1), 0, Math.PI * 2);
+                ctx.arc(x, y, Math.max(2, cell * 0.085), 0, Math.PI * 2);
                 ctx.fillStyle = lastMove.color === 'black'
-                    ? 'rgba(244, 238, 228, 0.8)'
-                    : 'rgba(66, 51, 34, 0.75)';
+                    ? 'rgba(244, 238, 228, 0.38)'
+                    : 'rgba(66, 51, 34, 0.34)';
                 ctx.fill();
             }
 
