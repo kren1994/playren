@@ -746,6 +746,9 @@
         .player-timer {
             flex: 0 0 auto;
             font-size: var(--seat-timer);
+            /* single numeric line: keep its box under the name's 1.5em core so
+               the clock appearing/disappearing never changes the row height */
+            line-height: 1;
             font-weight: 800;
             /* tabular-nums already meters the digits; no negative tracking */
             letter-spacing: 0;
@@ -772,6 +775,11 @@
             flex: 0 0 18px;
             width: 18px;
             height: 18px;
+        }
+
+        /* No mark → no slot: give the reserved width back to the name. */
+        .player-ready:empty {
+            display: none;
         }
 
         .ready-mark {
@@ -1954,8 +1962,10 @@
             }
 
             .player-name {
-                line-height: 1.2;
-                min-height: 0;
+                /* constant row core so empty and seated seats share one height
+                   (the ready slot no longer props the row up when hidden) */
+                line-height: 1.5;
+                min-height: 1.5em;
             }
 
             .player-status {
