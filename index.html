@@ -588,7 +588,9 @@
         .spectator-card.seat-action::before {
             content: "";
             position: absolute;
-            inset: 6px 8px;
+            /* horizontal inset matches the section padding (16px) so the fill
+               lines up exactly with the chat compose pill's edges */
+            inset: 6px 16px;
             border-radius: 12px;
             background: var(--fill-soft);
             pointer-events: none;
