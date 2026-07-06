@@ -2518,6 +2518,7 @@
         let boardThemeIndex = 0;
         let colorSchemePreference = 'auto';
         let currentLanguage = 'ja';
+        let previousLocalSeat = '';
         let displayMoveCount = -1;
         let pendingMove = null;
         let confirmMovePoint = null;
@@ -2764,7 +2765,7 @@
                 resignCancel: 'キャンセル',
                 resignConfirm: '終局',
                 playerNotJoined: ' ',
-                readyHint: 'タップで準備 OK',
+                readyHint: 'もう一度席をタップすると準備 OK',
                 readyAriaTitle: '準備 OK',
                 readyAriaCancel: '準備 OK を解除',
                 seatLeftAria: '左上席に着席',
@@ -2903,7 +2904,7 @@
                 resignCancel: '取消',
                 resignConfirm: '终局',
                 playerNotJoined: ' ',
-                readyHint: '点击准备完毕',
+                readyHint: '再次点击自己的座位即准备完毕',
                 readyAriaTitle: '准备完毕',
                 readyAriaCancel: '取消准备',
                 seatLeftAria: '坐到左上席',
@@ -3042,7 +3043,7 @@
                 resignCancel: 'Cancel',
                 resignConfirm: 'Resign',
                 playerNotJoined: ' ',
-                readyHint: 'Tap to ready up',
+                readyHint: 'Tap your seat again when you are ready',
                 readyAriaTitle: 'Ready',
                 readyAriaCancel: 'Cancel ready',
                 seatLeftAria: 'Take the upper-left seat',
@@ -3359,6 +3360,7 @@
                 boardThemeIndex: 0,
                 colorScheme: 'auto',
                 language: 'ja',
+                readyHintSeen: false,
             };
         }
 
@@ -3379,6 +3381,7 @@
             next.boardThemeIndex = clamp(Number(next.boardThemeIndex) || 0, 0, boardThemes.length - 1);
             next.colorScheme = ['auto', 'light', 'dark'].includes(next.colorScheme) ? next.colorScheme : 'auto';
             next.language = ['ja', 'zh', 'en'].includes(next.language) ? next.language : 'ja';
+            next.readyHintSeen = next.readyHintSeen === true;
             return next;
         }
 
@@ -5316,16 +5319,6 @@
                 // their name (via the .disconnected class); play continues.
                 view.status.textContent = '';
                 view.status.hidden = true;
-                // First-timer guidance: your own seat asks for the second tap
-                // that marks you ready (chip disappears once ready / playing).
-                const needsReadyHint = Boolean(participant
-                    && participant.id === localPeerId
-                    && state && state.status !== 'playing'
-                    && !state.readyByPeerId?.[participant.id]);
-                if (needsReadyHint) {
-                    view.status.textContent = i18n('readyHint');
-                    view.status.hidden = false;
-                }
                 view.slot.classList.toggle('disconnected', disconnected);
                 view.slot.classList.toggle('active', Boolean(participant && participant.id === activePeerId && state?.status === 'playing'));
                 renderReadyMark(view.ready, participant);
@@ -5334,6 +5327,20 @@
             // Greying is per-slot (renderParticipant) so only the actual
             // disconnected player dims — in pair renju a teammate stays normal.
             seatViews.forEach((view) => renderParticipant(view, state ? getSeatOccupant(view.seat) : null));
+
+            // First sit on this device: one transient hint about the second
+            // tap that marks you ready. Never shown again (readyHintSeen).
+            const localSeatNow = getParticipantById(localPeerId)?.seat || '';
+            if (localSeatNow !== previousLocalSeat) {
+                const satDown = isPlayingSeat(localSeatNow);
+                if (satDown && state?.status !== 'playing'
+                    && !state?.readyByPeerId?.[localPeerId]
+                    && !loadUserSettings().readyHintSeen) {
+                    showPresenceToast(i18n('readyHint'));
+                    persistUserSettings({ readyHintSeen: true });
+                }
+                previousLocalSeat = localSeatNow;
+            }
             const blackPeerId = getTeamPeerIds('black')[0] || '';
             const whitePeerId = getTeamPeerIds('white')[0] || '';
             elements.blackPlayerTimer.textContent = blackPeerId ? formatTime(getDisplayRemainingMs(blackPeerId)) : '';
