@@ -2745,6 +2745,7 @@
                 resignCancel: 'キャンセル',
                 resignConfirm: '終局',
                 playerNotJoined: ' ',
+                readyHint: 'タップで準備 OK',
                 readyAriaTitle: '準備 OK',
                 readyAriaCancel: '準備 OK を解除',
                 seatLeftAria: '左上席に着席',
@@ -2883,6 +2884,7 @@
                 resignCancel: '取消',
                 resignConfirm: '终局',
                 playerNotJoined: ' ',
+                readyHint: '点击准备完毕',
                 readyAriaTitle: '准备完毕',
                 readyAriaCancel: '取消准备',
                 seatLeftAria: '坐到左上席',
@@ -3021,6 +3023,7 @@
                 resignCancel: 'Cancel',
                 resignConfirm: 'Resign',
                 playerNotJoined: ' ',
+                readyHint: 'Tap to ready up',
                 readyAriaTitle: 'Ready',
                 readyAriaCancel: 'Cancel ready',
                 seatLeftAria: 'Take the upper-left seat',
@@ -5294,6 +5297,16 @@
                 // their name (via the .disconnected class); play continues.
                 view.status.textContent = '';
                 view.status.hidden = true;
+                // First-timer guidance: your own seat asks for the second tap
+                // that marks you ready (chip disappears once ready / playing).
+                const needsReadyHint = Boolean(participant
+                    && participant.id === localPeerId
+                    && state && state.status !== 'playing'
+                    && !state.readyByPeerId?.[participant.id]);
+                if (needsReadyHint) {
+                    view.status.textContent = i18n('readyHint');
+                    view.status.hidden = false;
+                }
                 view.slot.classList.toggle('disconnected', disconnected);
                 view.slot.classList.toggle('active', Boolean(participant && participant.id === activePeerId && state?.status === 'playing'));
                 renderReadyMark(view.ready, participant);
