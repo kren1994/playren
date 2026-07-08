@@ -292,9 +292,14 @@
             transition: background 0.18s ease, color 0.18s ease;
         }
 
+        @media (hover: hover) {
         .lobby-lang-btn:hover {
             background: var(--tint-hover);
             color: var(--text);
+        }
+        }
+        .lobby-lang-btn:active {
+            background: var(--tint-active);
         }
 
         .language-icon {
@@ -337,8 +342,10 @@
             text-underline-offset: 2px;
         }
 
+        @media (hover: hover) {
         .lobby-help-link:hover {
             opacity: 0.8;
+        }
         }
 
         .game-screen {
@@ -461,8 +468,10 @@
             border: none;
         }
 
+        @media (hover: hover) {
         .button:hover {
             transform: translateY(-1px);
+        }
         }
 
         .button:active {
@@ -481,8 +490,10 @@
             box-shadow: 0 4px 14px rgba(15, 67, 56, 0.22);
         }
 
+        @media (hover: hover) {
         .button-primary:hover {
             box-shadow: 0 7px 18px rgba(15, 67, 56, 0.26);
+        }
         }
 
         .button-primary:active {
@@ -603,13 +614,17 @@
             pointer-events: none;
         }
 
+        @media (hover: hover) {
         .spectator-card.seat-action:hover::before {
             background: var(--tint-hover);
         }
+        }
 
+        @media (hover: hover) {
         .player-card.seat-action:hover,
         .player-slot.seat-action:hover {
             background: var(--tint-hover);
+        }
         }
 
         .player-card.seat-action:active,
@@ -1244,7 +1259,7 @@
             color: var(--text);
             transition: background 0.18s ease, transform 0.18s ease;
         }
-        .board-controls button:hover { background: var(--tint-hover); }
+        @media (hover: hover) { .board-controls button:hover { background: var(--tint-hover); } }
         .board-controls button:active { background: var(--tint-active); transform: scale(0.96); }
         .board-controls button:disabled { opacity: 0.45; cursor: not-allowed; transform: none; background: transparent; }
 
@@ -1291,7 +1306,8 @@
             color: var(--text); background: transparent; border: none; box-shadow: none; border-radius: 10px; outline: none;
             display: flex; align-items: center; justify-content: space-between; gap: 10px;
         }
-        .board-controls .control-menu-item:hover { background: var(--tint-hover); transform: none; }
+        @media (hover: hover) { .board-controls .control-menu-item:hover { background: var(--tint-hover); transform: none; } }
+        .board-controls .control-menu-item:active { background: var(--tint-active); }
         .board-controls .control-menu-item::after { content: ''; width: 1em; flex: 0 0 1em; }
         .board-controls .control-menu-item.active::after { content: '✓'; color: var(--muted); }
         .board-controls .control-menu-item.board-theme-item::after,
@@ -1626,8 +1642,10 @@
             cursor: pointer;
         }
 
+        @media (hover: hover) {
         .log-action-button:hover {
             color: var(--accent-strong);
+        }
         }
 
         /* Compose sits at the top (messages grow upward), kept understated: a
@@ -1689,8 +1707,10 @@
             transition: color 0.15s ease;
         }
 
+        @media (hover: hover) {
         .log-send:hover {
             color: var(--accent);
+        }
         }
 
         .log-author {
