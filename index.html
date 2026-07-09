@@ -4989,13 +4989,16 @@
                     const moveText = String(index + 1);
                     const moveTextY = y + Math.max(1, Math.round(cell * 0.03));
                     const textLen = moveText.length;
-                    const baseRatio = textLen >= 3 ? 0.3 : (textLen === 2 ? 0.38 : 0.41);
-                    const fontSize = Math.max(10, Math.floor(cell * baseRatio));
                     // On narrow (phone) widths the board is small, so a bold
                     // weight + thick halo reads as too loud and competes with the
-                    // stone pattern. Lighten both there; keep PC as-is.
+                    // stone pattern. There, use a medium weight, ~90% size and a
+                    // thinner halo; keep PC as-is.
                     const narrow = window.innerWidth <= 599;
-                    ctx.font = `${narrow ? 400 : 600} ${fontSize}px 'Segoe UI', 'Yu Gothic UI', Meiryo, sans-serif`;
+                    const baseRatio = narrow
+                        ? (textLen >= 3 ? 0.27 : (textLen === 2 ? 0.34 : 0.37))
+                        : (textLen >= 3 ? 0.3 : (textLen === 2 ? 0.38 : 0.41));
+                    const fontSize = Math.max(10, Math.floor(cell * baseRatio));
+                    ctx.font = `${narrow ? 500 : 600} ${fontSize}px 'Segoe UI', 'Yu Gothic UI', Meiryo, sans-serif`;
                     ctx.textAlign = 'center';
                     ctx.textBaseline = 'middle';
                     if (stoneShadingEnabled) {
