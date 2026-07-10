@@ -4997,7 +4997,10 @@
                     const baseRatio = narrow
                         ? (textLen >= 3 ? 0.27 : (textLen === 2 ? 0.34 : 0.37))
                         : (textLen >= 3 ? 0.3 : (textLen === 2 ? 0.38 : 0.41));
-                    const fontSize = Math.max(10, Math.floor(cell * baseRatio));
+                    // Floor 9px on phones (10px otherwise): small boards clamp
+                    // to the floor, so at 10px the narrow size reduction would
+                    // never take effect there.
+                    const fontSize = Math.max(narrow ? 9 : 10, Math.floor(cell * baseRatio));
                     ctx.font = `${narrow ? 500 : 600} ${fontSize}px 'Segoe UI', 'Yu Gothic UI', Meiryo, sans-serif`;
                     ctx.textAlign = 'center';
                     ctx.textBaseline = 'middle';
