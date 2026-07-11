@@ -1768,22 +1768,24 @@
             color: var(--muted);
         }
 
+        /* Action feedback / errors: same top-centre stack as the presence
+           toasts (one place to look), but visually heavier — importance is
+           carried by weight, not by position. Hidden state keeps no height so
+           the presence pills close ranks around it. */
         .toast {
-            position: fixed;
-            right: 18px;
-            bottom: 18px;
-            min-width: 260px;
             max-width: min(420px, calc(100vw - 36px));
-            padding: 14px 16px;
-            border-radius: 16px;
+            padding: 12px 18px;
+            border-radius: 999px;
             background: var(--toast-bg);
             color: #f8f5ef;
-            box-shadow: 0 18px 36px rgba(24, 17, 12, 0.28);
+            font-size: 14px;
+            font-weight: 600;
+            text-align: center;
+            box-shadow: 0 12px 28px rgba(24, 17, 12, 0.26);
             opacity: 0;
-            transform: translateY(14px);
+            transform: translateY(-6px);
             pointer-events: none;
             transition: opacity 0.2s ease, transform 0.2s ease;
-            z-index: 20;
         }
 
         .toast.show {
@@ -1792,7 +1794,7 @@
         }
 
         /* Light, stacked presence toasts (join / leave / disconnect / reconnect),
-           kept distinct and subtler than the bottom-right info/error toast. */
+           kept subtler than the action/error toast that shares this stack. */
         .presence-toasts {
             position: fixed;
             top: 14px;
@@ -2067,11 +2069,7 @@
             .nav-btn.reset { width: 3.4em; min-width: 3em; }
 
             .toast {
-                right: 10px;
-                left: 10px;
-                bottom: 10px;
-                min-width: 0;
-                max-width: none;
+                max-width: calc(100vw - 20px);
             }
         }
     </style>
@@ -2419,8 +2417,9 @@
         </div>
     </div>
 
-    <div id="toast" class="toast" aria-live="polite"></div>
-    <div id="presenceToasts" class="presence-toasts" aria-live="polite"></div>
+    <div id="presenceToasts" class="presence-toasts" aria-live="polite">
+        <div id="toast" class="toast" aria-live="assertive" hidden></div>
+    </div>
 
     <script src="./ws-config.js"></script>
     <script src="./peer-over-ws.js"></script>
@@ -2570,6 +2569,7 @@
         let localMode = 'idle';
         let connectionState = '未接続';
         let toastTimer = null;
+        let toastHideTimer = null;
         let boardGeometry = null;
         let resizeFrame = 0;
         let lastActivityAt = 0;
@@ -3572,11 +3572,18 @@
         }
 
         function showToast(message) {
+            // presence と同じ縦スタックに載るため、非表示中は hidden で高さを
+            // 消し、フェードアウト（240ms）を待ってから畳む。
             elements.toast.textContent = message;
-            elements.toast.classList.add('show');
+            elements.toast.hidden = false;
             window.clearTimeout(toastTimer);
+            window.clearTimeout(toastHideTimer);
+            requestAnimationFrame(() => elements.toast.classList.add('show'));
             toastTimer = window.setTimeout(() => {
                 elements.toast.classList.remove('show');
+                toastHideTimer = window.setTimeout(() => {
+                    elements.toast.hidden = true;
+                }, 240);
             }, 2600);
         }
 
@@ -3588,9 +3595,10 @@
             el.className = 'presence-toast';
             el.textContent = message;
             elements.presenceToasts.appendChild(el);
-            while (elements.presenceToasts.childElementCount > 4) {
-                elements.presenceToasts.firstElementChild.remove();
-            }
+            // #toast も同じスタックに常駐しているので、間引きは presence の
+            // ピルだけを対象にする。
+            const pills = elements.presenceToasts.querySelectorAll('.presence-toast');
+            for (let i = 0; i < pills.length - 4; i++) pills[i].remove();
             requestAnimationFrame(() => el.classList.add('show'));
             window.setTimeout(() => {
                 el.classList.remove('show');
