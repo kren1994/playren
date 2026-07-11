@@ -1209,6 +1209,33 @@
             box-shadow: 0 16px 40px var(--shadow-color);
         }
 
+        /* Transient notice floated over the board (e.g. an opening swap):
+           lands in the player's line of sight, then fades away. Sits in the
+           lower area because opening stones cluster around the centre.
+           Opacity-only, so no reduced-motion gate. */
+        .board-notice {
+            position: absolute;
+            left: 50%;
+            top: 72%;
+            transform: translate(-50%, -50%);
+            max-width: calc(100% - 32px);
+            padding: 10px 18px;
+            border-radius: 999px;
+            background: var(--toast-bg);
+            color: var(--toast-text);
+            font-size: 15px;
+            font-weight: 600;
+            text-align: center;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.3s ease;
+            z-index: 6;
+        }
+
+        .board-notice.show {
+            opacity: 1;
+        }
+
         #boardCanvas {
             filter: var(--board-dim);
             width: 100%;
@@ -2191,6 +2218,7 @@
                     <div class="board-container" id="boardContainer">
                         <div class="board-wrap" id="boardWrap">
                             <canvas id="boardCanvas" width="760" height="760"></canvas>
+                            <div id="boardNotice" class="board-notice" aria-live="polite"></div>
                         </div>
                     </div>
 
@@ -2469,6 +2497,7 @@
             blackBottomReadyWrap: document.getElementById('blackBottomReadyWrap'),
             whiteBottomReadyWrap: document.getElementById('whiteBottomReadyWrap'),
             boardCanvas: document.getElementById('boardCanvas'),
+            boardNotice: document.getElementById('boardNotice'),
             boardControls: document.querySelector('.board-controls'),
             spectatorList: document.getElementById('spectatorList'),
             spectatorCard: document.getElementById('spectatorCard'),
@@ -2883,6 +2912,9 @@
                 msgReconnected: (name) => `${name} が復帰しました。`,
                 msgTimeChangedBy: (name) => `${name} が持ち時間を変更しました。`,
                 msgColorsSwappedBy: (name) => `${name} が手番の色を交換しました。`,
+                msgSwapNoticeBlack: '色交換 — あなたは黒番です',
+                msgSwapNoticeWhite: '色交換 — あなたは白番です',
+                msgSwapNoticeSpectator: '色が交換されました',
                 msgPairRenjuOnBy: (name) => `${name} がペア連珠を有効にしました。`,
                 msgPairRenjuOffBy: (name) => `${name} がペア連珠を無効にしました。`,
                 msgSeatsResetBy: (name) => `${name} が対局席をリセットしました。`,
@@ -3022,6 +3054,9 @@
                 msgReconnected: (name) => `${name} 已重新连接。`,
                 msgTimeChangedBy: (name) => `${name} 修改了用时设置。`,
                 msgColorsSwappedBy: (name) => `${name} 交换了执子颜色。`,
+                msgSwapNoticeBlack: '已交换 — 您现在执黑',
+                msgSwapNoticeWhite: '已交换 — 您现在执白',
+                msgSwapNoticeSpectator: '已交换执子颜色',
                 msgPairRenjuOnBy: (name) => `${name} 开启了双人连珠。`,
                 msgPairRenjuOffBy: (name) => `${name} 关闭了双人连珠。`,
                 msgSeatsResetBy: (name) => `${name} 重置了对局座位。`,
@@ -3161,6 +3196,9 @@
                 msgReconnected: (name) => `${name} reconnected.`,
                 msgTimeChangedBy: (name) => `${name} changed the time settings.`,
                 msgColorsSwappedBy: (name) => `${name} swapped the stone colors.`,
+                msgSwapNoticeBlack: 'Swapped — you are Black now',
+                msgSwapNoticeWhite: 'Swapped — you are White now',
+                msgSwapNoticeSpectator: 'Colors were swapped',
                 msgPairRenjuOnBy: (name) => `${name} turned on pair renju.`,
                 msgPairRenjuOffBy: (name) => `${name} turned off pair renju.`,
                 msgSeatsResetBy: (name) => `${name} reset the seats.`,
@@ -3728,6 +3766,35 @@
             }, LAST_MOVE_HIGHLIGHT_MS);
         }
 
+        let boardNoticeTimer = 0;
+
+        // 盤の中央に一過性の告知チップを出す（2秒表示してフェード）。
+        // 開局の色交換など「視線の先（盤）で知らせるべき出来事」用。
+        function showBoardNotice(text) {
+            const el = elements.boardNotice;
+            if (!el || !text) return;
+            if (boardNoticeTimer) clearTimeout(boardNoticeTimer);
+            el.textContent = text;
+            el.classList.remove('show');
+            void el.offsetWidth; // 連続表示でもフェードインし直す
+            el.classList.add('show');
+            boardNoticeTimer = window.setTimeout(() => {
+                boardNoticeTimer = 0;
+                el.classList.remove('show');
+            }, 2000);
+        }
+
+        // 開局の色交換を告知: 対局者には交換後の自分の色、観戦者には事実のみ。
+        // getTeamForPeer は「席」を返し、開局 swap は席→色の対応
+        // (state.seatColors) を反転させるので、席ではなく実効色で判定する。
+        function showSwapNotice() {
+            const seatTeam = getTeamForPeer(localPeerId);
+            const color = seatTeam ? (state?.seatColors?.[seatTeam] || seatTeam) : '';
+            if (color === 'black') showBoardNotice(i18n('msgSwapNoticeBlack'));
+            else if (color === 'white') showBoardNotice(i18n('msgSwapNoticeWhite'));
+            else showBoardNotice(i18n('msgSwapNoticeSpectator'));
+        }
+
         // 色交換は盤ではなく席で知らせる: 手番になった席（時計が動いている側）
         // だけにアンバーの一拍を走らせて減衰させる。判定できないときは両席。
         function pulseSeatSwap() {
@@ -4178,6 +4245,12 @@
                 // 交換後の手番を指してからパルスを打つ。
                 if (kind === 'swap') window.setTimeout(pulseSeatSwap, 0);
                 playActionNotificationSound();
+            }
+
+            // 開局の色交換チップは actor 本人以外の全員（観戦者含む）に出す。
+            // state は採用済みなので getTeamForPeer は交換後の色を返す。
+            if (kind === 'swap' && lastAction.actorPeerId && lastAction.actorPeerId !== localPeerId) {
+                showSwapNotice();
             }
         }
 
