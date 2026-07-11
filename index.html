@@ -2559,6 +2559,9 @@
         let confirmMovePoint = null;
         let lastMoveHighlight = null;
         let lastMoveHighlightTimer = 0;
+        // 検討モードの ⟳ はサーバ往復後に盤が変わるため、「次の状態更新が
+        // 届いたら最終手をハイライトする」予約をこの時刻まで有効にする。
+        let reviewResetHighlightUntil = 0;
         let currentOpenControlMenu = null;
         let dismissedActionDialogPhase = '';
         let localPlayerToken = '';
@@ -4144,6 +4147,12 @@
                 if (displayMoveCount > currentMax) displayMoveCount = -1;
             }
             render();
+            // 検討モードで ⟳ を押した直後の状態更新なら、移動先（終局図）の
+            // 最終手をハイライトする（予約は 1.5 秒で失効）。
+            if (reviewResetHighlightUntil) {
+                if (Date.now() <= reviewResetHighlightUntil) highlightNewestVisibleMove();
+                reviewResetHighlightUntil = 0;
+            }
         }
 
         // Client-side feedback the Durable Object can't produce: stone sound for
@@ -5893,13 +5902,26 @@
             renderBoard();
         }
 
+        // どこに打たれたか見失ったときの救済: いま見えている最終手にリングを
+        // 出す。自動リング（相手の手のみ）と違い明示的な要求なので、誰の手か
+        // は問わない。
+        function highlightNewestVisibleMove() {
+            const moves = getRenderedMoves();
+            if (!moves.length || displayMoveCount !== -1) return;
+            startLastMoveHighlight(moves[moves.length - 1]);
+            renderBoard();
+        }
+
         function resetMovesView() {
             if (!state) return;
             clearConfirmMovePoint();
             if (canUseReviewBoard()) {
                 sendAction({ kind: 'review-branch-base' });
+                // 盤はサーバ応答で変わるので、次の状態更新時にハイライトする
+                reviewResetHighlightUntil = Date.now() + 1500;
             } else {
                 displayMoveCount = -1;
+                highlightNewestVisibleMove();
                 renderBoard();
             }
         }
@@ -5909,12 +5931,21 @@
             clearConfirmMovePoint();
             if (canUseReviewBoard()) {
                 const max = (state.reviewMoves || []).length;
-                let current = state.reviewCursor ?? max;
-                current += delta;
-                if (current < 0) current = 0;
-                if (current > max) current = max;
-                sendAction({ kind: 'review-cursor', cursor: current });
+                const current = state.reviewCursor ?? max;
+                // 既に最終手で > / >> : 進む先はないので最終手を示す
+                if (delta > 0 && current >= max) {
+                    highlightNewestVisibleMove();
+                    return;
+                }
+                let next = current + delta;
+                if (next < 0) next = 0;
+                if (next > max) next = max;
+                sendAction({ kind: 'review-cursor', cursor: next });
             } else {
+                if (delta > 0 && displayMoveCount === -1) {
+                    highlightNewestVisibleMove();
+                    return;
+                }
                 const max = getRenderedMoves().length;
                 let current = displayMoveCount === -1 ? max : displayMoveCount;
                 current += delta;
