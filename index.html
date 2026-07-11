@@ -578,6 +578,27 @@
             background: var(--tint-state);
         }
 
+        /* Colour swap: both seats flash a brief amber wash that decays — the
+           change is announced where it happened (the seats), not on the board. */
+        @media (prefers-reduced-motion: no-preference) {
+            .player-card.swap-pulse {
+                animation: seat-swap-pulse 1.4s ease-out;
+            }
+
+            @keyframes seat-swap-pulse {
+                from { background-color: rgba(226, 138, 42, 0.24); }
+                to { background-color: transparent; }
+            }
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+            /* Motion-free fallback: a short static wash; the card's own
+               background transition eases it in and out. */
+            .player-card.swap-pulse {
+                background-color: rgba(226, 138, 42, 0.16);
+            }
+        }
+
         .player-slot {
             width: 100%;
             min-width: 0;
@@ -2538,8 +2559,6 @@
         let confirmMovePoint = null;
         let lastMoveHighlight = null;
         let lastMoveHighlightTimer = 0;
-        let boardAlertHighlight = null;
-        let boardAlertHighlightTimer = 0;
         let currentOpenControlMenu = null;
         let dismissedActionDialogPhase = '';
         let localPlayerToken = '';
@@ -2560,7 +2579,10 @@
         const NOTIFICATION_SOUND_POOL_SIZE = 4;
         const NOTIFICATION_SOUND_POOL_MAX = 8;
         const LAST_MOVE_HIGHLIGHT_MS = 2000;
-        const BOARD_ALERT_HIGHLIGHT_MS = 2000;
+        // The ring holds for the first half and fades over the second, so it
+        // draws the eye once when the stone lands and then leaves quietly.
+        // Opacity-only fades are motion-safe, so no reduced-motion gate.
+        const LAST_MOVE_RING_FADE_MS = 1000;
         let stoneSoundBuffer = null;
         let stoneSoundBufferPromise = null;
         let stoneSoundPool = [];
@@ -3687,6 +3709,15 @@
                 number: move.number,
                 expiresAt: Date.now() + LAST_MOVE_HIGHLIGHT_MS,
             };
+            // Redraw at frame rate only while the ring is actually fading.
+            const highlight = lastMoveHighlight;
+            const fadeStartAt = highlight.expiresAt - LAST_MOVE_RING_FADE_MS;
+            const tick = () => {
+                if (lastMoveHighlight !== highlight) return;
+                if (Date.now() >= fadeStartAt) renderBoard();
+                if (Date.now() < highlight.expiresAt) requestAnimationFrame(tick);
+            };
+            requestAnimationFrame(tick);
             lastMoveHighlightTimer = window.setTimeout(() => {
                 lastMoveHighlight = null;
                 lastMoveHighlightTimer = 0;
@@ -3694,26 +3725,22 @@
             }, LAST_MOVE_HIGHLIGHT_MS);
         }
 
-        function clearBoardAlertHighlight() {
-            boardAlertHighlight = null;
-            if (boardAlertHighlightTimer) {
-                clearTimeout(boardAlertHighlightTimer);
-                boardAlertHighlightTimer = 0;
+        // 色交換は盤ではなく席で知らせる: 手番になった席（時計が動いている側）
+        // だけにアンバーの一拍を走らせて減衰させる。判定できないときは両席。
+        function pulseSeatSwap() {
+            let targets = [...document.querySelectorAll('.player-card.active')];
+            if (!targets.length) {
+                targets = [...document.querySelectorAll('.player-slot.active')]
+                    .map((slot) => slot.closest('.player-card'))
+                    .filter(Boolean);
             }
-        }
-
-        function startBoardAlertHighlight(kind) {
-            clearBoardAlertHighlight();
-            boardAlertHighlight = {
-                kind,
-                expiresAt: Date.now() + BOARD_ALERT_HIGHLIGHT_MS,
-            };
-            renderBoard();
-            boardAlertHighlightTimer = window.setTimeout(() => {
-                boardAlertHighlight = null;
-                boardAlertHighlightTimer = 0;
-                renderBoard();
-            }, BOARD_ALERT_HIGHLIGHT_MS);
+            if (!targets.length) targets = [...document.querySelectorAll('.player-card')];
+            targets.forEach((card) => {
+                card.classList.remove('swap-pulse');
+                void card.offsetWidth; // restart the animation on repeat swaps
+                card.classList.add('swap-pulse');
+                window.setTimeout(() => card.classList.remove('swap-pulse'), 1500);
+            });
         }
 
         function setPendingMove(action) {
@@ -4077,11 +4104,16 @@
             const currentVersion = state?.version || 0;
             const currentMoveCount = state?.moves?.length || 0;
             const incomingMoves = Array.isArray(nextState.moves) ? nextState.moves : [];
+            const newestIncomingMove = incomingMoves[incomingMoves.length - 1];
+            // Ring only for moves placed by someone else — the person who just
+            // played knows where their own stone is (spectators see all rings).
             const shouldHighlightIncomingMove = Boolean(
                 state &&
                 incomingVersion &&
                 incomingVersion > currentVersion &&
-                incomingMoves.length > currentMoveCount
+                incomingMoves.length > currentMoveCount &&
+                newestIncomingMove &&
+                newestIncomingMove.peerId !== localPeerId
             );
             // Ignore a stale/out-of-order broadcast (shouldn't happen over one
             // ordered socket, but cheap to guard).
@@ -4133,7 +4165,9 @@
             const kind = lastAction && lastAction.kind;
             if (kind && isActiveActionNotification(kind)
                 && shouldNotifyRemoteAction(lastAction.actorPeerId, kind)) {
-                if (kind === 'swap') startBoardAlertHighlight('swap');
+                // render() は reactToStateChange の後に走るので、.active が
+                // 交換後の手番を指してからパルスを打つ。
+                if (kind === 'swap') window.setTimeout(pulseSeatSwap, 0);
                 playActionNotificationSound();
             }
         }
@@ -4640,7 +4674,6 @@
             clockOffsetMs = 0;
             clearConfirmMovePoint();
             clearLastMoveHighlight();
-            clearBoardAlertHighlight();
             if (peer) {
                 try { peer.destroy(); } catch (error) { }
                 peer = null;
@@ -4976,11 +5009,18 @@
                 drawStoneBody(x, y, cell * 0.45, move.color === 'black');
 
                 if (isHighlightedLastMove) {
+                    // Lands with a calm, deep-amber ring and fades out over the
+                    // second half. The board itself is amber, so the ring stops
+                    // reading below ~0.4 alpha; the eased curve (^0.45) keeps it
+                    // inside the visible band for most of the fade window and
+                    // lets it slip out already-invisible (no pop).
+                    const remainingMs = lastMoveHighlight.expiresAt - Date.now();
+                    const fade = Math.pow(Math.max(0, Math.min(0.8, remainingMs / LAST_MOVE_RING_FADE_MS)), 0.45);
                     ctx.save();
                     ctx.beginPath();
                     ctx.arc(x, y, cell * 0.5, 0, Math.PI * 2);
-                    ctx.lineWidth = Math.max(3, cell * 0.08);
-                    ctx.strokeStyle = 'rgba(255, 163, 64, 0.58)';
+                    ctx.lineWidth = Math.max(3, cell * 0.075);
+                    ctx.strokeStyle = `rgba(235, 140, 36, ${(0.8 * fade).toFixed(3)})`;
                     ctx.stroke();
                     ctx.restore();
                 }
@@ -5086,20 +5126,6 @@
             ctx.restore();
         }
 
-        function drawBoardAlertHighlight() {
-            if (!boardGeometry || !boardAlertHighlight || Date.now() >= boardAlertHighlight.expiresAt) return;
-            const { size, cell } = boardGeometry;
-            const lineWidth = Math.max(3, Math.min(7, cell * 0.14));
-            const inset = lineWidth / 2 + 2;
-            ctx.save();
-            ctx.strokeStyle = 'rgba(255, 163, 64, 0.58)';
-            ctx.lineWidth = lineWidth;
-            ctx.shadowColor = 'rgba(255, 163, 64, 0.26)';
-            ctx.shadowBlur = Math.max(6, cell * 0.22);
-            ctx.strokeRect(inset, inset, size - inset * 2, size - inset * 2);
-            ctx.restore();
-        }
-
         function renderBoard() {
             if (!boardGeometry) return;
             const { size, padding, topPadding, rightPadding, bottomPadding, coordinateGap, cell } = boardGeometry;
@@ -5169,7 +5195,6 @@
                 drawOfferedMoves();
             }
             drawStones();
-            drawBoardAlertHighlight();
         }
 
         function boardPointFromEvent(event) {
