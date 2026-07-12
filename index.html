@@ -1697,18 +1697,37 @@
             word-break: break-word;
         }
 
+        /* Secondary to the result line it hangs off: no bold, no accent colour
+           at rest — a hairline underline carries the affordance. The accent
+           only comes up on hover/focus (dark mode's mint accent would otherwise
+           outshine the message itself). */
         .log-action-button {
             appearance: none;
             margin-left: 8px;
             padding: 0;
             border: 0;
             background: transparent;
-            color: var(--accent);
+            color: var(--muted);
             font: inherit;
-            font-weight: 700;
             text-decoration: underline;
+            text-decoration-thickness: 1px;
+            text-decoration-color: var(--line);
             text-underline-offset: 3px;
             cursor: pointer;
+            transition: color 0.15s ease, text-decoration-color 0.15s ease;
+        }
+
+        @media (hover: hover) {
+            .log-action-button:hover {
+                color: var(--accent);
+                text-decoration-color: currentColor;
+            }
+        }
+
+        .log-action-button:focus-visible,
+        .log-action-button:active {
+            color: var(--accent);
+            text-decoration-color: currentColor;
         }
 
         @media (hover: hover) {
