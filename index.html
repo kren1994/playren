@@ -868,6 +868,19 @@
             }
         }
 
+        /* Non-modal variant for in-game responses (swap / draw / takeback /
+           resign): the card floats but the page stays fully usable, so the
+           player can review the position or chat before answering. Board
+           moves during a swap phase are legal and imply "keep". */
+        .confirm-backdrop.confirm-passive {
+            background: transparent;
+            pointer-events: none;
+        }
+
+        .confirm-backdrop.confirm-passive .confirm-card {
+            pointer-events: auto;
+        }
+
         .confirm-card {
             width: auto;
             min-width: 240px;
@@ -899,6 +912,14 @@
             font-size: 14px;
             line-height: 1.6;
             white-space: pre-line; /* honor the \n line break in the message */
+        }
+
+        /* 「そのまま」はボタンでなく盤への着手なので、その導線を一言で示す */
+        .confirm-hint {
+            margin: -4px 0 0;
+            text-align: center;
+            font-size: 12px;
+            color: var(--muted);
         }
 
         #timeSettingsDialog {
@@ -2317,24 +2338,25 @@
     </div>
 
     <!-- 動的アクション用ダイアログ -->
-    <div id="actionConfirm" class="confirm-backdrop" hidden>
-        <div class="confirm-card" role="dialog" aria-modal="true">
+    <div id="actionConfirm" class="confirm-backdrop confirm-passive" hidden>
+        <div class="confirm-card" role="dialog">
             <div id="actionConfirmButtons" class="confirm-actions">
             </div>
+            <p id="actionConfirmHint" class="confirm-hint"></p>
         </div>
     </div>
 
-    <div id="drawConfirm" class="confirm-backdrop" hidden>
-        <div class="confirm-card" role="dialog" aria-modal="true">
+    <div id="drawConfirm" class="confirm-backdrop confirm-passive" hidden>
+        <div class="confirm-card" role="dialog">
             <div class="confirm-actions">
                 <button id="drawDeclineBtn" class="button button-secondary" type="button">拒否</button>
-                <button id="drawAcceptBtn" class="button button-primary" type="button">満局合意</button>
+                <button id="drawAcceptBtn" class="button button-warn" type="button">満局合意</button>
             </div>
         </div>
     </div>
 
-    <div id="takebackConfirm" class="confirm-backdrop" hidden>
-        <div class="confirm-card" role="dialog" aria-modal="true">
+    <div id="takebackConfirm" class="confirm-backdrop confirm-passive" hidden>
+        <div class="confirm-card" role="dialog">
             <div class="confirm-actions">
                 <button id="takebackDeclineBtn" class="button button-secondary" type="button">拒否</button>
                 <button id="takebackAcceptBtn" class="button button-primary" type="button">待った合意</button>
@@ -2342,11 +2364,11 @@
         </div>
     </div>
 
-    <div id="resignConfirm" class="confirm-backdrop" hidden>
-        <div class="confirm-card" role="dialog" aria-modal="true">
+    <div id="resignConfirm" class="confirm-backdrop confirm-passive" hidden>
+        <div class="confirm-card" role="dialog">
             <div class="confirm-actions">
                 <button id="resignCancelBtn" class="button button-secondary" type="button">キャンセル</button>
-                <button id="resignConfirmBtn" class="button button-primary" type="button">終局</button>
+                <button id="resignConfirmBtn" class="button button-warn" type="button">終局</button>
             </div>
         </div>
     </div>
@@ -2516,6 +2538,7 @@
             resignCancelBtn: document.getElementById('resignCancelBtn'),
             actionConfirm: document.getElementById('actionConfirm'),
             actionConfirmButtons: document.getElementById('actionConfirmButtons'),
+            actionConfirmHint: document.getElementById('actionConfirmHint'),
             menuDrawBtn: document.getElementById('menuDrawBtn'),
             menuResignBtn: document.getElementById('menuResignBtn'),
             menuTakebackBtn: document.getElementById('menuTakebackBtn'),
@@ -2592,7 +2615,6 @@
         // 届いたら最終手をハイライトする」予約をこの時刻まで有効にする。
         let reviewResetHighlightUntil = 0;
         let currentOpenControlMenu = null;
-        let dismissedActionDialogPhase = '';
         let localPlayerToken = '';
         let hasNotifiedHostLeaving = false;
         let reconnectTimer = 0;
@@ -2826,7 +2848,7 @@
                 menuPairRenju: 'ペア連珠',
                 actionDialogChoice2: '10 題',
                 actionDialogSwap: 'Swap',
-                actionDialogRegular: 'そのまま',
+                actionDialogHint: 'そのまま進めるなら盤に着手',
                 drawDecline: '拒否',
                 drawAccept: '満局合意',
                 takebackDecline: '拒否',
@@ -2968,7 +2990,7 @@
                 menuPairRenju: '双人连珠',
                 actionDialogChoice2: '10 题',
                 actionDialogSwap: 'Swap',
-                actionDialogRegular: '不交换',
+                actionDialogHint: '不交换时直接落子',
                 drawDecline: '拒绝',
                 drawAccept: '同意和棋',
                 takebackDecline: '拒绝',
@@ -3110,7 +3132,7 @@
                 menuPairRenju: 'Pair Renju',
                 actionDialogChoice2: '10 moves',
                 actionDialogSwap: 'Swap',
-                actionDialogRegular: 'Keep',
+                actionDialogHint: 'Or just play on the board',
                 drawDecline: 'Decline',
                 drawAccept: 'Accept Draw',
                 takebackDecline: 'Decline',
@@ -5610,42 +5632,32 @@
             const descriptor = phaseDescriptor();
             const isMyTurn = descriptor.actorPeerId && descriptor.actorPeerId === localPeerId;
             const isSwapOrChoice = isMyTurn && (state.phase.startsWith('swap-after-') || state.phase === 'choose-branch');
-            
-            if (dismissedActionDialogPhase !== state.phase) {
-                dismissedActionDialogPhase = '';
-            }
 
-            if (isSwapOrChoice && !dismissedActionDialogPhase) {
+            // 非モーダル: 「そのまま」はボタンでなく、盤に打つことで選ぶ
+            // （swap フェーズ中の着手はエンジンが暗黙の続行として扱う）。
+            // 対等な選択肢なので、ボタンは同格の見た目にする。
+            if (isSwapOrChoice) {
                 elements.actionConfirm.hidden = false;
                 updateConfirmDialogPosition();
-                
+
+                elements.actionConfirmHint.textContent = i18n('actionDialogHint');
                 elements.actionConfirmButtons.innerHTML = '';
-                
+
                 if (state.phase.startsWith('swap-after-')) {
                     const btnSwap = document.createElement('button');
-                    btnSwap.className = 'button button-warn';
+                    btnSwap.className = 'button button-secondary';
                     btnSwap.textContent = i18n('actionDialogSwap');
                     btnSwap.onclick = () => { elements.actionConfirm.hidden = true; sendAction({ kind: 'swap' }); };
                     elements.actionConfirmButtons.appendChild(btnSwap);
                 }
-                
-                const btnReg = document.createElement('button');
-                btnReg.className = 'button button-secondary';
-                btnReg.textContent = i18n('actionDialogRegular');
-                btnReg.onclick = () => { 
-                    elements.actionConfirm.hidden = true; 
-                    dismissedActionDialogPhase = state.phase; 
-                };
-                elements.actionConfirmButtons.appendChild(btnReg);
 
                 if (state.phase === 'choose-branch' || state.phase === 'swap-after-4') {
                     const btn10 = document.createElement('button');
-                    btn10.className = 'button button-primary';
+                    btn10.className = 'button button-secondary';
                     btn10.textContent = i18n('actionDialogChoice2');
                     btn10.onclick = () => { elements.actionConfirm.hidden = true; sendAction({ kind: 'choice2' }); };
                     elements.actionConfirmButtons.appendChild(btn10);
                 }
-                
             } else {
                 elements.actionConfirm.hidden = true;
             }
