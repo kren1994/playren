@@ -2695,6 +2695,9 @@
             [stoneSoundPool, notificationSoundPool].forEach((pool) => {
                 initSoundPool(pool);
                 pool.elements.forEach((sound) => {
+                    // load() aborts an element mid-play, so only prime ones that
+                    // have fetched nothing yet — re-priming would clip playback.
+                    if (sound.readyState !== 0) return;
                     try { sound.load(); } catch (error) {}
                 });
             });
