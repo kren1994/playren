@@ -2639,9 +2639,10 @@
         let reconnectTimer = 0;
         let sessionTerminated = false;
         // Estimated (serverClock - localClock) offset so the display
-        // interpolates clocks against host time, not the local wall clock.
-        // Always 0 on the host (it is the time authority).
-        let clockOffsetMs = 0;
+        // interpolates clocks against DO time, not the local wall clock.
+        // null until the first game-state carries a serverNow (local mode
+        // never sets it; the arithmetic treats null as 0).
+        let clockOffsetMs = null;
         
         let soundEnabled = true;
         // Every effect goes through one path: a small pool of HTMLAudio elements.
@@ -4143,9 +4144,15 @@
                 return;
             }
             // Align our wall clock to the server's so clock interpolation in
-            // getDisplayRemainingMs uses authoritative (DO) time.
+            // getDisplayRemainingMs uses authoritative (DO) time. serverNow is
+            // stamped at send and we read Date.now() at processing, so every
+            // sample understates the true offset by its delivery delay — and a
+            // backgrounded iPhone can hold a message for seconds. Keep the max:
+            // the best-delivered sample wins, and the display can only err on
+            // the pessimistic side (never shows more time than the DO has).
             if (typeof serverNow === 'number' && serverNow > 0) {
-                clockOffsetMs = serverNow - Date.now();
+                const sample = serverNow - Date.now();
+                clockOffsetMs = clockOffsetMs === null ? sample : Math.max(clockOffsetMs, sample);
             }
             if (peer) localMode = 'guest';
             const previousState = state;
@@ -4255,9 +4262,9 @@
             if (state.status !== 'playing' || !sameActiveClock || !state.clocks.activeStartedAt) {
                 return base;
             }
-            // activeStartedAt is in host time; align our clock to it. On the host
-            // clockOffsetMs is 0, so this is a no-op there.
-            return Math.max(0, base - ((Date.now() + clockOffsetMs) - state.clocks.activeStartedAt));
+            // activeStartedAt is in DO time; align our clock to it. In local
+            // mode there is no server, so the offset stays null (= 0 here).
+            return Math.max(0, base - ((Date.now() + (clockOffsetMs || 0)) - state.clocks.activeStartedAt));
         }
 
         function applyElapsedTime(timestamp = Date.now()) {
@@ -4705,7 +4712,7 @@
         function destroyNetworkState() {
             sessionTerminated = true;
             clearReconnectTimer();
-            clockOffsetMs = 0;
+            clockOffsetMs = null;
             clearConfirmMovePoint();
             clearLastMoveHighlight();
             if (peer) {
@@ -4722,7 +4729,7 @@
         function closeLocalSessionWithoutSnapshot() {
             sessionTerminated = true;
             clearReconnectTimer();
-            clockOffsetMs = 0;
+            clockOffsetMs = null;
             clearConfirmMovePoint();
             const previousPeer = peer;
 
