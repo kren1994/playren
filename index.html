@@ -2644,108 +2644,59 @@
         let clockOffsetMs = 0;
         
         let soundEnabled = true;
-        let audioCtx = null;
-        const STONE_SOUND_SRC = './mp3/play1.mp3';
+        // Every effect goes through one path: a small pool of HTMLAudio elements.
+        // The stone sound used to prefer a WebAudio buffer and fall back to this
+        // pool, which made it the only sound whose behaviour varied per play —
+        // and on iOS WebAudio obeys the ring/silent switch while HTMLAudio does
+        // not, so the stone alone went silent. Uniform beats low-latency here;
+        // the sources are short WAVs so the element path starts fast enough.
+        const STONE_SOUND_SRC = './mp3/play1.wav';
         const NOTIFICATION_SOUND_SRC = './mp3/notify.wav';
-        const STONE_SOUND_POOL_SIZE = 4;
-        const STONE_SOUND_POOL_MAX = 8;
-        const NOTIFICATION_SOUND_POOL_SIZE = 4;
-        const NOTIFICATION_SOUND_POOL_MAX = 8;
+        const SOUND_POOL_SIZE = 4;
+        const SOUND_POOL_MAX = 8;
         const LAST_MOVE_HIGHLIGHT_MS = 2000;
         // The ring holds for the first half and fades over the second, so it
         // draws the eye once when the stone lands and then leaves quietly.
         // Opacity-only fades are motion-safe, so no reduced-motion gate.
         const LAST_MOVE_RING_FADE_MS = 1000;
-        let stoneSoundBuffer = null;
-        let stoneSoundBufferPromise = null;
-        let stoneSoundPool = [];
-        let notificationSoundPool = [];
-        let audioResumePromise = null;
+        const stoneSoundPool = { src: STONE_SOUND_SRC, elements: [] };
+        const notificationSoundPool = { src: NOTIFICATION_SOUND_SRC, elements: [] };
         let lastReportedSec = null;
 
-        function initAudio() {
-            if (!audioCtx) {
-                const AudioContext = window.AudioContext || window.webkitAudioContext;
-                if (AudioContext) {
-                    audioCtx = new AudioContext();
-                }
-            }
-            if (audioCtx && audioCtx.state === 'suspended') {
-                if (!audioResumePromise) {
-                    audioResumePromise = audioCtx.resume()
-                        .catch(() => {})
-                        .finally(() => {
-                            audioResumePromise = null;
-                        });
-                }
-            }
-            return audioCtx;
-        }
-
-        function initStoneSound() {
-            if (stoneSoundPool.length || !window.Audio) return;
-            stoneSoundPool = Array.from({ length: STONE_SOUND_POOL_SIZE }, () => {
-                return createStoneAudioElement();
-            });
-        }
-
-        function initNotificationSound() {
-            if (notificationSoundPool.length || !window.Audio) return;
-            notificationSoundPool = Array.from({ length: NOTIFICATION_SOUND_POOL_SIZE }, () => {
-                return createNotificationAudioElement();
-            });
-        }
-
-        function createStoneAudioElement() {
-            const sound = new Audio(STONE_SOUND_SRC);
+        function createAudioElement(src) {
+            const sound = new Audio(src);
             sound.preload = 'auto';
             return sound;
         }
 
-        function createNotificationAudioElement() {
-            const sound = new Audio(NOTIFICATION_SOUND_SRC);
-            sound.preload = 'auto';
-            return sound;
+        function initSoundPool(pool) {
+            if (pool.elements.length || !window.Audio) return;
+            pool.elements = Array.from({ length: SOUND_POOL_SIZE }, () => createAudioElement(pool.src));
         }
 
-        function decodeAudioDataCompat(arrayBuffer) {
-            return new Promise((resolve, reject) => {
-                const decoded = audioCtx.decodeAudioData(arrayBuffer, resolve, reject);
-                if (decoded && typeof decoded.then === 'function') {
-                    decoded.then(resolve, reject);
-                }
-            });
-        }
-
-        function ensureStoneSoundBuffer() {
-            if (!audioCtx || stoneSoundBuffer || stoneSoundBufferPromise) return;
-            stoneSoundBufferPromise = fetch(STONE_SOUND_SRC)
-                .then((response) => {
-                    if (!response.ok) throw new Error(`stone sound load failed: ${response.status}`);
-                    return response.arrayBuffer();
-                })
-                .then(decodeAudioDataCompat)
-                .then((buffer) => {
-                    stoneSoundBuffer = buffer;
-                    return buffer;
-                })
-                .catch(() => {
-                    stoneSoundBufferPromise = null;
-                    return null;
-                });
+        function playPooledSound(pool) {
+            initSoundPool(pool);
+            let sound = pool.elements.find((item) => item.paused || item.ended);
+            if (!sound && pool.elements.length < SOUND_POOL_MAX) {
+                sound = createAudioElement(pool.src);
+                pool.elements.push(sound);
+            }
+            if (!sound) return;
+            try {
+                sound.currentTime = 0;
+            } catch (error) {
+                // iOS may reject currentTime before metadata is available; play from the start anyway.
+            }
+            sound.play().catch(() => {});
         }
 
         function primeAudioFromUserGesture() {
             if (!soundEnabled) return;
-            initAudio();
-            ensureStoneSoundBuffer();
-            initStoneSound();
-            initNotificationSound();
-            stoneSoundPool.forEach((sound) => {
-                try { sound.load(); } catch (error) {}
-            });
-            notificationSoundPool.forEach((sound) => {
-                try { sound.load(); } catch (error) {}
+            [stoneSoundPool, notificationSoundPool].forEach((pool) => {
+                initSoundPool(pool);
+                pool.elements.forEach((sound) => {
+                    try { sound.load(); } catch (error) {}
+                });
             });
         }
 
@@ -2753,70 +2704,19 @@
             document.body.addEventListener(eventName, primeAudioFromUserGesture, { capture: true, passive: true });
         });
 
-        function playStoneSoundBuffer() {
-            if (!audioCtx || !stoneSoundBuffer || audioCtx.state !== 'running') return false;
-            const source = audioCtx.createBufferSource();
-            const gain = audioCtx.createGain();
-            source.buffer = stoneSoundBuffer;
-            gain.gain.value = 1;
-            source.connect(gain);
-            gain.connect(audioCtx.destination);
-            source.start();
-            return true;
-        }
-
-        function playStoneSoundFallback() {
-            initStoneSound();
-            if (!stoneSoundPool.length) return;
-            let sound = stoneSoundPool.find((item) => item.paused || item.ended);
-            if (!sound && stoneSoundPool.length < STONE_SOUND_POOL_MAX) {
-                sound = createStoneAudioElement();
-                stoneSoundPool.push(sound);
-            }
-            if (!sound) return;
-            try {
-                sound.currentTime = 0;
-            } catch (error) {
-                // iOS may reject currentTime before metadata is available; play from the start anyway.
-            }
-            sound.play().catch(() => {});
-        }
-
-        function playNotificationSoundFile() {
-            initNotificationSound();
-            if (!notificationSoundPool.length) return;
-            let sound = notificationSoundPool.find((item) => item.paused || item.ended);
-            if (!sound && notificationSoundPool.length < NOTIFICATION_SOUND_POOL_MAX) {
-                sound = createNotificationAudioElement();
-                notificationSoundPool.push(sound);
-            }
-            if (!sound) return;
-            try {
-                sound.currentTime = 0;
-            } catch (error) {
-                // iOS may reject currentTime before metadata is available; play from the start anyway.
-            }
-            sound.play().catch(() => {});
-        }
-
-        function playStoneSound(isSelf) {
+        function playStoneSound() {
             if (!soundEnabled) return;
-            initAudio();
-            ensureStoneSoundBuffer();
-            if (playStoneSoundBuffer()) return;
-            playStoneSoundFallback();
+            playPooledSound(stoneSoundPool);
         }
 
         function playCountdownSound() {
             if (!soundEnabled) return;
-            initAudio();
-            playNotificationSoundFile();
+            playPooledSound(notificationSoundPool);
         }
 
         function playActionNotificationSound() {
             if (!soundEnabled) return;
-            initAudio();
-            playNotificationSoundFile();
+            playPooledSound(notificationSoundPool);
         }
 
         // Palette rules: every theme stays a step darker than the white stone
@@ -3778,7 +3678,7 @@
                 return;
             }
             clearConfirmMovePoint();
-            playStoneSound(true);
+            playStoneSound();
             sendAction({ kind: actionKind, x: point.x, y: point.y });
         }
 
@@ -4282,7 +4182,7 @@
             const lastMove = next.moves?.[nextMoves - 1];
 
             if (nextMoves > prevMoves && lastMove && lastMove.peerId !== localPeerId) {
-                playStoneSound(false);
+                playStoneSound();
             }
 
             // swap / draw / takeback notifications fire on the seated opponent:
@@ -5965,8 +5865,7 @@
             document.getElementById('soundBtn').classList.toggle('active', soundEnabled);
             persistUserSettings({ soundEnabled });
             if (soundEnabled) {
-                initAudio();
-                initNotificationSound();
+                primeAudioFromUserGesture();
             }
         }
 
