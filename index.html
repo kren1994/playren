@@ -4822,6 +4822,24 @@
             updateConfirmDialogPosition();
         }
 
+        // Breathing room between the lowest legal point and the dialog above it.
+        const CONFIRM_DIALOG_GAP = 10;
+
+        // Screen y of the bottom edge of the lowest legal point, or null when the
+        // phase puts no square constraint on the board.
+        function constraintBottomY() {
+            if (!boardGeometry || !state) return null;
+            const constraint = phaseDescriptor().constraint;
+            if (!constraint) return null;
+            const radius = constraint.kind === 'square' ? constraint.radius
+                : constraint.kind === 'center' ? 0
+                : null;
+            if (radius === null) return null;
+            const rect = elements.boardCanvas.getBoundingClientRect();
+            const { topPadding, cell } = boardGeometry;
+            return rect.top + topPadding + (CENTER + radius) * cell + cell * 0.5;
+        }
+
         function updateConfirmDialogPosition() {
             if (!elements.boardCanvas) return;
             const rect = elements.boardCanvas.getBoundingClientRect();
@@ -4829,7 +4847,23 @@
             // Pin to the board's bottom-center, but clamp into the viewport so a
             // board taller than the screen (e.g. landscape phones) can't push the
             // dialog below the fold where it would be invisible.
-            const y = Math.min(rect.bottom, window.innerHeight - 16);
+            let y = Math.min(rect.bottom, window.innerHeight - 16);
+
+            // During swap / choice, "keep" is not a button — it is a move on the
+            // board, so the card must never sit on a legal point. The card grows
+            // upward from y, so push y down until its top clears the constraint
+            // region. Only ever downward: the resting place stays the board's
+            // bottom edge. The viewport clamp still has the last word, so a screen
+            // too short to fit both simply keeps the old behaviour.
+            if (!elements.actionConfirm.hidden) {
+                const card = elements.actionConfirm.querySelector('.confirm-card');
+                const limit = constraintBottomY();
+                if (card && limit !== null) {
+                    const needed = limit + CONFIRM_DIALOG_GAP + card.offsetHeight;
+                    y = Math.min(Math.max(y, needed), window.innerHeight - 16);
+                }
+            }
+
             document.documentElement.style.setProperty('--confirm-dialog-x', `${rect.left + rect.width / 2}px`);
             document.documentElement.style.setProperty('--confirm-dialog-y', `${y}px`);
         }
@@ -5497,8 +5531,6 @@
             // 対等な選択肢なので、ボタンは同格の見た目にする。
             if (isSwapOrChoice) {
                 elements.actionConfirm.hidden = false;
-                updateConfirmDialogPosition();
-
                 elements.actionConfirmHint.textContent = i18n('actionDialogHint');
                 elements.actionConfirmButtons.innerHTML = '';
 
@@ -5517,6 +5549,9 @@
                     btn10.onclick = () => { elements.actionConfirm.hidden = true; sendAction({ kind: 'choice2' }); };
                     elements.actionConfirmButtons.appendChild(btn10);
                 }
+
+                // Position last: the card's height depends on the buttons above.
+                updateConfirmDialogPosition();
             } else {
                 elements.actionConfirm.hidden = true;
             }
