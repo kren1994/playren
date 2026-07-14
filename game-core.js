@@ -700,12 +700,37 @@
         return '';
     }
 
+    // Moves 1-6 are the opening: they must never be rewound. A takeback is
+    // therefore allowed only while it leaves at least this many moves standing,
+    // which in a normal game means black may take back from move 7 on and white
+    // from move 8 on.
+    const PROTECTED_MOVE_COUNT = 6;
+
+    function isProposerTeamTurn(ctx, peerId) {
+        const activePeerId = phaseDescriptor(ctx).actorPeerId;
+        return getTeamForPeer(ctx,peerId) === getTeamForPeer(ctx,activePeerId);
+    }
+
+    // How many moves a takeback by peerId would remove; mirrors applyTakeback.
+    function getTakebackMoveCount(ctx, peerId) {
+        const state = ctx.state;
+        const moves = state?.moves || [];
+        if (!moves.length) return 0;
+        if (state.pairRenjuEnabled) {
+            return Math.min(isProposerTeamTurn(ctx, peerId) ? 2 : 1, moves.length);
+        }
+        let count = 1;
+        while (count < moves.length && moves[moves.length - count - 1].peerId === peerId) count += 1;
+        return count;
+    }
+
     function getTakebackRequestError(ctx, peerId) {
         const state = ctx.state;
         if (!state || state.status !== 'playing') return ctx.i18n('errTakebackPlayingOnly');
         const participant = getParticipantById(ctx,peerId);
         if (!isSeatedParticipant(ctx,participant)) return ctx.i18n('errTakebackPlayerOnly');
-        if ((state.moves || []).length <= 6) return ctx.i18n('errTakebackTooEarly');
+        const remainingMoveCount = (state.moves || []).length - getTakebackMoveCount(ctx, peerId);
+        if (remainingMoveCount < PROTECTED_MOVE_COUNT) return ctx.i18n('errTakebackTooEarly');
         const opponentPeerId = getOpponentPeerId(ctx,peerId);
         if (!opponentPeerId) return ctx.i18n('errTakebackNoOpponent');
         if (state.takebackOfferByPeerId) return ctx.i18n('errTakebackAlready');
@@ -720,9 +745,8 @@
         if (state.pairRenjuEnabled) {
             const activePeerId = phaseDescriptor(ctx).actorPeerId;
             const proposerTeam = getTeamForPeer(ctx,peerId);
-            const activeTeam = getTeamForPeer(ctx,activePeerId);
-            const isOwnTeamTurn = proposerTeam === activeTeam;
-            state.takebackMoveCount = isOwnTeamTurn ? 2 : 1;
+            const isOwnTeamTurn = isProposerTeamTurn(ctx, peerId);
+            state.takebackMoveCount = getTakebackMoveCount(ctx, peerId);
             if (isOwnTeamTurn) {
                 const opponentTeam = getOpponentTeam(proposerTeam);
                 const lastOpponentMove = [...(state.moves || [])]
