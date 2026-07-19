@@ -1003,6 +1003,20 @@
         }
 
         state.reviewMoves = currentMoves;
+        // 分岐印 = 検討線が本譜と最初に食い違う手。走査せず差分で保つ。
+        // 印より手前が本譜と一致することは定義が保証するので、cursor までの
+        // 切り詰めで食い違いの元ごと消えた（印 >= cursor）なら印を降ろし、
+        // 印が無いときだけ新しい手を本譜の同位置と比べれば足りる。分岐 →
+        // 1手戻す → 本譜と同じ手、で本譜へ復帰した場合はここで印が降りる。
+        // 本譜の終端より先に足す手は分岐（baseMove が undefined になる）。
+        if (state.reviewBranchBaseCursor != null && state.reviewBranchBaseCursor >= cursor) {
+            state.reviewBranchBaseCursor = null;
+        }
+        if (state.reviewBranchBaseCursor == null) {
+            const baseMove = state.status === 'finished' ? (state.moves || [])[cursor] : undefined;
+            const isOnMainLine = Boolean(baseMove) && baseMove.x === x && baseMove.y === y;
+            if (!isOnMainLine) state.reviewBranchBaseCursor = cursor;
+        }
         const nextColor = state.reviewMoves.length % 2 === 0 ? 'black' : 'white';
         state.reviewMoves.push({
             x,
@@ -1013,22 +1027,7 @@
             review: true,
         });
         state.reviewCursor = state.reviewMoves.length;
-        state.reviewBranchBaseCursor = findReviewBranchBaseCursor(ctx);
         return '';
-    }
-
-    // 分岐点は「検討線が本譜と最初に食い違う手」。手を足すたびに測り直す。
-    // 一度立てたら降りない印にすると、分岐 → 1手戻す → 本譜と同じ手、と
-    // 打って本譜へ復帰しても分岐扱いのままになり、更新ボタンが古い分岐元
-    // へ引き戻してしまう。本譜より長くなった分（終局図の先）も分岐。
-    function findReviewBranchBaseCursor(ctx) {
-        const baseMoves = getReviewBaseMoves(ctx);
-        const moves = ctx.state?.reviewMoves || [];
-        for (let i = 0; i < moves.length; i += 1) {
-            const base = baseMoves[i];
-            if (!base || base.x !== moves[i].x || base.y !== moves[i].y) return i;
-        }
-        return null;
     }
 
     function setReviewCursor(ctx, peerId, cursor) {
