@@ -4131,6 +4131,16 @@
                 displayMoveCount = -1;
             }
 
+            // 自分の手番になった瞬間も最新図へ戻す。古い局面を表示したまま
+            // 着手や Swap を選ばせないため、着手に限らず手番の主体が自分へ
+            // 移った時点で引き戻す。手番の変わり目だけを見るので、手番中に
+            // 自分で巻き戻したものは以降の状態更新では奪わない。
+            const prevActorPeerId = GameCore.phaseDescriptor({ ...gameCoreCtx(), state: prev }).actorPeerId;
+            const nextActorPeerId = phaseDescriptor().actorPeerId;
+            if (nextActorPeerId && nextActorPeerId === localPeerId && prevActorPeerId !== localPeerId) {
+                displayMoveCount = -1;
+            }
+
             // swap / draw / takeback notifications fire on the seated opponent:
             // swap also flashes a whole-board orange alert (mirrors v1).
             const kind = lastAction && lastAction.kind;
