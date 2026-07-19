@@ -2630,6 +2630,7 @@
         let confirmMovePoint = null;
         let lastMoveHighlight = null;
         let lastMoveHighlightTimer = 0;
+        let lastBoardPointerType = '';
         // 検討モードの ⟳ はサーバ往復後に盤が変わるため、「次の状態更新が
         // 届いたら最終手をハイライトする」予約をこの時刻まで有効にする。
         let reviewResetHighlightUntil = 0;
@@ -4122,6 +4123,14 @@
                 playStoneSound();
             }
 
+            // 終局図は必ず見せる。手を戻して眺めている最中に終局しても、
+            // ローカルの表示位置を捨てて最新（＝終局図）へ戻す。状態側は
+            // finishGame が reviewMoves を終局図で作り直しているので、
+            // displayMoveCount を外すだけで終局図が出る。
+            if (prev.status === 'playing' && next.status === 'finished') {
+                displayMoveCount = -1;
+            }
+
             // swap / draw / takeback notifications fire on the seated opponent:
             // swap also flashes a whole-board orange alert (mirrors v1).
             const kind = lastAction && lastAction.kind;
@@ -5205,6 +5214,11 @@
         }
 
         function handleBoardPointerDown(event) {
+            // contextmenu 側で「マウスの右クリックか、タッチの長押しか」を
+            // 見分けるために控える（contextmenu が pointerType を持たない
+            // 環境があるため）。右ボタンでも pointerdown は来るので、
+            // 早期 return より前に記録する。
+            lastBoardPointerType = event.pointerType || 'mouse';
             if (event.pointerType === 'mouse' && event.button !== 0) return;
             if (event.isPrimary === false) return;
             event.preventDefault();
@@ -5259,17 +5273,14 @@
             }
         }
 
+        // 盤上の右クリックは ＜ と同じ「1手戻す」。盤のどこでも効き、対局中も
+        // 検討中も同じ意味になる。タッチの長押しも contextmenu を出すが、
+        // 考慮中に指を置いただけで戻るのは事故なので、マウスに限る。
         function handleBoardContextMenu(event) {
             event.preventDefault();
-            if (displayMoveCount !== -1 && displayMoveCount !== getRenderedMoves().length) {
-                displayMoveCount = -1;
-                clearConfirmMovePoint();
-                renderBoard();
-                return;
-            }
-            if (!canUseReviewBoard()) return;
-            if (!boardPointFromEvent(event)) return;
-            sendAction({ kind: 'review-undo' });
+            const pointerType = event.pointerType || lastBoardPointerType;
+            if (pointerType && pointerType !== 'mouse') return;
+            goMoves(-1);
         }
 
         const RULE_LABEL = 'Taraguchi-10';
