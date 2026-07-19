@@ -1003,13 +1003,6 @@
         }
 
         state.reviewMoves = currentMoves;
-        if (state.reviewBranchBaseCursor == null) {
-            const baseMoves = getReviewBaseMoves(ctx);
-            const isOnMainLine = baseMoves[cursor]?.x === x && baseMoves[cursor]?.y === y;
-            if (!isOnMainLine) {
-                state.reviewBranchBaseCursor = cursor;
-            }
-        }
         const nextColor = state.reviewMoves.length % 2 === 0 ? 'black' : 'white';
         state.reviewMoves.push({
             x,
@@ -1020,7 +1013,22 @@
             review: true,
         });
         state.reviewCursor = state.reviewMoves.length;
+        state.reviewBranchBaseCursor = findReviewBranchBaseCursor(ctx);
         return '';
+    }
+
+    // 分岐点は「検討線が本譜と最初に食い違う手」。手を足すたびに測り直す。
+    // 一度立てたら降りない印にすると、分岐 → 1手戻す → 本譜と同じ手、と
+    // 打って本譜へ復帰しても分岐扱いのままになり、更新ボタンが古い分岐元
+    // へ引き戻してしまう。本譜より長くなった分（終局図の先）も分岐。
+    function findReviewBranchBaseCursor(ctx) {
+        const baseMoves = getReviewBaseMoves(ctx);
+        const moves = ctx.state?.reviewMoves || [];
+        for (let i = 0; i < moves.length; i += 1) {
+            const base = baseMoves[i];
+            if (!base || base.x !== moves[i].x || base.y !== moves[i].y) return i;
+        }
+        return null;
     }
 
     function setReviewCursor(ctx, peerId, cursor) {
