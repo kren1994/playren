@@ -555,6 +555,30 @@
             border-radius: 0 var(--radius-md) var(--radius-md) 0;
         }
 
+        /* The right seat mirrors the left one, so the strip reads as two facing
+           sides rather than two stacked rows: the clocks meet at the centre
+           seam (they are the pair you actually compare) and the stones sit
+           furthest out. Keyed to seat position — never to colour, which swaps
+           between matches. */
+        .players .player-card + .player-card {
+            flex-direction: row-reverse;
+        }
+
+        .players .player-card + .player-card .player-main {
+            flex-direction: row-reverse;
+        }
+
+        /* Names read outward from the seam, so a short name never drifts away
+           from its clock. */
+        .players .player-card .player-name {
+            text-align: right;
+        }
+
+        .players .player-card + .player-card .player-name {
+            text-align: left;
+        }
+
+
         /* Outside of play the seats carry a quiet resting fill (same idiom as
            the chat compose pill) so joinable seats stay discoverable. */
         .players.seats-idle .player-card {
@@ -678,13 +702,14 @@
             display: none;
         }
 
+        /* The stone rides in the row with the name and clock (not pinned to the
+           card edge), so the seat's contents stay one group and the slack goes
+           to the outer edge instead of between the name and its stone. */
         .player-card.black::before,
         .player-card.white::before {
             content: "";
-            position: absolute;
-            top: 50%;
-            transform: translateY(-50%);
-            left: var(--seat-pad-x);
+            align-self: center;
+            flex: 0 0 auto;
             width: var(--seat-dot);
             height: var(--seat-dot);
             border-radius: 50%;
@@ -705,13 +730,30 @@
             border-color: var(--stone-white-rim);
         }
 
+        /* Contents hug the centre seam; the leftover width sits at the outer
+           edge, where nothing needs it. */
+        .players .player-card {
+            justify-content: flex-end;
+        }
+
+        .players .player-card .player-team-members {
+            flex: 0 1 auto;
+        }
+
+        /* Both seats reserve the same name width — the widest name on the
+           board, measured in JS — so the mirrored clusters line up whatever
+           the players are called. Shrinkable, so a long name still ellipsises
+           instead of pushing the clock out. */
+        .players .player-card .player-name {
+            flex: 0 1 auto;
+            width: var(--seat-name-box, auto);
+        }
+
         .player-head {
             display: flex;
             justify-content: space-between;
             align-items: center;
             gap: 10px;
-            /* clear the stone dot (drawn at the content-box start) + a gap */
-            padding-left: calc(var(--seat-dot) + 14px);
             width: 100%;
             min-width: 0;
             box-sizing: border-box;
@@ -841,10 +883,12 @@
             height: 18px;
         }
 
-        /* No mark → no slot: give the reserved width back to the name. */
-        .player-ready:empty {
-            display: none;
-        }
+        /* The slot stays even with no mark in it, so the gap between the name
+           and the clock is the same all game and the name doesn't shift 28px
+           the moment someone readies up. (It used to collapse to hand the
+           width back to the name — that mattered when the name box stretched;
+           it is measured to the longest name now, so there is nothing to
+           give back.) */
 
         .ready-mark {
             flex: 0 0 18px;
@@ -5382,9 +5426,42 @@
             players.style.setProperty('--mobile-player-name-size', `${fontSize}px`);
         }
 
+        let nameMeasureContext = null;
+
+        // Give both seats the same name box: the widest name currently on the
+        // board. The seats are mirror images, so without this the stones and
+        // names drift apart by however much the two names differ in length.
+        // Measured on a canvas (like the fit-guard above) to avoid a
+        // measure-then-set reflow loop against the width we are setting.
+        function updateSeatNameBox() {
+            const players = elements.blackPlayerCard.parentElement;
+            const names = [
+                elements.blackPlayerName,
+                elements.whitePlayerName,
+                ...(state?.pairRenjuEnabled
+                    ? [elements.blackBottomPlayerName, elements.whiteBottomPlayerName]
+                    : []),
+            ];
+            if (!nameMeasureContext) {
+                nameMeasureContext = document.createElement('canvas').getContext('2d');
+            }
+            const style = getComputedStyle(elements.blackPlayerName);
+            nameMeasureContext.font = `${style.fontWeight} ${style.fontSize} ${style.fontFamily}`;
+            const widest = names.reduce(
+                (max, element) => Math.max(max, nameMeasureContext.measureText(element.textContent || '').width),
+                0
+            );
+            players.style.setProperty('--seat-name-box', `${Math.ceil(widest)}px`);
+        }
+
         function scheduleMobilePlayerNameSize() {
             cancelAnimationFrame(playerNameResizeFrame);
-            playerNameResizeFrame = requestAnimationFrame(updateMobilePlayerNameSize);
+            playerNameResizeFrame = requestAnimationFrame(() => {
+                // Order matters: the fit-guard can change the font size, and the
+                // name box is measured in that font.
+                updateMobilePlayerNameSize();
+                updateSeatNameBox();
+            });
         }
 
         function renderPlayers() {
