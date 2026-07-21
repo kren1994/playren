@@ -798,6 +798,14 @@
             text-decoration-color: var(--accent);
         }
 
+        /* Waiting seats recede so the hairline reads without being thickened:
+           raise contrast by lowering the surroundings, not by shouting. Only
+           while a game is on — before it starts nobody is to move, and muting
+           every name would just look disabled. */
+        .players:not(.seats-idle) .player-slot:not(.active) .player-name {
+            color: var(--muted);
+        }
+
         .player-timer {
             flex: 0 0 auto;
             font-size: var(--seat-timer);
