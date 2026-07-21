@@ -780,14 +780,16 @@
             opacity: 0.5;
         }
 
-        /* Turn marker: a hairline under the name of whoever is to move. Rides
-           on text-decoration so it tracks the name's ellipsised width, and
-           stays clear of .disconnected (opacity), so both can show at once. */
+        /* Turn marker: a rule under the name of whoever is to move. Rides on
+           text-decoration so it tracks the name's ellipsised width, and stays
+           clear of .disconnected (opacity), so both can show at once. 2px so
+           the colour below is actually readable as a colour; the offset grows
+           with it to keep clear of descenders. */
         .player-slot.active .player-name {
             text-decoration: underline;
-            text-decoration-thickness: 1px;
+            text-decoration-thickness: 2px;
             text-decoration-color: var(--muted);
-            text-underline-offset: 3px;
+            text-underline-offset: 4px;
         }
 
         /* ...and it goes accent only when that someone is me. The line says
@@ -798,10 +800,9 @@
             text-decoration-color: var(--accent);
         }
 
-        /* Waiting seats recede so the hairline reads without being thickened:
-           raise contrast by lowering the surroundings, not by shouting. Only
-           while a game is on — before it starts nobody is to move, and muting
-           every name would just look disabled. */
+        /* Waiting seats recede, so the marker reads from contrast rather than
+           from weight alone. Only while a game is on — before it starts nobody
+           is to move, and muting every name would just look disabled. */
         .players:not(.seats-idle) .player-slot:not(.active) .player-name {
             color: var(--muted);
         }
