@@ -780,6 +780,24 @@
             opacity: 0.5;
         }
 
+        /* Turn marker: a hairline under the name of whoever is to move. Rides
+           on text-decoration so it tracks the name's ellipsised width, and
+           stays clear of .disconnected (opacity), so both can show at once. */
+        .player-slot.active .player-name {
+            text-decoration: underline;
+            text-decoration-thickness: 1px;
+            text-decoration-color: var(--muted);
+            text-underline-offset: 3px;
+        }
+
+        /* ...and it goes accent only when that someone is me. The line says
+           WHO moves, the colour says whether that's you — so accent keeps
+           meaning "you can act", as it does on buttons and focus rings.
+           Colour only, no new element and no motion. */
+        .player-slot.self.active .player-name {
+            text-decoration-color: var(--accent);
+        }
+
         .player-timer {
             flex: 0 0 auto;
             font-size: var(--seat-timer);
@@ -5375,6 +5393,7 @@
                 view.status.textContent = '';
                 view.status.hidden = true;
                 view.slot.classList.toggle('disconnected', disconnected);
+                view.slot.classList.toggle('self', Boolean(participant && participant.id === localPeerId));
                 view.slot.classList.toggle('active', Boolean(participant && participant.id === activePeerId && state?.status === 'playing'));
                 renderReadyMark(view.ready, participant);
             }
