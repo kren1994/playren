@@ -4916,6 +4916,11 @@
 
         function drawConstraintHighlight(descriptor) {
             if (!boardGeometry || !descriptor?.constraint) return;
+            // The frame is an affordance — "you may play inside here" — so it is
+            // only for whoever is on move. Anyone who cannot act right now
+            // (the waiting player, spectators) would just be reading board
+            // decoration, so they get the plain board.
+            if (!descriptor.actorPeerId || descriptor.actorPeerId !== localPeerId) return;
             const { padding, topPadding, cell } = boardGeometry;
             ctx.save();
             ctx.strokeStyle = 'rgba(22, 70, 59, 0.48)';
