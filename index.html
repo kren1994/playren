@@ -43,6 +43,9 @@
             --accent: #17594a;
             --accent-strong: #0f4338;
             --accent-soft: rgba(23, 89, 74, 0.12);
+            /* Ready fill: deeper than any other wash, so the seat reads as ready
+               across the gap between the two cards. */
+            --tint-ready: rgba(23, 89, 74, 0.18);
             --warn: #a44b1f;
             --danger: #8b2f28;
             --shadow-color: rgba(63, 43, 21, 0.2);
@@ -88,6 +91,7 @@
                 --accent: #46a98c;
                 --accent-strong: #63c7aa;
                 --accent-soft: rgba(99, 199, 170, 0.16);
+                --tint-ready: rgba(99, 199, 170, 0.2);
                 --warn: #d98f52;
                 --danger: #e0796a;
                 --shadow-color: rgba(0, 0, 0, 0.5);
@@ -121,6 +125,7 @@
                 --accent: #46a98c;
                 --accent-strong: #63c7aa;
                 --accent-soft: rgba(99, 199, 170, 0.16);
+                --tint-ready: rgba(99, 199, 170, 0.2);
                 --warn: #d98f52;
                 --danger: #e0796a;
                 --shadow-color: rgba(0, 0, 0, 0.5);
@@ -870,59 +875,21 @@
         }
 
 
-        /* The mark floats over the row instead of sitting in it: readying up
-           must not move anything, so it costs no width at all and is allowed
-           to overlap a long name. It rides at the inner end, next to the
-           stone, which is where the eye already is. */
-        .player-ready {
-            position: absolute;
-            top: 50%;
-            right: 0;
-            transform: translateY(-50%);
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            width: 18px;
-            height: 18px;
-            /* above the name, since it is allowed to land on top of it */
-            z-index: 3;
-            pointer-events: none;
-        }
-
-        /* Mirrored seat: the inner end is the other side. */
-        .players .player-card + .player-card .player-ready {
-            right: auto;
-            left: 0;
-        }
-
-        .ready-mark {
-            flex: 0 0 18px;
-            width: 18px;
-            height: 18px;
-            aspect-ratio: 1;
-            box-sizing: border-box;
-            border-radius: 50%;
-            border: 1px solid var(--field-line);
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 10px;
-            line-height: 1;
-            font-weight: 800;
-            color: rgba(47, 36, 24, 0.32);
-            background: var(--field);
-        }
-
-        /* Stays fully opaque: the mark floats over the name, so anything less
-           lets the letters bleed through it and both become unreadable. */
-        .ready-mark.passive {
-            opacity: 1;
-        }
-
-        .ready-mark.active {
-            color: #f8fbf8;
-            background: linear-gradient(135deg, var(--accent), var(--accent-strong));
-            border-color: rgba(23, 89, 74, 0.42);
+        /* Ready is painted, not badged: the seat fills with the same state
+           tint the running clock uses. A third round mark beside the stone and
+           the clock read as one more instrument, and this needs no element at
+           all — so it cannot shift anything either. No turn exists before the
+           match starts, so the tint cannot be confused with whose move it is.
+           Placed after .seats-idle so it wins over the resting fill. */
+        .players:not(.pair-renju) .player-card.ready,
+        .players.pair-renju .player-slot.ready {
+            /* Deeper than the turn tint: the two seats sit apart in a normal
+               match, so a wash as light as that one is hard to compare across
+               the gap. They never appear together — ready is pre-match, the
+               turn tint is mid-match — so the stronger value costs nothing.
+               Its own token: --accent-soft also fills the menu chips, which
+               should not follow this. */
+            background: var(--tint-ready);
         }
 
         /* 透過ダイアログのスタイル */
@@ -2345,7 +2312,6 @@
                                                 <div id="blackPlayerName" class="player-name"></div>
                                                 <div id="blackPlayerStatus" class="player-status" hidden></div>
                                             </div>
-                                            <div id="blackReadyWrap" class="player-ready"></div>
                                         </div>
                                     </div>
                                 </div>
@@ -2356,7 +2322,6 @@
                                                 <div id="blackBottomPlayerName" class="player-name"></div>
                                                 <div id="blackBottomPlayerStatus" class="player-status" hidden></div>
                                             </div>
-                                            <div id="blackBottomReadyWrap" class="player-ready"></div>
                                         </div>
                                     </div>
                                 </div>
@@ -2372,7 +2337,6 @@
                                                 <div id="whitePlayerName" class="player-name"></div>
                                                 <div id="whitePlayerStatus" class="player-status" hidden></div>
                                             </div>
-                                            <div id="whiteReadyWrap" class="player-ready"></div>
                                         </div>
                                     </div>
                                 </div>
@@ -2383,7 +2347,6 @@
                                                 <div id="whiteBottomPlayerName" class="player-name"></div>
                                                 <div id="whiteBottomPlayerStatus" class="player-status" hidden></div>
                                             </div>
-                                            <div id="whiteBottomReadyWrap" class="player-ready"></div>
                                         </div>
                                     </div>
                                 </div>
@@ -2683,10 +2646,6 @@
             whiteBottomPlayerStatus: document.getElementById('whiteBottomPlayerStatus'),
             blackPlayerTimer: document.getElementById('blackPlayerTimer'),
             whitePlayerTimer: document.getElementById('whitePlayerTimer'),
-            blackReadyWrap: document.getElementById('blackReadyWrap'),
-            whiteReadyWrap: document.getElementById('whiteReadyWrap'),
-            blackBottomReadyWrap: document.getElementById('blackBottomReadyWrap'),
-            whiteBottomReadyWrap: document.getElementById('whiteBottomReadyWrap'),
             boardCanvas: document.getElementById('boardCanvas'),
             boardNotice: document.getElementById('boardNotice'),
             boardControls: document.querySelector('.board-controls'),
@@ -4752,22 +4711,6 @@
             sendAction({ kind: 'seat-change', targetPeerId: localPeerId, seat: 'spectator' });
         }
 
-        function renderReadyMark(container, participant) {
-            container.innerHTML = '';
-
-            if (!participant) {
-                return;
-            }
-
-            const isReady = Boolean(state.readyByPeerId?.[participant.id]);
-            if (!isReady) return;
-            const readyMark = document.createElement('span');
-            readyMark.className = 'ready-mark passive active';
-            readyMark.textContent = '✓';
-            readyMark.setAttribute('aria-label', i18n('readyAriaTitle'));
-            container.appendChild(readyMark);
-        }
-
         function renderDrawConfirm() {
             if (!state) {
                 elements.drawConfirm.hidden = true;
@@ -5522,10 +5465,10 @@
             if (pairLayoutChanged) requestAnimationFrame(() => resizeBoard());
             players.classList.toggle('seats-idle', !state || state.status !== 'playing');
             const seatViews = [
-                { seat: 'black', slot: elements.blackPlayerSlot, name: elements.blackPlayerName, status: elements.blackPlayerStatus, ready: elements.blackReadyWrap },
-                { seat: 'white', slot: elements.whitePlayerSlot, name: elements.whitePlayerName, status: elements.whitePlayerStatus, ready: elements.whiteReadyWrap },
-                { seat: 'blackBottom', slot: elements.blackBottomPlayerSlot, name: elements.blackBottomPlayerName, status: elements.blackBottomPlayerStatus, ready: elements.blackBottomReadyWrap },
-                { seat: 'whiteBottom', slot: elements.whiteBottomPlayerSlot, name: elements.whiteBottomPlayerName, status: elements.whiteBottomPlayerStatus, ready: elements.whiteBottomReadyWrap },
+                { seat: 'black', slot: elements.blackPlayerSlot, name: elements.blackPlayerName, status: elements.blackPlayerStatus },
+                { seat: 'white', slot: elements.whitePlayerSlot, name: elements.whitePlayerName, status: elements.whitePlayerStatus },
+                { seat: 'blackBottom', slot: elements.blackBottomPlayerSlot, name: elements.blackBottomPlayerName, status: elements.blackBottomPlayerStatus },
+                { seat: 'whiteBottom', slot: elements.whiteBottomPlayerSlot, name: elements.whiteBottomPlayerName, status: elements.whiteBottomPlayerStatus },
             ];
             const activePeerId = state?.clocks?.activePeerId || '';
 
@@ -5539,7 +5482,10 @@
                 view.slot.classList.toggle('disconnected', disconnected);
                 view.slot.classList.toggle('self', Boolean(participant && participant.id === localPeerId));
                 view.slot.classList.toggle('active', Boolean(participant && participant.id === activePeerId && state?.status === 'playing'));
-                renderReadyMark(view.ready, participant);
+                // Ready shows as the seat's own fill, not a badge: next to the
+                // stone and the clock a third round mark read as one more
+                // instrument. The state is also named on the seat's aria-label.
+                view.slot.classList.toggle('ready', Boolean(participant && state?.readyByPeerId?.[participant.id]));
             }
 
             // Greying is per-slot (renderParticipant) so only the actual
@@ -5593,6 +5539,14 @@
                 'active',
                 Boolean(!pairEnabled && state?.status === 'playing' && getTeamForPeer(activePeerId) === 'white')
             );
+            // Outside pair renju a seat holds one player, so the whole card
+            // carries their ready fill — same split the turn tint already uses.
+            const seatReady = (seat) => {
+                const occupant = state ? getSeatOccupant(seat) : null;
+                return Boolean(occupant && state?.readyByPeerId?.[occupant.id]);
+            };
+            elements.blackPlayerCard.classList.toggle('ready', !pairEnabled && seatReady('black'));
+            elements.whitePlayerCard.classList.toggle('ready', !pairEnabled && seatReady('white'));
 
             const localParticipant = getParticipantById(localPeerId);
             seatViews.forEach((view) => {
@@ -5617,7 +5571,14 @@
                 } else {
                     view.slot.removeAttribute('role');
                     view.slot.removeAttribute('tabindex');
-                    view.slot.removeAttribute('aria-label');
+                    // Ready is colour-only on screen, so the seat still has to
+                    // say it out loud for anyone not reading the fill.
+                    const occupant = state ? getSeatOccupant(view.seat) : null;
+                    if (occupant && state?.readyByPeerId?.[occupant.id]) {
+                        view.slot.setAttribute('aria-label', `${occupant.name}: ${i18n('readyAriaTitle')}`);
+                    } else {
+                        view.slot.removeAttribute('aria-label');
+                    }
                 }
             });
 
