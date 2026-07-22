@@ -5440,8 +5440,16 @@
 
         function renderPlayers() {
             const pairEnabled = Boolean(state?.pairRenjuEnabled);
-            elements.blackPlayerCard.parentElement.classList.toggle('pair-renju', pairEnabled);
-            elements.blackPlayerCard.parentElement.classList.toggle('seats-idle', !state || state.status !== 'playing');
+            const players = elements.blackPlayerCard.parentElement;
+            // Pair renju stacks two rows into each seat, so the strip above the
+            // board changes height. The board is sized from what is left below
+            // it, and nothing else re-fits it on this transition — without
+            // this it keeps its old size until the next window resize, and
+            // runs into the controls underneath.
+            const pairLayoutChanged = players.classList.contains('pair-renju') !== pairEnabled;
+            players.classList.toggle('pair-renju', pairEnabled);
+            if (pairLayoutChanged) requestAnimationFrame(() => resizeBoard());
+            players.classList.toggle('seats-idle', !state || state.status !== 'playing');
             const seatViews = [
                 { seat: 'black', slot: elements.blackPlayerSlot, name: elements.blackPlayerName, status: elements.blackPlayerStatus, ready: elements.blackReadyWrap },
                 { seat: 'white', slot: elements.whitePlayerSlot, name: elements.whitePlayerName, status: elements.whitePlayerStatus, ready: elements.whiteReadyWrap },
@@ -5482,8 +5490,20 @@
             }
             const blackPeerId = getTeamPeerIds('black')[0] || '';
             const whitePeerId = getTeamPeerIds('white')[0] || '';
-            elements.blackPlayerTimer.textContent = blackPeerId ? formatTime(getDisplayRemainingMs(blackPeerId)) : '';
-            elements.whitePlayerTimer.textContent = whitePeerId ? formatTime(getDisplayRemainingMs(whitePeerId)) : '';
+            // An empty seat still shows its clock, at the time it is set to.
+            // The clock sits next to the stone now, so blanking it would slide
+            // the stone sideways every time somebody sits down or leaves.
+            const seatBaseMs = (seat) => (
+                state?.seatClockSettings?.[seat]?.baseSeconds
+                ?? state?.config?.baseSeconds
+                ?? 0
+            ) * 1000;
+            elements.blackPlayerTimer.textContent = formatTime(
+                blackPeerId ? getDisplayRemainingMs(blackPeerId) : seatBaseMs('black')
+            );
+            elements.whitePlayerTimer.textContent = formatTime(
+                whitePeerId ? getDisplayRemainingMs(whitePeerId) : seatBaseMs('white')
+            );
             updateTimerUrgency(elements.blackPlayerTimer, blackPeerId);
             updateTimerUrgency(elements.whitePlayerTimer, whitePeerId);
 
