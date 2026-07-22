@@ -635,6 +635,13 @@
             cursor: pointer;
             touch-action: manipulation;
             transition: background-color 0.15s ease, border-color 0.15s ease, transform 0.15s ease;
+            /* A seat is a button, so its text must not behave like text: press
+               it and the name would flash selected, which reads as if only the
+               name — not the seat — took the press. The browser's own tap wash
+               goes too: the seat already answers with its tint and 1px dip. */
+            user-select: none;
+            -webkit-user-select: none;
+            -webkit-tap-highlight-color: transparent;
         }
 
         /* When "return to spectating" is available, an inset rounded fill
