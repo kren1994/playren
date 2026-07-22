@@ -568,15 +568,6 @@
             flex-direction: row-reverse;
         }
 
-        /* Names read outward from the seam, so a short name never drifts away
-           from its clock. */
-        .players .player-card .player-name {
-            text-align: right;
-        }
-
-        .players .player-card + .player-card .player-name {
-            text-align: left;
-        }
 
 
         /* Outside of play the seats carry a quiet resting fill (same idiom as
@@ -730,24 +721,28 @@
             border-color: var(--stone-white-rim);
         }
 
-        /* Contents hug the centre seam; the leftover width sits at the outer
-           edge, where nothing needs it. */
-        .players .player-card {
-            justify-content: flex-end;
-        }
-
+        /* Stone and clock pair up at the centre seam as the seat's instrument
+           cluster; the name takes the whole outer remainder and centres in it. */
         .players .player-card .player-team-members {
-            flex: 0 1 auto;
+            flex: 1;
+            order: 0;
         }
 
-        /* Both seats reserve the same name width — the widest name on the
-           board, measured in JS — so the mirrored clusters line up whatever
-           the players are called. Shrinkable, so a long name still ellipsises
-           instead of pushing the clock out. */
-        .players .player-card .player-name {
-            flex: 0 1 auto;
-            width: var(--seat-name-box, auto);
+        .players .player-card.black::before,
+        .players .player-card.white::before {
+            order: 1;
         }
+
+        .players .player-card .player-timer {
+            order: 2;
+        }
+
+        .players .player-card .player-name {
+            width: auto;
+            flex: 1;
+            text-align: center;
+        }
+
 
         .player-head {
             display: flex;
@@ -775,6 +770,8 @@
             justify-content: space-between;
             gap: 10px;
             min-width: 0;
+            /* anchor for the ready mark, which floats over this row */
+            position: relative;
         }
 
         .player-name {
@@ -873,22 +870,30 @@
         }
 
 
+        /* The mark floats over the row instead of sitting in it: readying up
+           must not move anything, so it costs no width at all and is allowed
+           to overlap a long name. It rides at the inner end, next to the
+           stone, which is where the eye already is. */
         .player-ready {
+            position: absolute;
+            top: 50%;
+            right: 0;
+            transform: translateY(-50%);
             display: inline-flex;
             align-items: center;
             justify-content: center;
-            align-self: center;
-            flex: 0 0 18px;
             width: 18px;
             height: 18px;
+            /* above the name, since it is allowed to land on top of it */
+            z-index: 3;
+            pointer-events: none;
         }
 
-        /* The slot stays even with no mark in it, so the gap between the name
-           and the clock is the same all game and the name doesn't shift 28px
-           the moment someone readies up. (It used to collapse to hand the
-           width back to the name — that mattered when the name box stretched;
-           it is measured to the longest name now, so there is nothing to
-           give back.) */
+        /* Mirrored seat: the inner end is the other side. */
+        .players .player-card + .player-card .player-ready {
+            right: auto;
+            left: 0;
+        }
 
         .ready-mark {
             flex: 0 0 18px;
@@ -908,8 +913,10 @@
             background: var(--field);
         }
 
+        /* Stays fully opaque: the mark floats over the name, so anything less
+           lets the letters bleed through it and both become unreadable. */
         .ready-mark.passive {
-            opacity: 0.72;
+            opacity: 1;
         }
 
         .ready-mark.active {
@@ -5426,42 +5433,9 @@
             players.style.setProperty('--mobile-player-name-size', `${fontSize}px`);
         }
 
-        let nameMeasureContext = null;
-
-        // Give both seats the same name box: the widest name currently on the
-        // board. The seats are mirror images, so without this the stones and
-        // names drift apart by however much the two names differ in length.
-        // Measured on a canvas (like the fit-guard above) to avoid a
-        // measure-then-set reflow loop against the width we are setting.
-        function updateSeatNameBox() {
-            const players = elements.blackPlayerCard.parentElement;
-            const names = [
-                elements.blackPlayerName,
-                elements.whitePlayerName,
-                ...(state?.pairRenjuEnabled
-                    ? [elements.blackBottomPlayerName, elements.whiteBottomPlayerName]
-                    : []),
-            ];
-            if (!nameMeasureContext) {
-                nameMeasureContext = document.createElement('canvas').getContext('2d');
-            }
-            const style = getComputedStyle(elements.blackPlayerName);
-            nameMeasureContext.font = `${style.fontWeight} ${style.fontSize} ${style.fontFamily}`;
-            const widest = names.reduce(
-                (max, element) => Math.max(max, nameMeasureContext.measureText(element.textContent || '').width),
-                0
-            );
-            players.style.setProperty('--seat-name-box', `${Math.ceil(widest)}px`);
-        }
-
         function scheduleMobilePlayerNameSize() {
             cancelAnimationFrame(playerNameResizeFrame);
-            playerNameResizeFrame = requestAnimationFrame(() => {
-                // Order matters: the fit-guard can change the font size, and the
-                // name box is measured in that font.
-                updateMobilePlayerNameSize();
-                updateSeatNameBox();
-            });
+            playerNameResizeFrame = requestAnimationFrame(updateMobilePlayerNameSize);
         }
 
         function renderPlayers() {
