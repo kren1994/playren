@@ -45,7 +45,7 @@
             --accent-soft: rgba(23, 89, 74, 0.12);
             /* Ready fill: deeper than any other wash, so the seat reads as ready
                across the gap between the two cards. */
-            --tint-ready: rgba(23, 89, 74, 0.3);
+            --tint-ready: rgba(23, 89, 74, 0.26);
             --warn: #a44b1f;
             --danger: #8b2f28;
             --shadow-color: rgba(63, 43, 21, 0.2);
@@ -91,7 +91,7 @@
                 --accent: #46a98c;
                 --accent-strong: #63c7aa;
                 --accent-soft: rgba(99, 199, 170, 0.16);
-                --tint-ready: rgba(99, 199, 170, 0.32);
+                --tint-ready: rgba(99, 199, 170, 0.28);
                 --warn: #d98f52;
                 --danger: #e0796a;
                 --shadow-color: rgba(0, 0, 0, 0.5);
@@ -125,7 +125,7 @@
                 --accent: #46a98c;
                 --accent-strong: #63c7aa;
                 --accent-soft: rgba(99, 199, 170, 0.16);
-                --tint-ready: rgba(99, 199, 170, 0.32);
+                --tint-ready: rgba(99, 199, 170, 0.28);
                 --warn: #d98f52;
                 --danger: #e0796a;
                 --shadow-color: rgba(0, 0, 0, 0.5);
@@ -628,6 +628,8 @@
             width: 100%;
             min-width: 0;
             border-radius: 10px;
+            /* anchor for the ready tick, which hangs off the outer edge */
+            position: relative;
         }
 
         .players.pair-renju .player-slot.active {
@@ -902,6 +904,30 @@
                Its own token: --accent-soft also fills the menu chips, which
                should not follow this. */
             background: var(--tint-ready);
+        }
+
+        /* The fill says which seat; this says what the fill means. It rides at
+           the outer edge — the far side from the stone and clock, so the three
+           never queue up as they did when the mark sat inside — and it is a
+           pseudo-element in absolute flow, so it adds no node and moves
+           nothing. Per slot, so each player in a pair has their own. */
+        .player-slot.ready::after {
+            content: "✓";
+            position: absolute;
+            top: 50%;
+            left: 0;
+            transform: translateY(-50%);
+            font-size: 12px;
+            font-weight: 800;
+            line-height: 1;
+            color: var(--accent-strong);
+            pointer-events: none;
+        }
+
+        /* Mirrored seat: its outer edge is the other side. */
+        .players .player-card + .player-card .player-slot.ready::after {
+            left: auto;
+            right: 0;
         }
 
         /* 透過ダイアログのスタイル */
