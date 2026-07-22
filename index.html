@@ -525,7 +525,12 @@
                per-breakpoint hand-tuned sizes that drifted apart over time. */
             --seat-dot: clamp(8px, calc(var(--board-size, 600px) * 0.016), 11px);
             --seat-name: clamp(12px, calc(var(--board-size, 600px) * 0.022), 15px);
-            --seat-timer: clamp(14px, calc(var(--board-size, 600px) * 0.028), 20px);
+            /* Capped at 17px, not 20: the board grows tallest on a tablet, so
+               that is where the clock hit its ceiling and started shouting.
+               17 keeps it a step above the 15px name — it is the number read
+               most often — without letting it run away. Boards under ~607px
+               never reach the cap, so phones and desktops are untouched. */
+            --seat-timer: clamp(14px, calc(var(--board-size, 600px) * 0.028), 17px);
             --seat-pad-x: 14px;
             display: grid;
             grid-template-columns: repeat(2, minmax(0, 1fr));
