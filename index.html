@@ -1460,6 +1460,43 @@
         .board-controls .control-menu-item.board-theme-item::after,
         .board-controls .control-menu-item[data-value]::after { content: attr(data-value); width: auto; flex: 0 0 auto; color: var(--muted); }
         .board-controls .control-menu-item.language-menu-item::after { content: none; display: none; }
+
+        /* Just wide enough to pack the chips three-and-two; at the menu's old
+           width they each took a line and saved nothing, and a hair narrower
+           than this drops to three rows and costs more height than the width
+           saves. */
+        #viewMenu {
+            min-width: 180px;
+        }
+
+        /* On/off settings ride as chips instead of one row each: five rows of
+           43px was over half the screen on a small phone. The state is the
+           chip's own fill, so the reserved tick column goes away too. */
+        .control-menu-chips {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+            padding: 4px 6px 6px;
+        }
+
+        .board-controls .control-menu-item.chip {
+            width: auto;
+            flex: 0 0 auto;
+            padding: 8px 12px;
+            border-radius: 999px;
+            border: 1px solid var(--line);
+            color: var(--muted);
+            justify-content: center;
+            gap: 0;
+        }
+
+        .board-controls .control-menu-item.chip::after { content: none; display: none; }
+
+        .board-controls .control-menu-item.chip.active {
+            border-color: transparent;
+            background: var(--accent-soft);
+            color: var(--accent-strong);
+        }
         .control-menu-value {
             display: inline-flex;
             align-items: center;
@@ -2390,14 +2427,15 @@
                                         </span>
                                     </button>
                                     <button id="colorSchemeBtn" class="control-menu-item" type="button" data-value="自動">配色</button>
-                                    <button id="soundBtn" class="control-menu-item active" type="button">効果音</button>
-                                    <button id="menuMoveConfirmBtn" class="control-menu-item" type="button">着手確認</button>
-                                    <div class="control-menu-divider" role="separator"></div>
-                                    <button id="coordsBtn" class="control-menu-item active" type="button">座標</button>
-                                    <button id="moveNumBtn" class="control-menu-item active" type="button">手数</button>
-                                    <div class="control-menu-divider" role="separator"></div>
                                     <button id="themeBtn" class="control-menu-item board-theme-item" type="button" data-value="茶">盤面色</button>
-                                    <button id="stoneShadingBtn" class="control-menu-item" type="button">石の陰影</button>
+                                    <div class="control-menu-divider" role="separator"></div>
+                                    <div class="control-menu-chips">
+                                        <button id="coordsBtn" class="control-menu-item chip active" type="button">座標</button>
+                                        <button id="moveNumBtn" class="control-menu-item chip active" type="button">手数</button>
+                                        <button id="stoneShadingBtn" class="control-menu-item chip" type="button">陰影</button>
+                                        <button id="soundBtn" class="control-menu-item chip active" type="button">効果音</button>
+                                        <button id="menuMoveConfirmBtn" class="control-menu-item chip" type="button">着手確認</button>
+                                    </div>
                                 </div>
                             </div>
                         </div>
@@ -2839,7 +2877,7 @@
                 menuLang: '言語',
                 menuSound: '効果音',
                 menuCoords: '座標',
-                menuStoneShading: '石の陰影',
+                menuStoneShading: '陰影',
                 menuTheme: '盤面色',
                 menuColorScheme: '配色',
                 colorSchemeGray: 'グレー',
@@ -2942,7 +2980,7 @@
                 menuLang: '语言',
                 menuSound: '音效',
                 menuCoords: '坐标',
-                menuStoneShading: '棋子阴影',
+                menuStoneShading: '阴影',
                 menuTheme: '棋盘色',
                 menuColorScheme: '配色',
                 colorSchemeGray: '灰色',
@@ -3051,8 +3089,8 @@
                 colorSchemeGray: 'Gray',
                 colorSchemeLight: 'Light',
                 colorSchemeDark: 'Dark',
-                menuMoveNum: 'Move Nos.',
-                menuMoveConfirm: 'Move Confirm',
+                menuMoveNum: 'Numbers',
+                menuMoveConfirm: 'Confirm',
                 menuPairRenju: 'Pair Renju',
                 actionDialogChoice2: '10 moves',
                 actionDialogSwap: 'Swap',
