@@ -917,10 +917,22 @@
             top: 50%;
             left: 0;
             transform: translateY(-50%);
-            font-size: 12px;
+            width: 18px;
+            height: 18px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 11px;
             font-weight: 800;
             line-height: 1;
-            color: var(--accent-strong);
+            color: #f8fbf8;
+            background: linear-gradient(135deg, var(--accent), var(--accent-strong));
+            /* A filled badge, not a bare glyph: a long name reaches the outer
+               edge and would swallow a plain tick, so the mark rides above the
+               name on its own disc. It sits inside the slot's own left edge,
+               clear of the card's rounded clip, so it is never cut off. */
+            z-index: 3;
             pointer-events: none;
         }
 
