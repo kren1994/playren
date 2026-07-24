@@ -5055,32 +5055,50 @@
             // (the waiting player, spectators) would just be reading board
             // decoration, so they get the plain board.
             if (!descriptor.actorPeerId || descriptor.actorPeerId !== localPeerId) return;
+            // 'anywhere' MUST bail out: with the inverted drawing below, an
+            // unguarded fall-through would veil the entire board every turn.
+            const kind = descriptor.constraint.kind;
+            if (kind !== 'center' && kind !== 'square') return;
             const { padding, topPadding, cell } = boardGeometry;
+
+            // Figure and ground, inverted: the old design tinted the playable
+            // square — the one place all the stones and the player's attention
+            // already were — and left the empty remainder untouched. Now the
+            // out-of-bounds area (guaranteed empty during the opening) gets a
+            // light neutral veil and the playable area stays looking like a
+            // normal board, which is the invitation. Neutral so it reads the
+            // same on all six board colours; light because it is an aid, not
+            // a wall. Radius scales with the cell instead of a fixed 18px that
+            // dwarfed small-phone cells.
+            const buildAllowedPath = () => {
+                if (kind === 'center') {
+                    const x = padding + CENTER * cell;
+                    const y = topPadding + CENTER * cell;
+                    ctx.moveTo(x + cell * 0.52, y);
+                    ctx.arc(x, y, cell * 0.52, 0, Math.PI * 2);
+                } else {
+                    const radius = descriptor.constraint.radius;
+                    const left = padding + (CENTER - radius) * cell - cell * 0.5;
+                    const top = topPadding + (CENTER - radius) * cell - cell * 0.5;
+                    const side = (radius * 2 + 1) * cell;
+                    ctx.roundRect(left, top, side, side, cell * 0.35);
+                }
+            };
+            const size = ctx.canvas.width / (window.devicePixelRatio || 1);
             ctx.save();
-            ctx.strokeStyle = 'rgba(22, 70, 59, 0.48)';
-            ctx.fillStyle = 'rgba(22, 70, 59, 0.08)';
-            ctx.lineWidth = 2;
-            ctx.setLineDash([10, 8]);
-
-            if (descriptor.constraint.kind === 'center') {
-                const x = padding + CENTER * cell;
-                const y = topPadding + CENTER * cell;
-                ctx.beginPath();
-                ctx.arc(x, y, cell * 0.52, 0, Math.PI * 2);
-                ctx.fill();
-                ctx.stroke();
-            }
-
-            if (descriptor.constraint.kind === 'square') {
-                const radius = descriptor.constraint.radius;
-                const left = padding + (CENTER - radius) * cell - cell * 0.5;
-                const top = topPadding + (CENTER - radius) * cell - cell * 0.5;
-                const side = (radius * 2 + 1) * cell;
-                ctx.beginPath();
-                ctx.roundRect(left, top, side, side, 18);
-                ctx.fill();
-                ctx.stroke();
-            }
+            ctx.beginPath();
+            ctx.rect(0, 0, size, size);
+            buildAllowedPath();
+            ctx.fillStyle = 'rgba(32, 26, 20, 0.1)';
+            ctx.fill('evenodd');
+            // A hairline on the boundary itself, so the edge can be read as a
+            // line and not just a change of tone. The veil carries the meaning;
+            // the old heavy dashes are gone with it.
+            ctx.beginPath();
+            buildAllowedPath();
+            ctx.lineWidth = 1;
+            ctx.strokeStyle = 'rgba(32, 26, 20, 0.28)';
+            ctx.stroke();
             ctx.restore();
         }
 
