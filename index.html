@@ -531,7 +531,13 @@
                most often — without letting it run away. Boards under ~607px
                never reach the cap, so phones and desktops are untouched. */
             --seat-timer: clamp(14px, calc(var(--board-size, 600px) * 0.028), 17px);
-            --seat-pad-x: 14px;
+            /* Proportional on big boards: with a fixed 14px the instrument
+               cluster hugged the seam and the name floated in the outer void
+               on tablets. Growing the pad moves the clocks off the hairline
+               and the name off the edge, so the seat rebalances itself.
+               Boards under ~597px stay at 14px — phones and the typical
+               desktop window are untouched. */
+            --seat-pad-x: clamp(14px, calc((var(--board-size, 600px) - 480px) * 0.12), 40px);
             display: grid;
             grid-template-columns: repeat(2, minmax(0, 1fr));
             gap: 0;
@@ -789,8 +795,14 @@
             justify-content: space-between;
             gap: 10px;
             min-width: 0;
-            /* anchor for the ready mark, which floats over this row */
-            position: relative;
+        }
+
+        /* An empty seat invites instead of staying blank: the resting fill
+           alone never said the seat was tappable. Rendered where the name
+           will sit, in placeholder tones so it cannot be read as a player. */
+        .player-name.vacant {
+            color: var(--muted);
+            font-weight: 500;
         }
 
         .player-name {
@@ -913,6 +925,10 @@
            nothing. Per slot, so each player in a pair has their own. */
         .player-slot.ready::after {
             content: "✓";
+            /* alt-text form hides the glyph from screen readers (the aria-label
+               already names the state); browsers without support keep the
+               plain declaration above. */
+            content: "✓" / "";
             position: absolute;
             top: 50%;
             left: 0;
@@ -2940,6 +2956,7 @@
                 resignCancel: 'キャンセル',
                 resignConfirm: '終局',
                 playerNotJoined: ' ',
+                seatVacant: 'タップで着席',
                 readyHint: 'もう一度席をタップすると準備 OK',
                 readyAriaTitle: '準備 OK',
                 readyAriaCancel: '準備 OK を解除',
@@ -3043,6 +3060,7 @@
                 resignCancel: '取消',
                 resignConfirm: '终局',
                 playerNotJoined: ' ',
+                seatVacant: '点击入座',
                 readyHint: '再次点击自己的座位即准备完毕',
                 readyAriaTitle: '准备完毕',
                 readyAriaCancel: '取消准备',
@@ -3146,6 +3164,7 @@
                 resignCancel: 'Cancel',
                 resignConfirm: 'Resign',
                 playerNotJoined: ' ',
+                seatVacant: 'Tap to sit',
                 readyHint: 'Tap your seat again when you are ready',
                 readyAriaTitle: 'Ready',
                 readyAriaCancel: 'Cancel ready',
@@ -5523,7 +5542,8 @@
             const activePeerId = state?.clocks?.activePeerId || '';
 
             function renderParticipant(view, participant) {
-                view.name.textContent = participant ? participant.name : i18n('playerNotJoined');
+                view.name.textContent = participant ? participant.name : i18n('seatVacant');
+                view.name.classList.toggle('vacant', !participant);
                 const disconnected = isParticipantDisconnected(participant);
                 // No status text / countdown: a disconnected player only greys
                 // their name (via the .disconnected class); play continues.
@@ -5532,9 +5552,8 @@
                 view.slot.classList.toggle('disconnected', disconnected);
                 view.slot.classList.toggle('self', Boolean(participant && participant.id === localPeerId));
                 view.slot.classList.toggle('active', Boolean(participant && participant.id === activePeerId && state?.status === 'playing'));
-                // Ready shows as the seat's own fill, not a badge: next to the
-                // stone and the clock a third round mark read as one more
-                // instrument. The state is also named on the seat's aria-label.
+                // Ready = the seat's fill plus the badge at the outer edge;
+                // the state is also named on the seat's aria-label.
                 view.slot.classList.toggle('ready', Boolean(participant && state?.readyByPeerId?.[participant.id]));
             }
 
@@ -5621,11 +5640,10 @@
                 } else {
                     view.slot.removeAttribute('role');
                     view.slot.removeAttribute('tabindex');
-                    // Ready is colour-only on screen, so the seat still has to
-                    // say it out loud for anyone not reading the fill.
-                    const occupant = state ? getSeatOccupant(view.seat) : null;
-                    if (occupant && state?.readyByPeerId?.[occupant.id]) {
-                        view.slot.setAttribute('aria-label', `${occupant.name}: ${i18n('readyAriaTitle')}`);
+                    // Ready is colour-first on screen, so the seat still has
+                    // to say it out loud for anyone not reading the fill.
+                    if (participant && state?.readyByPeerId?.[participant.id]) {
+                        view.slot.setAttribute('aria-label', `${participant.name}: ${i18n('readyAriaTitle')}`);
                     } else {
                         view.slot.removeAttribute('aria-label');
                     }
