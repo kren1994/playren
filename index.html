@@ -1485,6 +1485,13 @@
         .board-controls .control-menu-item {
             width: 100%; text-align: left; padding: 12px 14px; font-size: 13px; font-weight: 600;
             color: var(--text); background: transparent; border: none; box-shadow: none; border-radius: 10px; outline: none;
+        }
+
+        /* outline:none above kills the default ring for mouse users; keyboard
+           users get it back, on the chip's own rounded shape. */
+        .board-controls .control-menu-item:focus-visible {
+            outline: 2px solid var(--focus-ring);
+            outline-offset: 2px;
             display: flex; align-items: center; justify-content: space-between; gap: 10px;
         }
         @media (hover: hover) { .board-controls .control-menu-item:hover { background: var(--tint-hover); transform: none; } }
@@ -1514,7 +1521,9 @@
         .board-controls .control-menu-item.chip {
             width: auto;
             flex: 0 0 auto;
-            padding: 8px 12px;
+            /* 11px vertical brings the chip back to ~43px — the row height the
+               old full-width items had. Fingers lost that when chips shrank. */
+            padding: 11px 12px;
             border-radius: 999px;
             border: 1px solid var(--line);
             color: var(--muted);
@@ -3573,6 +3582,16 @@
             syncViewSettingsControls();
         }
 
+        // Toggle chips speak their state: the fill is the visual, aria-pressed
+        // says the same fact to assistive tech (the fill alone says nothing
+        // there, and the old ✓ glyph that used to leak into the a11y tree is
+        // gone). Cyclers (language / appearance / board colour) are not
+        // toggles, so they carry aria-labels instead.
+        function setTogglePressed(element, on) {
+            element.classList.toggle('active', Boolean(on));
+            element.setAttribute('aria-pressed', String(Boolean(on)));
+        }
+
         function syncViewSettingsControls() {
             const languageCode = currentLanguage.toUpperCase();
             document.querySelectorAll('.language-code').forEach((item) => {
@@ -3581,11 +3600,11 @@
             document.getElementById('langBtn').setAttribute('aria-label', `${i18n('menuLang')}: ${languageCode}`);
             elements.lobbyLangBtn.setAttribute('aria-label', `${i18n('menuLang')}: ${languageCode}`);
             elements.lobbyLangBtn.title = i18n('menuLang');
-            document.getElementById('soundBtn').classList.toggle('active', soundEnabled);
-            document.getElementById('coordsBtn').classList.toggle('active', showCoords);
-            document.getElementById('moveNumBtn').classList.toggle('active', showMoveNumbers);
-            document.getElementById('stoneShadingBtn').classList.toggle('active', stoneShadingEnabled);
-            elements.menuMoveConfirmBtn.classList.toggle('active', moveConfirmEnabled);
+            setTogglePressed(document.getElementById('soundBtn'), soundEnabled);
+            setTogglePressed(document.getElementById('coordsBtn'), showCoords);
+            setTogglePressed(document.getElementById('moveNumBtn'), showMoveNumbers);
+            setTogglePressed(document.getElementById('stoneShadingBtn'), stoneShadingEnabled);
+            setTogglePressed(elements.menuMoveConfirmBtn, moveConfirmEnabled);
             const label = boardThemes[boardThemeIndex].label[currentLanguage] || boardThemes[boardThemeIndex].label['ja'];
             const themeBtn = document.getElementById('themeBtn');
             // Icon says which setting, text says its value — same grammar as
@@ -5760,7 +5779,7 @@
             // No host: room settings are open to everyone (only gated by !playing,
             // which already hides these three while a game is in progress).
             elements.menuPairRenjuBtn.classList.toggle('active', Boolean(state?.pairRenjuEnabled));
-            elements.menuMoveConfirmBtn.classList.toggle('active', moveConfirmEnabled);
+            setTogglePressed(elements.menuMoveConfirmBtn, moveConfirmEnabled);
             elements.menuDrawBtn.disabled = !canManageResult || Boolean(state?.drawOfferByPeerId);
             elements.menuResignBtn.disabled = !canManageResult;
             elements.menuTakebackBtn.disabled = !canManageResult || Boolean(state?.takebackOfferByPeerId);
@@ -6036,7 +6055,7 @@
 
         function toggleMoveConfirm() {
             moveConfirmEnabled = !moveConfirmEnabled;
-            elements.menuMoveConfirmBtn.classList.toggle('active', moveConfirmEnabled);
+            setTogglePressed(elements.menuMoveConfirmBtn, moveConfirmEnabled);
             persistUserSettings({ moveConfirmEnabled });
             clearConfirmMovePoint();
             renderBoard();
@@ -6086,7 +6105,7 @@
 
         function toggleSound() {
             soundEnabled = !soundEnabled;
-            document.getElementById('soundBtn').classList.toggle('active', soundEnabled);
+            setTogglePressed(document.getElementById('soundBtn'), soundEnabled);
             persistUserSettings({ soundEnabled });
             if (soundEnabled) {
                 primeAudioFromUserGesture();
@@ -6095,7 +6114,7 @@
 
         function toggleCoords() {
             showCoords = !showCoords;
-            document.getElementById('coordsBtn').classList.toggle('active', showCoords);
+            setTogglePressed(document.getElementById('coordsBtn'), showCoords);
             persistUserSettings({ showCoords });
             resizeBoard();
         }
@@ -6109,14 +6128,14 @@
 
         function toggleMoveNumbers() {
             showMoveNumbers = !showMoveNumbers;
-            document.getElementById('moveNumBtn').classList.toggle('active', showMoveNumbers);
+            setTogglePressed(document.getElementById('moveNumBtn'), showMoveNumbers);
             persistUserSettings({ showMoveNumbers });
             renderBoard();
         }
 
         function toggleStoneShading() {
             stoneShadingEnabled = !stoneShadingEnabled;
-            document.getElementById('stoneShadingBtn').classList.toggle('active', stoneShadingEnabled);
+            setTogglePressed(document.getElementById('stoneShadingBtn'), stoneShadingEnabled);
             persistUserSettings({ stoneShading: stoneShadingEnabled });
             renderBoard();
         }
