@@ -850,24 +850,17 @@
             opacity: 0.5;
         }
 
-        /* Turn marker: a rule under the name of whoever is to move. Rides on
-           text-decoration so it tracks the name's ellipsised width, and stays
-           clear of .disconnected (opacity), so both can show at once. 2px so
-           the colour below is actually readable as a colour; the offset grows
-           with it to keep clear of descenders. */
-        .player-slot.active .player-name {
+        /* The one line in the strip, reserved for the one personal alarm:
+           it is YOUR move. Whose turn it is in general is already told twice
+           (seat tint + the waiting side receding), so the other player's turn
+           draws no line at all — a muted rule there repeated the tint in the
+           same spot. Rides on text-decoration so it tracks the name's
+           ellipsised width, and stays clear of .disconnected (opacity). */
+        .player-slot.self.active .player-name {
             text-decoration: underline;
             text-decoration-thickness: 2px;
-            text-decoration-color: var(--muted);
-            text-underline-offset: 4px;
-        }
-
-        /* ...and it goes accent only when that someone is me. The line says
-           WHO moves, the colour says whether that's you — so accent keeps
-           meaning "you can act", as it does on buttons and focus rings.
-           Colour only, no new element and no motion. */
-        .player-slot.self.active .player-name {
             text-decoration-color: var(--accent);
+            text-underline-offset: 4px;
         }
 
         /* Waiting seats recede, so the marker reads from contrast rather than
@@ -888,6 +881,14 @@
             letter-spacing: 0;
             font-variant-numeric: tabular-nums;
             transition: color 0.3s ease;
+        }
+
+        /* The clock that is not running recedes with its name: the whole
+           waiting side steps back as one. Placed before the urgency rules so
+           amber/red win at equal specificity — nearly flagging matters even
+           while waiting. */
+        .player-timer.off-turn {
+            color: var(--muted);
         }
 
         /* Time pressure: amber under 10s, red under 5s. Colour only — no
@@ -5610,6 +5611,11 @@
             );
             updateTimerUrgency(elements.blackPlayerTimer, blackPeerId);
             updateTimerUrgency(elements.whitePlayerTimer, whitePeerId);
+            // The waiting side's clock recedes. Team-of-the-actor works in both
+            // modes (the card-level active class only exists outside pair renju).
+            const activeTeam = state?.status === 'playing' ? getTeamForPeer(activePeerId) : '';
+            elements.blackPlayerTimer.classList.toggle('off-turn', Boolean(activeTeam) && activeTeam !== 'black');
+            elements.whitePlayerTimer.classList.toggle('off-turn', Boolean(activeTeam) && activeTeam !== 'white');
 
             if (state) ensureSeatColors();
             const blackCardColor = state?.seatColors?.black || 'black';
