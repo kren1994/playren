@@ -2732,6 +2732,7 @@
             1, 2, 3, 5, 10, 15, 20, 25, 30, 45, 50, 60,
             70, 80, 90, 100, 110, 120, 130, 140, 150, 160, 170, 180,
         ];
+        const BASE_MINUTE_STEPS_HANDICAP = [0, ...BASE_MINUTE_STEPS];
         const INCREMENT_SECOND_STEPS = [0, 1, 2, 3, 5, 10, 20, 30, 40, 50, 60];
         const DISCONNECT_GRACE_MS = 120000;
         const ROOM_STATE_MAX_AGE_MS = 30 * 60 * 1000;
@@ -4777,6 +4778,9 @@
             elements.uiTimeRightLabel.hidden = !hasHandicap;
             elements.timeSeatGrid.classList.toggle('single', !hasHandicap);
             if (!hasHandicap) {
+                if (Number(elements.timeLeftBaseInput.value) <= 0) {
+                    elements.timeLeftBaseInput.value = '1';
+                }
                 elements.timeRightBaseInput.value = elements.timeLeftBaseInput.value;
                 elements.timeRightBaseSecondsInput.value = '0';
                 elements.timeLeftBaseSecondsInput.value = '0';
@@ -4789,7 +4793,7 @@
             if (!input || input.disabled) return;
             const candidates = input.dataset.unit === 'second'
                 ? INCREMENT_SECOND_STEPS
-                : BASE_MINUTE_STEPS;
+                : (elements.timeHandicapInput.checked ? BASE_MINUTE_STEPS_HANDICAP : BASE_MINUTE_STEPS);
             const currentValue = Number(input.value);
             const isDecrease = Number(button.dataset.step) < 0;
             const nextValue = isDecrease
