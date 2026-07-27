@@ -347,6 +347,70 @@
             text-underline-offset: 2px;
         }
 
+        button.lobby-help-link {
+            padding: 0;
+            border: 0;
+            background: transparent;
+            font-family: inherit;
+            cursor: pointer;
+        }
+
+        .help-dialog-backdrop {
+            display: grid;
+            place-items: center;
+            overflow-y: auto;
+        }
+
+        .confirm-card.help-dialog-card {
+            position: fixed;
+            left: 50%;
+            top: 50%;
+            transform: translate(-50%, -50%);
+            width: min(calc(100% - 40px), 500px);
+            max-width: 500px;
+            max-height: min(680px, calc(100vh - 40px));
+            overflow-y: auto;
+            padding: 22px;
+            gap: 16px;
+            /* Match the step cards while leaving just a little of the page
+               visible underneath. The steps themselves remain solid. */
+            background: var(--bg-accent);
+            background: color-mix(in srgb, var(--bg-accent) 92%, transparent);
+        }
+
+        .help-dialog-list {
+            display: grid;
+            gap: 12px;
+            margin: 0;
+            padding: 0;
+            list-style: none;
+        }
+
+        .help-dialog-list li {
+            padding: 12px 14px;
+            border: 1px solid var(--hairline);
+            border-radius: 12px;
+            background: var(--bg-accent);
+            line-height: 1.55;
+        }
+
+        .help-dialog-list strong {
+            display: block;
+            margin-bottom: 3px;
+        }
+
+        .help-dialog-footer {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            flex-wrap: wrap;
+        }
+
+        #helpDetailsLink {
+            margin-left: 14px;
+        }
+
         @media (hover: hover) {
         .lobby-help-link:hover {
             opacity: 0.8;
@@ -2385,7 +2449,7 @@
                         <button id="joinRoomBtn" class="button button-primary" type="button" style="width: 100%;">入室</button>
                     </div>
                     <div class="lobby-help">
-                        <a id="lobbyHelpLink" class="lobby-help-link" href="./README.html" target="_blank" rel="noopener noreferrer">使い方を見る</a>
+                        <button id="lobbyHelpLink" class="lobby-help-link" type="button">はじめての方へ・使い方</button>
                     </div>
                 </section>
             </div>
@@ -2559,7 +2623,7 @@
                                 <p id="roomSummary">5 分 + 3 秒</p>
                             </div>
                             <div class="info-help">
-                                <a id="gameHelpLink" class="lobby-help-link" href="./README.html" target="_blank" rel="noopener noreferrer">使い方を見る</a>
+                                <button id="gameHelpLink" class="lobby-help-link" type="button">使い方を見る</button>
                             </div>
                         </section>
                     </div>
@@ -2612,6 +2676,16 @@
                 <button id="genericConfirmOkBtn" class="button button-primary" type="button">OK</button>
             </div>
         </div>
+    </div>
+
+    <div id="helpDialog" class="confirm-backdrop help-dialog-backdrop" hidden>
+        <section class="confirm-card help-dialog-card" role="dialog" aria-modal="true" aria-label="使い方">
+            <ul id="helpDialogList" class="help-dialog-list"></ul>
+            <div class="help-dialog-footer">
+                <a id="helpDetailsLink" class="lobby-help-link" href="./README.html" target="_blank" rel="noopener noreferrer">詳しい使い方</a>
+                <button id="helpDialogCloseBtn" class="button button-secondary" type="button">閉じる</button>
+            </div>
+        </section>
     </div>
 
     <div id="timeSettingsDialog" class="confirm-backdrop" hidden>
@@ -2796,6 +2870,10 @@
             genericConfirmMessage: document.getElementById('genericConfirmMessage'),
             genericConfirmOkBtn: document.getElementById('genericConfirmOkBtn'),
             genericConfirmCancelBtn: document.getElementById('genericConfirmCancelBtn'),
+            helpDialog: document.getElementById('helpDialog'),
+            helpDialogList: document.getElementById('helpDialogList'),
+            helpDetailsLink: document.getElementById('helpDetailsLink'),
+            helpDialogCloseBtn: document.getElementById('helpDialogCloseBtn'),
             timeSettingsDialog: document.getElementById('timeSettingsDialog'),
             timeHandicapInput: document.getElementById('timeHandicapInput'),
             timeLeftBaseInput: document.getElementById('timeLeftBaseInput'),
@@ -2978,6 +3056,20 @@
                 roomCodePlaceholder: '例: apple123',
                 joinRoom: '入室',
                 helpLink: '使い方を見る',
+                helpLobby: 'はじめての方へ・使い方',
+                helpTitle: 'playren の使い方',
+                helpStep1Title: '1. 入室する',
+                helpStep1Text: '合言葉が同じなら同じ部屋に接続',
+                helpStep2Title: '2. 席に着く',
+                helpStep2Text: '空席をクリックして着席、観戦席エリアをクリックで退席',
+                helpStep3Title: '3. 準備 OK を押す',
+                helpStep3Text: '自席をクリックして準備 OK。全員 OK で対局開始',
+                helpStep4Title: '4. 対局を進める',
+                helpStep4Text: '開局は Taraguchi-10。着手すると持ち時間が加算（フィッシャールール）',
+                helpStep5Title: '5. 終局・局後検討',
+                helpStep5Text: '終局、満局合意、時間切れで対局終了。終了後は局後検討',
+                helpDetails: '詳しい使い方',
+                helpClose: '閉じる',
                 chatTitle: 'チャット',
                 chatSend: '投稿',
                 spectatorTitle: '観戦席',
@@ -3082,6 +3174,20 @@
                 roomCodePlaceholder: '例: apple123',
                 joinRoom: '进入',
                 helpLink: '查看用法',
+                helpLobby: '新手指南 · 查看用法',
+                helpTitle: 'playren 使用方法',
+                helpStep1Title: '1. 进入房间',
+                helpStep1Text: '口令相同即可连接到同一房间。',
+                helpStep2Title: '2. 入座',
+                helpStep2Text: '点击空位入座；点击观战席区域即可离座。',
+                helpStep3Title: '3. 按下准备完毕',
+                helpStep3Text: '点击自己的座位准备完毕。全员准备后开始对局。',
+                helpStep4Title: '4. 进行对局',
+                helpStep4Text: '采用 Taraguchi-10 开局；每次落子增加持时。',
+                helpStep5Title: '5. 终局・复盘',
+                helpStep5Text: '认输、和棋合意或超时后结束，可在结束后复盘。',
+                helpDetails: '详细使用方法',
+                helpClose: '关闭',
                 chatTitle: '聊天',
                 chatSend: '发送',
                 spectatorTitle: '观战席',
@@ -3186,6 +3292,20 @@
                 roomCodePlaceholder: 'e.g. apple123',
                 joinRoom: 'Enter Room',
                 helpLink: 'View Help',
+                helpLobby: 'New here? View Help',
+                helpTitle: 'How to play playren',
+                helpStep1Title: '1. Enter the room',
+                helpStep1Text: 'Matching room codes connect to the same room.',
+                helpStep2Title: '2. Take a seat',
+                helpStep2Text: 'Click an open seat; click the spectator area to leave your seat.',
+                helpStep3Title: '3. Ready up',
+                helpStep3Text: 'Click your own seat to become Ready. The game begins when everyone is ready.',
+                helpStep4Title: '4. Play the game',
+                helpStep4Text: 'Games open with Taraguchi-10; each move adds time to the clock.',
+                helpStep5Title: '5. End and review',
+                helpStep5Text: 'Games end by resignation, agreed draw, or timeout, followed by review.',
+                helpDetails: 'Detailed help',
+                helpClose: 'Close',
                 chatTitle: 'Chat',
                 chatSend: 'Send',
                 spectatorTitle: 'Spectators',
@@ -3386,6 +3506,37 @@
             return './README.html';
         }
 
+        let helpDialogReturnFocus = null;
+
+        function refreshHelpDialog() {
+            elements.helpDialog.setAttribute('aria-label', i18n('helpTitle'));
+            elements.helpDetailsLink.textContent = i18n('helpDetails');
+            elements.helpDetailsLink.href = getReadmeHref();
+            elements.helpDialogCloseBtn.textContent = i18n('helpClose');
+            elements.helpDialogList.replaceChildren(...[1, 2, 3, 4, 5].map((step) => {
+                const item = document.createElement('li');
+                const title = document.createElement('strong');
+                title.textContent = i18n(`helpStep${step}Title`);
+                item.append(title, document.createTextNode(i18n(`helpStep${step}Text`)));
+                return item;
+            }));
+        }
+
+        function openHelpDialog(trigger) {
+            helpDialogReturnFocus = trigger || document.activeElement;
+            closeControlMenus();
+            refreshHelpDialog();
+            elements.helpDialog.hidden = false;
+            requestAnimationFrame(() => elements.helpDialogCloseBtn.focus());
+        }
+
+        function closeHelpDialog() {
+            if (elements.helpDialog.hidden) return;
+            elements.helpDialog.hidden = true;
+            if (helpDialogReturnFocus?.focus) helpDialogReturnFocus.focus();
+            helpDialogReturnFocus = null;
+        }
+
         function applyLanguage() {
             document.documentElement.lang = currentLanguage === 'zh' ? 'zh-CN' : currentLanguage;
             elements.uiLobbyTitle.textContent = i18n('lobbyTitle');
@@ -3394,8 +3545,7 @@
             elements.uiRoomCodeLabel.textContent = i18n('roomCodeLabel');
             elements.roomCodeInput.placeholder = i18n('roomCodePlaceholder');
             elements.joinRoomBtn.textContent = i18n('joinRoom');
-            elements.lobbyHelpLink.textContent = i18n('helpLink');
-            elements.lobbyHelpLink.href = getReadmeHref();
+            elements.lobbyHelpLink.textContent = i18n('helpLobby');
             
             elements.uiChatTitle.textContent = i18n('chatTitle');
             elements.sendLogCommentBtn.textContent = i18n('chatSend');
@@ -3403,7 +3553,7 @@
             elements.uiSpectatorTitle.textContent = i18n('spectatorTitle');
             elements.uiInfoTitle.textContent = i18n('infoTitle');
             elements.gameHelpLink.textContent = i18n('helpLink');
-            elements.gameHelpLink.href = getReadmeHref();
+            refreshHelpDialog();
             
             elements.menuDrawBtn.textContent = i18n('menuDraw');
             elements.menuResignBtn.textContent = i18n('menuResign');
@@ -6303,6 +6453,11 @@
         }
 
         document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape' && !elements.helpDialog.hidden) {
+                e.preventDefault();
+                closeHelpDialog();
+                return;
+            }
             if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
             switch (e.key) {
                 case 'ArrowLeft': e.preventDefault(); goMoves(-1); break;
@@ -6405,6 +6560,12 @@
         bindPointerPress(elements.menuPairRenjuBtn, togglePairRenjuFromMenu);
         bindPointerPress(elements.menuResetSeatsBtn, resetSeatsFromMenu);
         bindPointerPress(elements.menuTimeSettingsBtn, openTimeSettingsDialog);
+        elements.lobbyHelpLink.addEventListener('click', () => openHelpDialog(elements.lobbyHelpLink));
+        elements.gameHelpLink.addEventListener('click', () => openHelpDialog(elements.gameHelpLink));
+        elements.helpDialogCloseBtn.addEventListener('click', closeHelpDialog);
+        elements.helpDialog.addEventListener('click', (event) => {
+            if (event.target === elements.helpDialog) closeHelpDialog();
+        });
         bindPointerPress(elements.genericConfirmOkBtn, () => {
             const onOk = genericConfirmOnOk;
             closeGenericConfirm();
