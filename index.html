@@ -1653,6 +1653,14 @@
             font-size: 13.5px;
         }
 
+        .info-help {
+            padding-left: 12px; /* line up with roomSummary's left edge */
+        }
+
+        .info-help .lobby-help-link {
+            font-size: 12.5px;
+        }
+
         .compact-time-editor {
             display: inline-flex;
             align-items: center;
@@ -2539,6 +2547,9 @@
                             <div class="info-topline">
                                 <p id="roomSummary">5 分 + 3 秒</p>
                             </div>
+                            <div class="info-help">
+                                <a id="gameHelpLink" class="lobby-help-link" href="./README.html" target="_blank" rel="noopener noreferrer">使い方を見る</a>
+                            </div>
                         </section>
                     </div>
                 </aside>
@@ -2781,6 +2792,7 @@
             uiLobbyTitle: document.getElementById('uiLobbyTitle'),
             lobbyLangBtn: document.getElementById('lobbyLangBtn'),
             lobbyHelpLink: document.getElementById('lobbyHelpLink'),
+            gameHelpLink: document.getElementById('gameHelpLink'),
             uiDisplayNameLabel: document.getElementById('uiDisplayNameLabel'),
             uiRoomCodeLabel: document.getElementById('uiRoomCodeLabel'),
             uiChatTitle: document.getElementById('uiChatTitle'),
@@ -3356,6 +3368,8 @@
             
             elements.uiSpectatorTitle.textContent = i18n('spectatorTitle');
             elements.uiInfoTitle.textContent = i18n('infoTitle');
+            elements.gameHelpLink.textContent = i18n('helpLink');
+            elements.gameHelpLink.href = getReadmeHref();
             
             elements.menuDrawBtn.textContent = i18n('menuDraw');
             elements.menuResignBtn.textContent = i18n('menuResign');
