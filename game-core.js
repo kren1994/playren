@@ -299,7 +299,7 @@
         const baseSeconds = Number(s.baseSeconds);
         const incrementSeconds = Number(s.incrementSeconds);
         return {
-            baseSeconds: clamp(Number.isFinite(baseSeconds) && baseSeconds > 0 ? baseSeconds : GC_DEFAULT_BASE_S, 60, 180 * 60),
+            baseSeconds: clamp(Number.isFinite(baseSeconds) && baseSeconds > 0 ? baseSeconds : GC_DEFAULT_BASE_S, 1, 180 * 60),
             incrementSeconds: clamp(Number.isFinite(incrementSeconds) ? incrementSeconds : GC_DEFAULT_INC_S, 0, 60),
         };
     }

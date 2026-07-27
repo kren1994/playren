@@ -1176,6 +1176,17 @@
             grid-column: 3;
         }
 
+        .time-base-stepper {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .time-base-seconds-stepper[hidden] {
+            display: none;
+        }
+
         .time-stepper {
             display: grid;
             grid-template-columns: 30px 4em 30px auto;
@@ -2613,19 +2624,35 @@
 
                     <label id="uiTimeLeftBaseLabel" class="time-row-label time-base-label" for="timeLeftBaseInput">持ち時間</label>
                     <div class="time-control-cell time-left-control time-base-control">
-                        <div class="time-stepper">
-                            <button class="time-step-button" type="button" data-step-target="timeLeftBaseInput" data-step="-1">−</button>
-                            <input id="timeLeftBaseInput" type="number" inputmode="numeric" min="1" max="180" value="5">
-                            <button class="time-step-button" type="button" data-step-target="timeLeftBaseInput" data-step="1">＋</button>
-                            <span id="uiTimeLeftMinute" class="time-unit">分</span>
+                        <div class="time-base-stepper">
+                            <div class="time-stepper">
+                                <button class="time-step-button" type="button" data-step-target="timeLeftBaseInput" data-step="-1">−</button>
+                                <input id="timeLeftBaseInput" type="number" inputmode="numeric" min="1" max="180" value="5">
+                                <button class="time-step-button" type="button" data-step-target="timeLeftBaseInput" data-step="1">＋</button>
+                                <span id="uiTimeLeftMinute" class="time-unit">分</span>
+                            </div>
+                            <div id="timeLeftBaseSecondsStepper" class="time-stepper time-base-seconds-stepper" hidden>
+                                <button class="time-step-button" type="button" data-step-target="timeLeftBaseSecondsInput" data-step="-1">−</button>
+                                <input id="timeLeftBaseSecondsInput" type="number" inputmode="numeric" min="0" max="59" value="0" data-unit="second">
+                                <button class="time-step-button" type="button" data-step-target="timeLeftBaseSecondsInput" data-step="1">＋</button>
+                                <span id="uiTimeLeftBaseSecond" class="time-unit">秒</span>
+                            </div>
                         </div>
                     </div>
                     <div class="time-control-cell time-right-control time-base-control">
-                        <div class="time-stepper">
-                            <button class="time-step-button" type="button" data-step-target="timeRightBaseInput" data-step="-1">−</button>
-                            <input id="timeRightBaseInput" type="number" inputmode="numeric" min="1" max="180" value="5">
-                            <button class="time-step-button" type="button" data-step-target="timeRightBaseInput" data-step="1">＋</button>
-                            <span id="uiTimeRightMinute" class="time-unit">分</span>
+                        <div class="time-base-stepper">
+                            <div class="time-stepper">
+                                <button class="time-step-button" type="button" data-step-target="timeRightBaseInput" data-step="-1">−</button>
+                                <input id="timeRightBaseInput" type="number" inputmode="numeric" min="1" max="180" value="5">
+                                <button class="time-step-button" type="button" data-step-target="timeRightBaseInput" data-step="1">＋</button>
+                                <span id="uiTimeRightMinute" class="time-unit">分</span>
+                            </div>
+                            <div id="timeRightBaseSecondsStepper" class="time-stepper time-base-seconds-stepper" hidden>
+                                <button class="time-step-button" type="button" data-step-target="timeRightBaseSecondsInput" data-step="-1">−</button>
+                                <input id="timeRightBaseSecondsInput" type="number" inputmode="numeric" min="0" max="59" value="0" data-unit="second">
+                                <button class="time-step-button" type="button" data-step-target="timeRightBaseSecondsInput" data-step="1">＋</button>
+                                <span id="uiTimeRightBaseSecond" class="time-unit">秒</span>
+                            </div>
                         </div>
                     </div>
 
@@ -2633,7 +2660,7 @@
                     <div class="time-control-cell time-left-control time-increment-control">
                         <div class="time-stepper">
                             <button class="time-step-button" type="button" data-step-target="timeLeftIncrementInput" data-step="-1">−</button>
-                            <input id="timeLeftIncrementInput" type="number" inputmode="numeric" min="0" max="60" value="5">
+                            <input id="timeLeftIncrementInput" type="number" inputmode="numeric" min="0" max="60" value="5" data-unit="second">
                             <button class="time-step-button" type="button" data-step-target="timeLeftIncrementInput" data-step="1">＋</button>
                             <span id="uiTimeLeftSecond" class="time-unit">秒</span>
                         </div>
@@ -2641,7 +2668,7 @@
                     <div class="time-control-cell time-right-control time-increment-control">
                         <div class="time-stepper">
                             <button class="time-step-button" type="button" data-step-target="timeRightIncrementInput" data-step="-1">−</button>
-                            <input id="timeRightIncrementInput" type="number" inputmode="numeric" min="0" max="60" value="5">
+                            <input id="timeRightIncrementInput" type="number" inputmode="numeric" min="0" max="60" value="5" data-unit="second">
                             <button class="time-step-button" type="button" data-step-target="timeRightIncrementInput" data-step="1">＋</button>
                             <span id="uiTimeRightSecond" class="time-unit">秒</span>
                         </div>
@@ -2771,9 +2798,13 @@
             timeSettingsDialog: document.getElementById('timeSettingsDialog'),
             timeHandicapInput: document.getElementById('timeHandicapInput'),
             timeLeftBaseInput: document.getElementById('timeLeftBaseInput'),
+            timeLeftBaseSecondsInput: document.getElementById('timeLeftBaseSecondsInput'),
             timeLeftIncrementInput: document.getElementById('timeLeftIncrementInput'),
             timeRightBaseInput: document.getElementById('timeRightBaseInput'),
+            timeRightBaseSecondsInput: document.getElementById('timeRightBaseSecondsInput'),
             timeRightIncrementInput: document.getElementById('timeRightIncrementInput'),
+            timeLeftBaseSecondsStepper: document.getElementById('timeLeftBaseSecondsStepper'),
+            timeRightBaseSecondsStepper: document.getElementById('timeRightBaseSecondsStepper'),
             timeSeatGrid: document.getElementById('timeSeatGrid'),
             timeSettingsCancelBtn: document.getElementById('timeSettingsCancelBtn'),
             timeSettingsApplyBtn: document.getElementById('timeSettingsApplyBtn'),
@@ -2783,9 +2814,11 @@
             uiTimeLeftIncrementLabel: document.getElementById('uiTimeLeftIncrementLabel'),
             uiTimeLeftMinute: document.getElementById('uiTimeLeftMinute'),
             uiTimeLeftSecond: document.getElementById('uiTimeLeftSecond'),
+            uiTimeLeftBaseSecond: document.getElementById('uiTimeLeftBaseSecond'),
             uiTimeRightLabel: document.getElementById('uiTimeRightLabel'),
             uiTimeRightMinute: document.getElementById('uiTimeRightMinute'),
             uiTimeRightSecond: document.getElementById('uiTimeRightSecond'),
+            uiTimeRightBaseSecond: document.getElementById('uiTimeRightBaseSecond'),
             toast: document.getElementById('toast'),
             presenceToasts: document.getElementById('presenceToasts'),
             
@@ -3388,6 +3421,8 @@
             elements.uiTimeRightMinute.textContent = i18n('minute');
             elements.uiTimeLeftSecond.textContent = i18n('second');
             elements.uiTimeRightSecond.textContent = i18n('second');
+            elements.uiTimeLeftBaseSecond.textContent = i18n('second');
+            elements.uiTimeRightBaseSecond.textContent = i18n('second');
             document.querySelectorAll('.time-step-button').forEach((button) => {
                 const label = Number(button.dataset.step) < 0 ? i18n('timeDecrease') : i18n('timeIncrease');
                 button.setAttribute('aria-label', label);
@@ -3502,6 +3537,7 @@
                 displayName: '',
                 roomCode: '',
                 baseMinutes: DEFAULT_BASE_MINUTES,
+                baseSeconds: DEFAULT_BASE_MINUTES * 60,
                 incrementSeconds: DEFAULT_INCREMENT_SECONDS,
                 soundEnabled: true,
                 showCoords: true,
@@ -3523,6 +3559,12 @@
             const baseMinutes = Number(next.baseMinutes);
             const incrementSeconds = Number(next.incrementSeconds);
             next.baseMinutes = clamp(Number.isFinite(baseMinutes) && baseMinutes > 0 ? baseMinutes : defaults.baseMinutes, 1, 180);
+            const rawBaseSeconds = Number(next.baseSeconds);
+            next.baseSeconds = clamp(
+                Number.isFinite(rawBaseSeconds) && rawBaseSeconds > 0 ? rawBaseSeconds : next.baseMinutes * 60,
+                1,
+                180 * 60
+            );
             next.incrementSeconds = clamp(Number.isFinite(incrementSeconds) ? incrementSeconds : defaults.incrementSeconds, 0, 60);
             next.soundEnabled = next.soundEnabled !== false;
             next.showCoords = next.showCoords !== false;
@@ -3557,11 +3599,15 @@
 
         function readTimeSettingsFromInputs() {
             const settings = loadUserSettings();
-            const rawBaseMinutes = Number(settings.baseMinutes);
+            const rawBaseSeconds = Number(settings.baseSeconds);
             const rawIncrementSeconds = Number(settings.incrementSeconds);
-            const baseMinutes = clamp(Number.isFinite(rawBaseMinutes) && rawBaseMinutes > 0 ? rawBaseMinutes : DEFAULT_BASE_MINUTES, 1, 180);
+            const baseSeconds = clamp(
+                Number.isFinite(rawBaseSeconds) && rawBaseSeconds > 0 ? rawBaseSeconds : DEFAULT_BASE_MINUTES * 60,
+                1,
+                180 * 60
+            );
             const incrementSeconds = clamp(Number.isFinite(rawIncrementSeconds) ? rawIncrementSeconds : DEFAULT_INCREMENT_SECONDS, 0, 60);
-            return { baseMinutes, incrementSeconds };
+            return { baseSeconds, incrementSeconds };
         }
 
         function persistLobbySettings() {
@@ -3733,9 +3779,9 @@
         }
 
         function buildSettings() {
-            const { baseMinutes, incrementSeconds } = readTimeSettingsFromInputs();
+            const { baseSeconds, incrementSeconds } = readTimeSettingsFromInputs();
             return {
-                baseSeconds: baseMinutes * 60,
+                baseSeconds,
                 incrementSeconds,
                 opening: 'taraguchi10',
             };
@@ -4678,9 +4724,11 @@
             }
             ensureSeatClockSettings();
             elements.timeHandicapInput.checked = Boolean(state.timeHandicapEnabled);
-            elements.timeLeftBaseInput.value = String(Math.round(state.seatClockSettings.black.baseSeconds / 60));
+            elements.timeLeftBaseInput.value = String(Math.floor(state.seatClockSettings.black.baseSeconds / 60));
+            elements.timeLeftBaseSecondsInput.value = String(state.seatClockSettings.black.baseSeconds % 60);
             elements.timeLeftIncrementInput.value = String(state.seatClockSettings.black.incrementSeconds);
-            elements.timeRightBaseInput.value = String(Math.round(state.seatClockSettings.white.baseSeconds / 60));
+            elements.timeRightBaseInput.value = String(Math.floor(state.seatClockSettings.white.baseSeconds / 60));
+            elements.timeRightBaseSecondsInput.value = String(state.seatClockSettings.white.baseSeconds % 60);
             elements.timeRightIncrementInput.value = String(state.seatClockSettings.white.incrementSeconds);
             syncTimeSettingsDialogMode();
             elements.timeSettingsDialog.hidden = false;
@@ -4712,19 +4760,26 @@
         function syncTimeSettingsDialogMode() {
             const hasHandicap = elements.timeHandicapInput.checked;
             elements.timeRightBaseInput.disabled = !hasHandicap;
+            elements.timeRightBaseSecondsInput.disabled = !hasHandicap;
             elements.timeRightIncrementInput.disabled = !hasHandicap;
-            document.querySelectorAll('[data-step-target="timeRightBaseInput"], [data-step-target="timeRightIncrementInput"]')
+            document.querySelectorAll('[data-step-target="timeRightBaseInput"], [data-step-target="timeRightBaseSecondsInput"], [data-step-target="timeRightIncrementInput"]')
                 .forEach((button) => {
                     button.disabled = !hasHandicap;
                 });
             document.querySelectorAll('.time-right-control').forEach((control) => {
                 control.hidden = !hasHandicap;
             });
+            elements.timeLeftBaseSecondsStepper.hidden = !hasHandicap;
+            elements.timeRightBaseSecondsStepper.hidden = !hasHandicap;
+            elements.timeLeftBaseInput.min = hasHandicap ? '0' : '1';
+            elements.timeRightBaseInput.min = hasHandicap ? '0' : '1';
             elements.uiTimeLeftLabel.hidden = !hasHandicap;
             elements.uiTimeRightLabel.hidden = !hasHandicap;
             elements.timeSeatGrid.classList.toggle('single', !hasHandicap);
             if (!hasHandicap) {
                 elements.timeRightBaseInput.value = elements.timeLeftBaseInput.value;
+                elements.timeRightBaseSecondsInput.value = '0';
+                elements.timeLeftBaseSecondsInput.value = '0';
                 elements.timeRightIncrementInput.value = elements.timeLeftIncrementInput.value;
             }
         }
@@ -4732,7 +4787,7 @@
         function stepTimeInput(button) {
             const input = document.getElementById(button.dataset.stepTarget);
             if (!input || input.disabled) return;
-            const candidates = input.id.includes('Increment')
+            const candidates = input.dataset.unit === 'second'
                 ? INCREMENT_SECOND_STEPS
                 : BASE_MINUTE_STEPS;
             const currentValue = Number(input.value);
@@ -4759,14 +4814,31 @@
             input.dispatchEvent(new Event('input', { bubbles: true }));
         }
 
-        function readClockSettingInputs(baseInput, incrementInput) {
+        function readClockSettingInputs(baseInput, incrementInput, baseSecondsInput = null) {
             const rawBaseMinutes = Number(baseInput.value);
             const rawIncrementSeconds = Number(incrementInput.value);
-            const baseMinutes = clamp(Number.isFinite(rawBaseMinutes) && rawBaseMinutes > 0 ? rawBaseMinutes : DEFAULT_BASE_MINUTES, 1, 180);
+            const minBaseMinutes = baseSecondsInput ? 0 : 1;
+            const baseMinutes = clamp(
+                Number.isFinite(rawBaseMinutes) && rawBaseMinutes >= 0 ? rawBaseMinutes : DEFAULT_BASE_MINUTES,
+                minBaseMinutes,
+                180
+            );
             const incrementSeconds = clamp(Number.isFinite(rawIncrementSeconds) ? rawIncrementSeconds : DEFAULT_INCREMENT_SECONDS, 0, 60);
-            baseInput.value = String(baseMinutes);
+            let baseSecondsPart = 0;
+            if (baseSecondsInput) {
+                const rawBaseSeconds = Number(baseSecondsInput.value);
+                baseSecondsPart = clamp(Number.isFinite(rawBaseSeconds) ? rawBaseSeconds : 0, 0, 59);
+            }
+            let baseSeconds = baseMinutes * 60 + baseSecondsPart;
+            if (baseSecondsInput) {
+                baseSeconds = clamp(baseSeconds, 1, 180 * 60);
+                baseInput.value = String(Math.floor(baseSeconds / 60));
+                baseSecondsInput.value = String(baseSeconds % 60);
+            } else {
+                baseInput.value = String(baseMinutes);
+            }
             incrementInput.value = String(incrementSeconds);
-            return { baseSeconds: baseMinutes * 60, incrementSeconds };
+            return { baseSeconds, incrementSeconds };
         }
 
         function applyTimeSettingsDialog() {
@@ -4777,12 +4849,21 @@
                 return;
             }
             const hasHandicap = elements.timeHandicapInput.checked;
-            const left = readClockSettingInputs(elements.timeLeftBaseInput, elements.timeLeftIncrementInput);
+            const left = readClockSettingInputs(
+                elements.timeLeftBaseInput,
+                elements.timeLeftIncrementInput,
+                hasHandicap ? elements.timeLeftBaseSecondsInput : null
+            );
             const right = hasHandicap
-                ? readClockSettingInputs(elements.timeRightBaseInput, elements.timeRightIncrementInput)
+                ? readClockSettingInputs(
+                    elements.timeRightBaseInput,
+                    elements.timeRightIncrementInput,
+                    elements.timeRightBaseSecondsInput
+                )
                 : { ...left };
             persistUserSettings({
-                baseMinutes: Math.round(left.baseSeconds / 60),
+                baseMinutes: Math.floor(left.baseSeconds / 60),
+                baseSeconds: left.baseSeconds,
                 incrementSeconds: left.incrementSeconds,
             });
             closeTimeSettingsDialog();
@@ -5513,16 +5594,25 @@
 
         const RULE_LABEL = 'Taraguchi-10';
 
-        function formatTimeSetting(minutes, increment) {
-            // CJK (分/秒) hugs the number; English (min/sec) needs a space before the unit.
+        function formatTimeSetting(baseSeconds, increment) {
+            const minutes = Math.floor(baseSeconds / 60);
+            const seconds = baseSeconds % 60;
             const u = currentLanguage === 'en' ? ' ' : '';
-            return `${minutes}${u}${i18n('minute')} + ${increment}${u}${i18n('second')}`;
+            let basePart;
+            if (seconds === 0) {
+                basePart = `${minutes}${u}${i18n('minute')}`;
+            } else if (currentLanguage === 'en') {
+                basePart = `${minutes}${u}${i18n('minute')} ${seconds}${u}${i18n('second')}`;
+            } else {
+                basePart = `${minutes}${i18n('minute')}${seconds}${i18n('second')}`;
+            }
+            return `${basePart} + ${increment}${u}${i18n('second')}`;
         }
 
         function renderRoomSummary() {
             if (!state) {
-                const { baseMinutes, incrementSeconds } = readTimeSettingsFromInputs();
-                elements.roomSummary.textContent = `${RULE_LABEL} ・ ${formatTimeSetting(baseMinutes, incrementSeconds)}`;
+                const { baseSeconds, incrementSeconds } = readTimeSettingsFromInputs();
+                elements.roomSummary.textContent = `${RULE_LABEL} ・ ${formatTimeSetting(baseSeconds, incrementSeconds)}`;
                 elements.roomSummary.hidden = false;
                 return;
             }
@@ -5530,8 +5620,8 @@
             ensureSeatClockSettings();
             const left = state.seatClockSettings.black;
             const right = state.seatClockSettings.white;
-            const leftText = formatTimeSetting(Math.round(left.baseSeconds / 60), left.incrementSeconds);
-            const rightText = formatTimeSetting(Math.round(right.baseSeconds / 60), right.incrementSeconds);
+            const leftText = formatTimeSetting(left.baseSeconds, left.incrementSeconds);
+            const rightText = formatTimeSetting(right.baseSeconds, right.incrementSeconds);
             const timeText = state.timeHandicapEnabled ? `${leftText} / ${rightText}` : leftText;
             elements.roomSummary.textContent = `${RULE_LABEL} ・ ${timeText}`;
             elements.roomSummary.hidden = false;
@@ -6274,8 +6364,10 @@
         elements.timeLeftIncrementInput.addEventListener('input', syncTimeSettingsDialogMode);
         [
             elements.timeLeftBaseInput,
+            elements.timeLeftBaseSecondsInput,
             elements.timeLeftIncrementInput,
             elements.timeRightBaseInput,
+            elements.timeRightBaseSecondsInput,
             elements.timeRightIncrementInput,
         ].forEach((input) => {
             input.addEventListener('blur', () => clampTimeInput(input));
