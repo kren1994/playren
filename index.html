@@ -1098,6 +1098,27 @@
             color: var(--muted);
         }
 
+        /* Opening swap / branch choice stays anchored where it is, but takes
+           less vertical room so the player can keep more of the board visible. */
+        #actionConfirm .confirm-card {
+            padding: 10px 14px;
+            gap: 6px;
+        }
+
+        #actionConfirm .button {
+            min-height: 40px;
+        }
+
+        #actionConfirm .confirm-actions {
+            gap: 6px;
+        }
+
+        #actionConfirm .confirm-hint {
+            margin: 0;
+            font-size: 11px;
+            line-height: 1.35;
+        }
+
         #timeSettingsDialog {
             display: flex;
             align-items: center;
