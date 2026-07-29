@@ -267,8 +267,8 @@
         }
 
         .scheme-icon {
-            width: 17px;
-            height: 17px;
+            width: 16px;
+            height: 16px;
             flex: 0 0 auto;
         }
 
@@ -314,6 +314,12 @@
         }
 
         .language-code {
+            min-width: 2.2em;
+            text-align: left;
+            letter-spacing: 0;
+        }
+
+        .lobby-corner .scheme-code {
             min-width: 2.2em;
             text-align: left;
             letter-spacing: 0;
@@ -2410,15 +2416,15 @@
     <div class="app-shell">
         <section id="lobbyScreen" class="screen lobby-screen">
             <div class="lobby-corner">
-                <!-- One fixed half-disc for "appearance"; it names the setting,
-                     not its value. The value swap it used to attempt never
-                     worked anyway: `hidden` is an HTMLElement property, so
-                     assigning it on an <svg> never reached the attribute. -->
+                <!-- Fixed half-disc icon for "appearance" (icon never swaps
+                     with the value, only the label text next to it does,
+                     same grammar as the language chip). -->
                 <button id="lobbyColorSchemeBtn" class="lobby-lang-btn" type="button" aria-label="配色">
                     <svg class="scheme-icon" viewBox="0 0 24 24" aria-hidden="true">
                         <circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="2"></circle>
                         <path d="M12 3a9 9 0 0 0 0 18z" fill="currentColor"></path>
                     </svg>
+                    <span class="scheme-code">ライト</span>
                 </button>
                 <button id="lobbyLangBtn" class="lobby-lang-btn" type="button" aria-label="言語">
                     <svg class="language-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
@@ -3850,6 +3856,7 @@
             schemeBtn.querySelector('.scheme-code').textContent = colorSchemeLabel();
             schemeBtn.setAttribute('aria-label', `${i18n('menuColorScheme')}: ${colorSchemeLabel()}`);
             const lobbySchemeBtn = document.getElementById('lobbyColorSchemeBtn');
+            lobbySchemeBtn.querySelector('.scheme-code').textContent = colorSchemeLabel();
             lobbySchemeBtn.setAttribute('aria-label', `${i18n('menuColorScheme')}: ${colorSchemeLabel()}`);
             lobbySchemeBtn.title = `${i18n('menuColorScheme')}: ${colorSchemeLabel()}`;
         }
