@@ -205,6 +205,10 @@
             justify-items: center;
             gap: 6px;
             text-align: center;
+            /* Breathing room from the corner controls above — but only once
+               the viewport actually has slack. On short phone screens this
+               stays at 0 so nothing gets more cramped. */
+            margin-top: clamp(0px, (100dvh - 640px) * 0.3, 28px);
         }
 
         .lobby-board {
