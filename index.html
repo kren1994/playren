@@ -350,11 +350,19 @@
         }
 
         .lobby-help-link {
-            display: inline-block;
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
             font-size: 13px;
             color: var(--accent-strong);
             text-decoration: underline;
             text-underline-offset: 2px;
+        }
+
+        .help-link-icon {
+            width: 14px;
+            height: 14px;
+            flex: 0 0 auto;
         }
 
         button.lobby-help-link {
@@ -2481,7 +2489,14 @@
                         <button id="joinRoomBtn" class="button button-primary" type="button" style="width: 100%;">入室</button>
                     </div>
                     <div class="lobby-help">
-                        <button id="lobbyHelpLink" class="lobby-help-link" type="button">はじめての方へ・使い方</button>
+                        <button id="lobbyHelpLink" class="lobby-help-link" type="button">
+                            <svg class="help-link-icon" viewBox="0 0 24 24" aria-hidden="true">
+                                <circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" stroke-width="2"></circle>
+                                <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path>
+                                <line x1="12" y1="17" x2="12.01" y2="17" stroke="currentColor" stroke-width="2" stroke-linecap="round"></line>
+                            </svg>
+                            <span id="lobbyHelpLinkText">はじめての方へ・使い方</span>
+                        </button>
                     </div>
                 </section>
             </div>
@@ -2655,7 +2670,14 @@
                                 <p id="roomSummary">5 分 + 3 秒</p>
                             </div>
                             <div class="info-help">
-                                <button id="gameHelpLink" class="lobby-help-link" type="button">使い方を見る</button>
+                                <button id="gameHelpLink" class="lobby-help-link" type="button">
+                                    <svg class="help-link-icon" viewBox="0 0 24 24" aria-hidden="true">
+                                        <circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" stroke-width="2"></circle>
+                                        <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path>
+                                        <line x1="12" y1="17" x2="12.01" y2="17" stroke="currentColor" stroke-width="2" stroke-linecap="round"></line>
+                                    </svg>
+                                    <span id="gameHelpLinkText">使い方を見る</span>
+                                </button>
                             </div>
                         </section>
                     </div>
@@ -2936,7 +2958,9 @@
             uiLobbyTitle: document.getElementById('uiLobbyTitle'),
             lobbyLangBtn: document.getElementById('lobbyLangBtn'),
             lobbyHelpLink: document.getElementById('lobbyHelpLink'),
+            lobbyHelpLinkText: document.getElementById('lobbyHelpLinkText'),
             gameHelpLink: document.getElementById('gameHelpLink'),
+            gameHelpLinkText: document.getElementById('gameHelpLinkText'),
             uiDisplayNameLabel: document.getElementById('uiDisplayNameLabel'),
             uiRoomCodeLabel: document.getElementById('uiRoomCodeLabel'),
             uiChatTitle: document.getElementById('uiChatTitle'),
@@ -3577,14 +3601,14 @@
             elements.uiRoomCodeLabel.textContent = i18n('roomCodeLabel');
             elements.roomCodeInput.placeholder = i18n('roomCodePlaceholder');
             elements.joinRoomBtn.textContent = i18n('joinRoom');
-            elements.lobbyHelpLink.textContent = i18n('helpLobby');
+            elements.lobbyHelpLinkText.textContent = i18n('helpLobby');
             
             elements.uiChatTitle.textContent = i18n('chatTitle');
             elements.sendLogCommentBtn.textContent = i18n('chatSend');
             
             elements.uiSpectatorTitle.textContent = i18n('spectatorTitle');
             elements.uiInfoTitle.textContent = i18n('infoTitle');
-            elements.gameHelpLink.textContent = i18n('helpLink');
+            elements.gameHelpLinkText.textContent = i18n('helpLink');
             refreshHelpDialog();
             
             elements.menuDrawBtn.textContent = i18n('menuDraw');
