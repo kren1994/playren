@@ -418,6 +418,13 @@
             margin-bottom: 3px;
         }
 
+        .help-privacy {
+            margin: 0 14px;
+            color: var(--muted);
+            font-size: 11px;
+            line-height: 1.5;
+        }
+
         .help-dialog-footer {
             display: flex;
             align-items: center;
@@ -2735,6 +2742,7 @@
     <div id="helpDialog" class="confirm-backdrop help-dialog-backdrop" hidden>
         <section class="confirm-card help-dialog-card" role="dialog" aria-modal="true" aria-label="使い方">
             <ul id="helpDialogList" class="help-dialog-list"></ul>
+            <p id="helpPrivacy" class="help-privacy"></p>
             <div class="help-dialog-footer">
                 <a id="helpDetailsLink" class="lobby-help-link" href="./README.html" target="_blank" rel="noopener noreferrer">詳しい使い方</a>
                 <button id="helpDialogCloseBtn" class="button button-secondary" type="button">閉じる</button>
@@ -2926,6 +2934,7 @@
             genericConfirmCancelBtn: document.getElementById('genericConfirmCancelBtn'),
             helpDialog: document.getElementById('helpDialog'),
             helpDialogList: document.getElementById('helpDialogList'),
+            helpPrivacy: document.getElementById('helpPrivacy'),
             helpDetailsLink: document.getElementById('helpDetailsLink'),
             helpDialogCloseBtn: document.getElementById('helpDialogCloseBtn'),
             timeSettingsDialog: document.getElementById('timeSettingsDialog'),
@@ -3126,6 +3135,7 @@
                 helpStep5Text: '終局、満局合意、時間切れで対局終了。局後検討へ',
                 helpDetails: '詳しい使い方',
                 helpClose: '閉じる',
+                helpPrivacy: '棋譜は非公開です。製作者による確認機能もありません。',
                 chatTitle: 'チャット',
                 chatSend: '投稿',
                 spectatorTitle: '観戦席',
@@ -3244,6 +3254,7 @@
                 helpStep5Text: '认输、和棋合意或超时后结束，可在结束后复盘。',
                 helpDetails: '详细使用方法',
                 helpClose: '关闭',
+                helpPrivacy: '棋谱不会公开或被搜索。也不提供让制作者查看对局内容的功能。',
                 chatTitle: '聊天',
                 chatSend: '发送',
                 spectatorTitle: '观战席',
@@ -3362,6 +3373,7 @@
                 helpStep5Text: 'Games end by resignation, agreed draw, or timeout, followed by review.',
                 helpDetails: 'Detailed help',
                 helpClose: 'Close',
+                helpPrivacy: 'Kifu is not published or searchable. There is also no feature for the creator to inspect game contents.',
                 chatTitle: 'Chat',
                 chatSend: 'Send',
                 spectatorTitle: 'Spectators',
@@ -3569,6 +3581,7 @@
             elements.helpDetailsLink.textContent = i18n('helpDetails');
             elements.helpDetailsLink.href = getReadmeHref();
             elements.helpDialogCloseBtn.textContent = i18n('helpClose');
+            elements.helpPrivacy.textContent = i18n('helpPrivacy');
             elements.helpDialogList.replaceChildren(...[1, 2, 3, 4, 5].map((step) => {
                 const item = document.createElement('li');
                 const title = document.createElement('strong');
