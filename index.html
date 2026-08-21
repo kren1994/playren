@@ -5596,7 +5596,7 @@
                     // to the floor, so at 10px the narrow size reduction would
                     // never take effect there.
                     const fontSize = Math.max(narrow ? 9 : 10, Math.floor(cell * baseRatio));
-                    ctx.font = `${narrow ? 500 : 600} ${fontSize}px 'Yu Gothic UI', 'Hiragino Sans', Meiryo, sans-serif`;
+                    ctx.font = `${narrow ? 500 : 600} ${fontSize}px 'Segoe UI', 'Yu Gothic UI', 'Hiragino Sans', Meiryo, sans-serif`;
                     ctx.textAlign = 'center';
                     ctx.textBaseline = 'middle';
                     if (stoneShadingEnabled) {
@@ -5641,7 +5641,7 @@
                     const textLen = moveText.length;
                     const baseRatio = textLen >= 3 ? 0.3 : (textLen === 2 ? 0.38 : 0.45);
                     const fontSize = Math.max(10, Math.floor(cell * baseRatio));
-                    ctx.font = `600 ${fontSize}px 'Yu Gothic UI', 'Hiragino Sans', Meiryo, sans-serif`;
+                    ctx.font = `600 ${fontSize}px 'Segoe UI', 'Yu Gothic UI', 'Hiragino Sans', Meiryo, sans-serif`;
                     ctx.textAlign = 'center';
                     ctx.textBaseline = 'middle';
                     ctx.fillText(moveText, x, moveTextY);
