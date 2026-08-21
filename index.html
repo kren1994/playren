@@ -1465,8 +1465,18 @@
         }
 
         .board-wrap.position-setup {
-            outline: 4px solid rgba(226, 138, 42, 0.72);
-            outline-offset: 0;
+            z-index: 1;
+        }
+
+        .board-wrap.position-setup::after {
+            content: '';
+            position: absolute;
+            inset: 0;
+            z-index: 2;
+            box-sizing: border-box;
+            border: 3px solid rgba(226, 138, 42, 0.56);
+            border-radius: 6px;
+            pointer-events: none;
         }
 
         /* Transient notice floated over the board (e.g. an opening swap):
