@@ -5845,8 +5845,9 @@
         }
 
         function renderRoomSummary() {
+            const roomCodeSeparator = currentLanguage === 'en' ? ': ' : '：';
             const roomCodeText = currentRoomCode
-                ? `${i18n('roomCodeSummaryLabel')}: ${currentRoomCode}`
+                ? `${i18n('roomCodeSummaryLabel')}${roomCodeSeparator}${currentRoomCode}`
                 : '';
             elements.roomCodeSummary.textContent = roomCodeText;
             elements.roomCodeSummary.hidden = !roomCodeText;
