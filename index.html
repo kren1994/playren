@@ -1464,6 +1464,11 @@
             box-shadow: 0 16px 40px var(--shadow-color);
         }
 
+        .board-wrap.position-setup {
+            outline: 4px solid rgba(226, 138, 42, 0.72);
+            outline-offset: 0;
+        }
+
         /* Transient notice floated over the board (e.g. an opening swap):
            lands in the player's line of sight, then fades away. Sits in the
            lower area because opening stones cluster around the centre.
@@ -2588,8 +2593,9 @@
                                 </button>
                                 <div id="actionMenu" class="control-menu-popup" hidden>
                                     <button id="menuPairRenjuBtn" class="control-menu-item" type="button">ペア連珠</button>
-                                    <button id="menuResetSeatsBtn" class="control-menu-item" type="button">対局席リセット</button>
+                                    <button id="menuPositionSetupBtn" class="control-menu-item" type="button">局面指定</button>
                                     <div id="actionMenuDivider" class="control-menu-divider" role="separator"></div>
+                                    <button id="menuResetSeatsBtn" class="control-menu-item" type="button">対局席リセット</button>
                                     <button id="menuSwapSeatColorsBtn" class="control-menu-item" type="button">色を交換</button>
                                     <button id="menuTimeSettingsBtn" class="control-menu-item" type="button">時間設定</button>
                                     <button id="menuResignBtn" class="control-menu-item" type="button">終局</button>
@@ -2902,6 +2908,7 @@
             blackPlayerTimer: document.getElementById('blackPlayerTimer'),
             whitePlayerTimer: document.getElementById('whitePlayerTimer'),
             boardCanvas: document.getElementById('boardCanvas'),
+            boardWrap: document.getElementById('boardWrap'),
             boardNotice: document.getElementById('boardNotice'),
             boardControls: document.querySelector('.board-controls'),
             spectatorList: document.getElementById('spectatorList'),
@@ -2929,6 +2936,7 @@
             menuTakebackBtn: document.getElementById('menuTakebackBtn'),
             menuMoveConfirmBtn: document.getElementById('menuMoveConfirmBtn'),
             menuPairRenjuBtn: document.getElementById('menuPairRenjuBtn'),
+            menuPositionSetupBtn: document.getElementById('menuPositionSetupBtn'),
             menuSwapSeatColorsBtn: document.getElementById('menuSwapSeatColorsBtn'),
             menuTimeSettingsBtn: document.getElementById('menuTimeSettingsBtn'),
             menuResetSeatsBtn: document.getElementById('menuResetSeatsBtn'),
@@ -3167,6 +3175,8 @@
                 menuMoveNum: '手数',
                 menuMoveConfirm: '着手確認',
                 menuPairRenju: 'ペア連珠',
+                menuPositionSetup: '局面指定',
+                msgPositionSetupDisabled: '局面指定OFFで開始。局面指定は6手目以降で可能',
                 actionDialogChoice2: '10 題',
                 actionDialogSwap: 'Swap',
                 actionDialogHint: 'そのまま進めるなら盤に着手',
@@ -3224,9 +3234,12 @@
                 msgSwapNoticeSpectator: 'Swap — 色を交換',
                 msgPairRenjuOnBy: (name) => `${name} がペア連珠 ON`,
                 msgPairRenjuOffBy: (name) => `${name} がペア連珠 OFF`,
+                msgPositionSetupOnBy: (name) => `${name} が局面指定 ON`,
+                msgPositionSetupOffBy: (name) => `${name} が局面指定 OFF`,
                 msgSeatsResetBy: (name) => `${name} が対局席リセット`,
                 menuResetSeats: '対局席リセット',
                 confirmPairRenju: 'ペア連珠を切り替え',
+                confirmPositionSetup: '局面指定を切り替え',
                 confirmResetSeats: '対局席をリセット\n（全員が観戦席へ）',
                 confirmOk: 'OK',
                 confirmCancel: 'キャンセル',
@@ -3287,6 +3300,8 @@
                 menuMoveNum: '手数',
                 menuMoveConfirm: '落子确认',
                 menuPairRenju: '双人连珠',
+                menuPositionSetup: '指定局面',
+                msgPositionSetupDisabled: '已关闭局面指定并开始。局面指定需从第6手起使用',
                 actionDialogChoice2: '10 题',
                 actionDialogSwap: 'Swap',
                 actionDialogHint: '不交换时直接落子',
@@ -3344,9 +3359,12 @@
                 msgSwapNoticeSpectator: 'Swap — 交换颜色',
                 msgPairRenjuOnBy: (name) => `${name} 开启双人连珠`,
                 msgPairRenjuOffBy: (name) => `${name} 关闭双人连珠`,
+                msgPositionSetupOnBy: (name) => `${name} 开启指定局面`,
+                msgPositionSetupOffBy: (name) => `${name} 关闭指定局面`,
                 msgSeatsResetBy: (name) => `${name} 重置对局座位`,
                 menuResetSeats: '座位重置',
                 confirmPairRenju: '切换双人连珠',
+                confirmPositionSetup: '切换指定局面',
                 confirmResetSeats: '重置对局座位\n（所有人移至观战席）',
                 confirmOk: '确定',
                 confirmCancel: '取消',
@@ -3407,6 +3425,8 @@
                 menuMoveNum: 'Numbers',
                 menuMoveConfirm: 'Confirm',
                 menuPairRenju: 'Pair Renju',
+                menuPositionSetup: 'Set Position',
+                msgPositionSetupDisabled: 'Position setup was turned off. It is available from move 6.',
                 actionDialogChoice2: '10 moves',
                 actionDialogSwap: 'Swap',
                 actionDialogHint: 'Or just play on the board',
@@ -3464,9 +3484,12 @@
                 msgSwapNoticeSpectator: 'Swap — colors swapped',
                 msgPairRenjuOnBy: (name) => `${name} turned pair renju ON`,
                 msgPairRenjuOffBy: (name) => `${name} turned pair renju OFF`,
+                msgPositionSetupOnBy: (name) => `${name} turned set position ON`,
+                msgPositionSetupOffBy: (name) => `${name} turned set position OFF`,
                 msgSeatsResetBy: (name) => `${name} reset the seats`,
                 menuResetSeats: 'Reset Seats',
                 confirmPairRenju: 'Toggle pair renju',
+                confirmPositionSetup: 'Toggle set position',
                 confirmResetSeats: 'Reset the seats\n(Everyone moves to the spectator bench)',
                 confirmOk: 'OK',
                 confirmCancel: 'Cancel',
@@ -3639,6 +3662,7 @@
             elements.menuTakebackBtn.textContent = i18n('menuTakeback');
             elements.menuMoveConfirmBtn.textContent = i18n('menuMoveConfirm');
             elements.menuPairRenjuBtn.textContent = i18n('menuPairRenju');
+            elements.menuPositionSetupBtn.textContent = i18n('menuPositionSetup');
             elements.menuResetSeatsBtn.textContent = i18n('menuResetSeats');
             elements.menuSwapSeatColorsBtn.textContent = i18n('menuSwapSeatColors');
             elements.menuTimeSettingsBtn.textContent = i18n('menuTimeSettings');
@@ -4909,6 +4933,20 @@
                 action = { ...action, requestId: createRequestId() };
                 setPendingMove(action);
             }
+            // Capture the board that is actually being displayed at the moment
+            // the player confirms readiness. Position setup is a start-time
+            // flag; its board is not captured when the flag is toggled.
+            if (action.kind === 'ready' && action.ready && state.positionSetupEnabled) {
+                action = {
+                    ...action,
+                    moves: getRenderedMoves().map((move) => ({
+                        x: move.x,
+                        y: move.y,
+                        color: move.color,
+                        ...(move.peerId ? { peerId: move.peerId } : {}),
+                    })),
+                };
+            }
             if ((action.kind === 'draw' || action.kind === 'takeback') && !applyOptimisticRequest(action.kind)) {
                 return;
             }
@@ -6124,6 +6162,9 @@
             // No host: room settings are open to everyone (only gated by !playing,
             // which already hides these three while a game is in progress).
             elements.menuPairRenjuBtn.classList.toggle('active', Boolean(state?.pairRenjuEnabled));
+            elements.menuPositionSetupBtn.hidden = isPlaying;
+            elements.menuPositionSetupBtn.classList.toggle('active', Boolean(state?.positionSetupEnabled));
+            elements.boardWrap.classList.toggle('position-setup', Boolean(state && state.status !== 'playing' && state.positionSetupEnabled));
             setTogglePressed(elements.menuMoveConfirmBtn, moveConfirmEnabled);
             elements.menuDrawBtn.disabled = !canManageResult || Boolean(state?.drawOfferByPeerId);
             elements.menuResignBtn.disabled = !canManageResult;
@@ -6433,6 +6474,16 @@
             });
         }
 
+        function togglePositionSetupFromMenu() {
+            closeControlMenus();
+            if (!state || state.status === 'playing') return;
+            openConfirm(i18n('confirmPositionSetup'), () => {
+                if (!state || state.status === 'playing') return;
+                const enabled = !state.positionSetupEnabled;
+                sendAction({ kind: 'position-setup', enabled });
+            });
+        }
+
         function resetSeatsFromMenu() {
             closeControlMenus();
             if (!state || state.status === 'playing') return;
@@ -6645,6 +6696,7 @@
         bindPointerPress(elements.menuMoveConfirmBtn, toggleMoveConfirm);
         bindPointerPress(elements.menuSwapSeatColorsBtn, swapSeatColorsFromMenu);
         bindPointerPress(elements.menuPairRenjuBtn, togglePairRenjuFromMenu);
+        bindPointerPress(elements.menuPositionSetupBtn, togglePositionSetupFromMenu);
         bindPointerPress(elements.menuResetSeatsBtn, resetSeatsFromMenu);
         bindPointerPress(elements.menuTimeSettingsBtn, openTimeSettingsDialog);
         elements.lobbyHelpLink.addEventListener('click', () => openHelpDialog(elements.lobbyHelpLink));

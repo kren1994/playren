@@ -148,7 +148,9 @@
             case 'opening-move-6-choice2':
                 return { actorPeerId: whitePeerId, allowBoardAction: true, boardActionKind: 'move', constraint: { kind: 'anywhere' } };
             case 'regular': {
-                const actorPeerId = lastMove ? getOpponentPeerId(ctx,lastMove.peerId) : blackPeerId;
+                const actorPeerId = state.positionSetupActive && lastMove
+                    ? (lastMove.color === 'black' ? whitePeerId : blackPeerId)
+                    : (lastMove ? getOpponentPeerId(ctx,lastMove.peerId) : blackPeerId);
                 return { actorPeerId, allowBoardAction: true, boardActionKind: 'move', constraint: { kind: 'anywhere' } };
             }
             case 'finished':
@@ -425,6 +427,34 @@
             state.seats[`${whiteTeam}Bottom`],
         ];
         state.pairTurnIndex = 0;
+    }
+
+    function clonePositionMoves(moves) {
+        if (!Array.isArray(moves)) return [];
+        return moves
+            .filter((move) => Number.isInteger(move?.x) && Number.isInteger(move?.y)
+                && (move.color === 'black' || move.color === 'white'))
+            .map((move, index) => ({
+                x: move.x,
+                y: move.y,
+                color: move.color,
+                ...(move.peerId ? { peerId: move.peerId } : {}),
+                number: index + 1,
+            }));
+    }
+
+    function setPositionSetupEnabled(ctx, enabled, moves) {
+        const state = ctx.state;
+        if (!state || state.status === 'playing') return;
+        ensurePairRenjuState(ctx);
+        state.positionSetupEnabled = Boolean(enabled);
+        resetReadyFlags(ctx);
+    }
+
+    function setPositionSetupStartMoves(ctx, moves) {
+        const state = ctx.state;
+        if (!state || state.status === 'playing' || !state.positionSetupEnabled) return;
+        state.moves = clonePositionMoves(moves);
     }
 
     // ---- pure clock state ops (Step 2.1) -----------------------------------
@@ -852,8 +882,12 @@
         // From the 2nd game on, auto-alternate black/white vs the PREVIOUS GAME'S
         // STARTING colors (an in-game Swap can change seatColors mid-game, so we
         // must not derive this from the end state). Suppressed by departure/manual.
-        const alternateColors = state.phase === 'finished' && state.swapColorsOnNextMatch;
+        const positionSetupEnabled = Boolean(state.positionSetupEnabled);
+        const startMoves = positionSetupEnabled ? clonePositionMoves(state.moves) : [];
+        const usePositionSetup = positionSetupEnabled && startMoves.length >= 6;
+        const alternateColors = !usePositionSetup && state.phase === 'finished' && state.swapColorsOnNextMatch;
         clearBoardForNewMatch(ctx);
+        if (usePositionSetup) state.moves = startMoves;
         ensureSeatColors(ctx);
         if (alternateColors && state.matchStartColors) {
             state.seatColors.black = state.matchStartColors.white;
@@ -865,7 +899,21 @@
         state.matchStartColors = { black: state.seatColors.black, white: state.seatColors.white };
         resetReadyFlags(ctx);
         initializePairTurnOrder(ctx);
-        setPhase(ctx, 'opening-move-1');
+        if (usePositionSetup) {
+            state.positionSetupActive = true;
+            if (state.pairRenjuEnabled && state.pairTurnOrder.length) {
+                state.pairTurnIndex = startMoves.length % state.pairTurnOrder.length;
+            }
+            setPhase(ctx, 'regular');
+        } else {
+            state.positionSetupActive = false;
+            state.positionSetupAutoDisabled = positionSetupEnabled;
+            setPhase(ctx, 'opening-move-1');
+        }
+        // Keep setup mode enabled after a setup-based match so it remains
+        // visible when the match finishes. A short (<6 move) setup is the
+        // explicit exception: it is automatically turned off for this start.
+        state.positionSetupEnabled = usePositionSetup;
     }
 
     function setReadyState(ctx, peerId, ready) {
@@ -1057,6 +1105,9 @@
             // When true, the next match auto-swaps black/white (alternation).
             // Set on game end; cleared by a departure or a manual color swap.
             swapColorsOnNextMatch: false,
+            positionSetupEnabled: false,
+            positionSetupActive: false,
+            positionSetupAutoDisabled: false,
             // seatColors snapshot at the START of the current match. Alternation
             // swaps from this (not the end state, which an in-game Swap can flip).
             matchStartColors: null,
@@ -1117,6 +1168,9 @@
         const state = ctx.state;
         if (!state) return;
         state.pairRenjuEnabled = Boolean(state.pairRenjuEnabled);
+        state.positionSetupEnabled = Boolean(state.positionSetupEnabled);
+        state.positionSetupActive = Boolean(state.positionSetupActive);
+        state.positionSetupAutoDisabled = Boolean(state.positionSetupAutoDisabled);
         state.seats = state.seats || { black: null, white: null };
         if (!Object.prototype.hasOwnProperty.call(state.seats, 'blackBottom')) state.seats.blackBottom = null;
         if (!Object.prototype.hasOwnProperty.call(state.seats, 'whiteBottom')) state.seats.whiteBottom = null;
@@ -1410,6 +1464,8 @@
         ensurePairRenjuState,
         normalizeCommentText,
         setPairRenjuEnabled,
+        setPositionSetupEnabled,
+        setPositionSetupStartMoves,
         canSelfChangeSeat,
         assignSeat,
         applyTimeSettings,

@@ -128,7 +128,17 @@ function dispatch(ctx, peerId, action, now) {
     case 'takeback': return GameCore.requestTakeback(ctx, peerId);
     case 'takeback-response': return GameCore.respondTakeback(ctx, peerId, Boolean(action.accept));
     case 'resign': return GameCore.resignGame(ctx, peerId);
-    case 'ready': return GameCore.setReadyState(ctx, peerId, Boolean(action.ready));
+    case 'ready': {
+      if (action.ready && state.positionSetupEnabled && Array.isArray(action.moves)) {
+        GameCore.setPositionSetupStartMoves(ctx, action.moves);
+      }
+      const result = GameCore.setReadyState(ctx, peerId, Boolean(action.ready));
+      if (!result && state.positionSetupAutoDisabled) {
+        state.positionSetupAutoDisabled = false;
+        ctx.notePresence('msgPositionSetupDisabled');
+      }
+      return result;
+    }
     case 'comment': return GameCore.addComment(ctx, peerId, action.text);
     case 'review-move': return GameCore.addReviewMove(ctx, peerId, action.x, action.y);
     case 'review-cursor': return GameCore.setReviewCursor(ctx, peerId, action.cursor);
@@ -150,6 +160,15 @@ function dispatch(ctx, peerId, action, now) {
       if (state.status === 'playing') return ctx.i18n('errCannotSwap');
       GameCore.setPairRenjuEnabled(ctx, Boolean(action.enabled));
       ctx.notePresence(action.enabled ? 'msgPairRenjuOnBy' : 'msgPairRenjuOffBy', ctx.getPeerName(peerId), peerId);
+      return '';
+    case 'position-setup':
+      if (state.status === 'playing') return ctx.i18n('errCannotSwap');
+      GameCore.setPositionSetupEnabled(ctx, Boolean(action.enabled));
+      ctx.notePresence(
+        action.enabled ? 'msgPositionSetupOnBy' : 'msgPositionSetupOffBy',
+        ctx.getPeerName(peerId),
+        peerId,
+      );
       return '';
     case 'reset-seats':
       if (state.status === 'playing') return ctx.i18n('errCannotSwap');
