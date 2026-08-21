@@ -1763,16 +1763,20 @@
         }
 
         .info-topline {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            gap: 10px;
-            flex-wrap: wrap;
+            display: grid;
+            gap: 4px;
         }
 
         #roomSummary {
             padding-left: 12px; /* line up with the chat column's left edge */
             font-size: 13.5px;
+        }
+
+        #roomCodeSummary {
+            margin: 0;
+            padding-left: 12px;
+            color: var(--muted);
+            font-size: 12px;
         }
 
         .info-help {
@@ -2675,6 +2679,7 @@
                             <h2 id="uiInfoTitle">対局情報</h2>
                             <div class="info-topline">
                                 <p id="roomSummary">5 分 + 3 秒</p>
+                                <p id="roomCodeSummary"></p>
                             </div>
                             <div class="info-help">
                                 <button id="gameHelpLink" class="lobby-help-link" type="button">
@@ -2903,6 +2908,7 @@
             spectatorList: document.getElementById('spectatorList'),
             spectatorCard: document.getElementById('spectatorCard'),
             roomSummary: document.getElementById('roomSummary'),
+            roomCodeSummary: document.getElementById('roomCodeSummary'),
             logList: document.getElementById('logList'),
             logCommentInput: document.getElementById('logCommentInput'),
             sendLogCommentBtn: document.getElementById('sendLogCommentBtn'),
@@ -2982,6 +2988,7 @@
         let peer = null;
         let state = null;
         let roomId = '';
+        let currentRoomCode = '';
         let localPeerId = '';
         let localMode = 'idle';
         let connectionState = '未接続';
@@ -3140,6 +3147,7 @@
                 chatSend: '投稿',
                 spectatorTitle: '観戦席',
                 infoTitle: '対局情報',
+                roomCodeSummaryLabel: '合言葉',
                 minute: '分',
                 second: '秒',
                 spectatorEmpty: '参加者なし',
@@ -3259,6 +3267,7 @@
                 chatSend: '发送',
                 spectatorTitle: '观战席',
                 infoTitle: '对局信息',
+                roomCodeSummaryLabel: '口令',
                 minute: '分',
                 second: '秒',
                 spectatorEmpty: '暂无参与者',
@@ -3378,6 +3387,7 @@
                 chatSend: 'Send',
                 spectatorTitle: 'Spectators',
                 infoTitle: 'Game Info',
+                roomCodeSummaryLabel: 'Room code',
                 minute: 'min',
                 second: 'sec',
                 spectatorEmpty: 'No participants',
@@ -3621,6 +3631,7 @@
             
             elements.uiSpectatorTitle.textContent = i18n('spectatorTitle');
             elements.uiInfoTitle.textContent = i18n('infoTitle');
+            renderRoomSummary();
             elements.gameHelpLinkText.textContent = i18n('helpLink');
             refreshHelpDialog();
             
@@ -5242,6 +5253,7 @@
 
             if (peer) resetAppState();
             persistLobbySettings();
+            currentRoomCode = roomCode;
             roomId = `${ROOM_PREFIX}${roomCode}`;
             localPlayerToken = getLocalPlayerToken(roomCode);
             sessionTerminated = false;
@@ -5834,6 +5846,11 @@
         }
 
         function renderRoomSummary() {
+            const roomCodeText = currentRoomCode
+                ? `${i18n('roomCodeSummaryLabel')}: ${currentRoomCode}`
+                : '';
+            elements.roomCodeSummary.textContent = roomCodeText;
+            elements.roomCodeSummary.hidden = !roomCodeText;
             if (!state) {
                 const { baseSeconds, incrementSeconds } = readTimeSettingsFromInputs();
                 elements.roomSummary.textContent = `${RULE_LABEL} ・ ${formatTimeSetting(baseSeconds, incrementSeconds)}`;
