@@ -448,7 +448,6 @@
         if (!state || state.status === 'playing') return;
         ensurePairRenjuState(ctx);
         state.positionSetupEnabled = Boolean(enabled);
-        resetReadyFlags(ctx);
     }
 
     // ---- pure clock state ops (Step 2.1) -----------------------------------
@@ -1213,7 +1212,6 @@
         // next game actually begins.
         state.pairTurnOrder = [];
         state.pairTurnIndex = 0;
-        resetReadyFlags(ctx);
         rebuildColors(ctx);
     }
 
@@ -1274,7 +1272,6 @@
         }
 
         if (state.status === 'finished') {
-            if (seatingChanged) resetReadyFlags(ctx);
             return '';
         }
 
@@ -1286,7 +1283,6 @@
         }
 
         if (seatingChanged) {
-            resetReadyFlags(ctx);
             state.phase = 'waiting-guest';
             state.status = 'waiting';
             ctx.stopClock();
@@ -1301,7 +1297,6 @@
         state.seatClockSettings = { black: settings.black, white: settings.white };
         ensureSeatClockSettings(ctx);
         syncSeatClocksToParticipants(ctx);
-        resetReadyFlags(ctx);
     }
 
     function removeParticipant(ctx, peerId, reasonText) {
@@ -1325,7 +1320,6 @@
         if (reasonText) ctx.addLog('system', reasonText);
 
         if (state.status === 'finished') {
-            if (wasSeated) resetReadyFlags(ctx);
             return;
         }
 
