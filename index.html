@@ -2662,6 +2662,7 @@
                                     <div class="control-menu-chips">
                                         <button id="coordsBtn" class="control-menu-item chip active" type="button">座標</button>
                                         <button id="moveNumBtn" class="control-menu-item chip active" type="button">手数</button>
+                                        <button id="lastMoveNumBtn" class="control-menu-item chip" type="button">最終手</button>
                                         <button id="stoneShadingBtn" class="control-menu-item chip" type="button">陰影</button>
                                         <button id="soundBtn" class="control-menu-item chip active" type="button">効果音</button>
                                         <button id="menuMoveConfirmBtn" class="control-menu-item chip" type="button">着手確認</button>
@@ -3018,6 +3019,7 @@
 
         let showCoords = true;
         let showMoveNumbers = true;
+        let showLastMoveNumber = false;
         let stoneShadingEnabled = false;
         let moveConfirmEnabled = false;
         let boardThemeIndex = 0;
@@ -3183,6 +3185,7 @@
                 colorSchemeLight: 'ライト',
                 colorSchemeDark: 'ダーク',
                 menuMoveNum: '手数',
+                menuLastMoveNum: '最終手',
                 menuMoveConfirm: '着手確認',
                 menuPairRenju: 'ペア連珠',
                 menuPositionSetup: '局面指定',
@@ -3309,6 +3312,7 @@
                 colorSchemeLight: '浅色',
                 colorSchemeDark: '深色',
                 menuMoveNum: '手数',
+                menuLastMoveNum: '最后一手',
                 menuMoveConfirm: '落子确认',
                 menuPairRenju: '双人连珠',
                 menuPositionSetup: '指定局面',
@@ -3435,6 +3439,7 @@
                 colorSchemeLight: 'Light',
                 colorSchemeDark: 'Dark',
                 menuMoveNum: 'Numbers',
+                menuLastMoveNum: 'Last move',
                 menuMoveConfirm: 'Confirm',
                 menuPairRenju: 'Pair Renju',
                 menuPositionSetup: 'Set Position',
@@ -3700,6 +3705,7 @@
             document.getElementById('coordsBtn').textContent = i18n('menuCoords');
             document.getElementById('stoneShadingBtn').textContent = i18n('menuStoneShading');
             document.getElementById('moveNumBtn').textContent = i18n('menuMoveNum');
+            document.getElementById('lastMoveNumBtn').textContent = i18n('menuLastMoveNum');
             syncViewSettingsControls();
             
             elements.drawDeclineBtn.textContent = i18n('drawDecline');
@@ -3809,6 +3815,7 @@
                 soundEnabled: true,
                 showCoords: true,
                 showMoveNumbers: true,
+                showLastMoveNumber: false,
                 moveConfirmEnabled: false,
                 stoneShading: false,
                 boardThemeIndex: 0,
@@ -3836,6 +3843,7 @@
             next.soundEnabled = next.soundEnabled !== false;
             next.showCoords = next.showCoords !== false;
             next.showMoveNumbers = next.showMoveNumbers !== false;
+            next.showLastMoveNumber = next.showLastMoveNumber === true;
             next.moveConfirmEnabled = next.moveConfirmEnabled === true;
             next.stoneShading = next.stoneShading === true;
             next.boardThemeIndex = clamp(Number(next.boardThemeIndex) || 0, 0, boardThemes.length - 1);
@@ -3930,6 +3938,7 @@
             setTogglePressed(document.getElementById('soundBtn'), soundEnabled);
             setTogglePressed(document.getElementById('coordsBtn'), showCoords);
             setTogglePressed(document.getElementById('moveNumBtn'), showMoveNumbers);
+            setTogglePressed(document.getElementById('lastMoveNumBtn'), showLastMoveNumber);
             setTogglePressed(document.getElementById('stoneShadingBtn'), stoneShadingEnabled);
             setTogglePressed(elements.menuMoveConfirmBtn, moveConfirmEnabled);
             const label = boardThemes[boardThemeIndex].label[currentLanguage] || boardThemes[boardThemeIndex].label['ja'];
@@ -3956,6 +3965,7 @@
             soundEnabled = settings.soundEnabled;
             showCoords = settings.showCoords;
             showMoveNumbers = settings.showMoveNumbers;
+            showLastMoveNumber = settings.showLastMoveNumber;
             moveConfirmEnabled = settings.moveConfirmEnabled;
             stoneShadingEnabled = settings.stoneShading;
             boardThemeIndex = settings.boardThemeIndex;
@@ -5633,6 +5643,7 @@
 
                 if (showMoveNumbers) {
                     const moveText = String(index + 1);
+                    const isLastMoveNumber = showLastMoveNumber && index === moves.length - 1;
                     const moveTextY = y + Math.max(1, Math.round(cell * 0.03));
                     const textLen = moveText.length;
                     // On narrow (phone) widths the board is small, so a bold
@@ -5654,16 +5665,24 @@
                         // Shaded stones: no halo — a translucent, ink-like
                         // numeral lets the stone's sheen show through, so the
                         // digit reads as printed on the stone, not pasted on.
-                        ctx.fillStyle = move.color === 'black'
-                            ? 'rgba(244, 238, 228, 0.85)'
-                            : 'rgba(66, 51, 34, 0.8)';
+                        ctx.fillStyle = isLastMoveNumber
+                            ? 'rgba(201, 105, 96, 0.95)'
+                            : (move.color === 'black'
+                                ? 'rgba(244, 238, 228, 0.85)'
+                                : 'rgba(66, 51, 34, 0.8)');
                         ctx.fillText(moveText, x, moveTextY);
                     } else {
-                        ctx.fillStyle = move.color === 'black' ? '#eee' : '#333';
-                        ctx.lineWidth = narrow ? 1.5 : 2.5;
-                        ctx.strokeStyle = move.color === 'black'
-                            ? (narrow ? 'rgba(0, 0, 0, 0.4)' : 'rgba(0, 0, 0, 0.55)')
-                            : (narrow ? 'rgba(255, 255, 255, 0.72)' : 'rgba(255, 255, 255, 0.9)');
+                        ctx.fillStyle = isLastMoveNumber ? '#c96960' : (move.color === 'black' ? '#eee' : '#333');
+                        ctx.lineWidth = isLastMoveNumber
+                            ? (narrow ? 1.2 : 1.8)
+                            : (narrow ? 1.5 : 2.5);
+                        ctx.strokeStyle = isLastMoveNumber
+                            ? (move.color === 'white'
+                                ? 'rgba(255, 255, 255, 0)'
+                                : (narrow ? 'rgba(73, 31, 28, 0.55)' : 'rgba(73, 31, 28, 0.7)'))
+                            : (move.color === 'black'
+                                ? (narrow ? 'rgba(0, 0, 0, 0.4)' : 'rgba(0, 0, 0, 0.55)')
+                                : (narrow ? 'rgba(255, 255, 255, 0.72)' : 'rgba(255, 255, 255, 0.9)'));
                         ctx.strokeText(moveText, x, moveTextY);
                         ctx.fillText(moveText, x, moveTextY);
                     }
@@ -6545,6 +6564,13 @@
             renderBoard();
         }
 
+        function toggleLastMoveNumber() {
+            showLastMoveNumber = !showLastMoveNumber;
+            setTogglePressed(document.getElementById('lastMoveNumBtn'), showLastMoveNumber);
+            persistUserSettings({ showLastMoveNumber });
+            renderBoard();
+        }
+
         function toggleStoneShading() {
             stoneShadingEnabled = !stoneShadingEnabled;
             setTogglePressed(document.getElementById('stoneShadingBtn'), stoneShadingEnabled);
@@ -6732,6 +6758,7 @@
         bindPointerPress(document.getElementById('coordsBtn'), toggleCoords);
         bindPointerPress(document.getElementById('themeBtn'), cycleTheme);
         bindPointerPress(document.getElementById('moveNumBtn'), toggleMoveNumbers);
+        bindPointerPress(document.getElementById('lastMoveNumBtn'), toggleLastMoveNumber);
         bindPointerPress(document.getElementById('stoneShadingBtn'), toggleStoneShading);
         elements.sendLogCommentBtn.addEventListener('click', submitLogComment);
         elements.logList.addEventListener('scroll', updateLogFade, { passive: true });
