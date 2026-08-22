@@ -129,10 +129,14 @@ function dispatch(ctx, peerId, action, now) {
     case 'takeback-response': return GameCore.respondTakeback(ctx, peerId, Boolean(action.accept));
     case 'resign': return GameCore.resignGame(ctx, peerId);
     case 'ready': {
-      if (action.ready && state.positionSetupEnabled && Array.isArray(action.moves)) {
-        GameCore.setPositionSetupStartMoves(ctx, action.moves);
-      }
-      const result = GameCore.setReadyState(ctx, peerId, Boolean(action.ready));
+      const result = GameCore.setReadyState(
+        ctx,
+        peerId,
+        Boolean(action.ready),
+        action.ready && state.positionSetupEnabled && Array.isArray(action.moves)
+          ? action.moves
+          : null,
+      );
       if (!result && state.positionSetupAutoDisabled) {
         state.positionSetupAutoDisabled = false;
         ctx.notePresence('msgPositionSetupDisabled');

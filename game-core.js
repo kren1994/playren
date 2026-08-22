@@ -451,12 +451,6 @@
         resetReadyFlags(ctx);
     }
 
-    function setPositionSetupStartMoves(ctx, moves) {
-        const state = ctx.state;
-        if (!state || state.status === 'playing' || !state.positionSetupEnabled) return;
-        state.moves = clonePositionMoves(moves);
-    }
-
     // ---- pure clock state ops (Step 2.1) -----------------------------------
     // These mutate state.clocks deterministically (time via the passed
     // timestamp / Date.now). The environment-specific side effects (browser
@@ -916,13 +910,22 @@
         state.positionSetupEnabled = usePositionSetup;
     }
 
-    function setReadyState(ctx, peerId, ready) {
+    function setReadyState(ctx, peerId, ready, startMoves = null) {
         const state = ctx.state;
         if (!state || !peerId) return ctx.i18n('errNotReadyState');
         const participant = getParticipantById(ctx,peerId);
         if (!isSeatedParticipant(ctx,participant)) return ctx.i18n('errReadyPlayerOnly');
         if (state.status === 'playing') return ctx.i18n('errReadyNotPlaying');
         state.readyByPeerId[peerId] = Boolean(ready);
+        // Keep the finished game's main line intact while players are still
+        // preparing. Adopt the displayed review line only in the same action
+        // that makes all required players ready and starts the next match.
+        if (ready && state.positionSetupEnabled
+            && Array.isArray(startMoves)
+            && allRequiredSeatsOccupied(ctx)
+            && allSeatedPlayersReady(ctx)) {
+            state.moves = clonePositionMoves(startMoves);
+        }
         maybeStartMatch(ctx);
         return '';
     }
@@ -1465,7 +1468,6 @@
         normalizeCommentText,
         setPairRenjuEnabled,
         setPositionSetupEnabled,
-        setPositionSetupStartMoves,
         canSelfChangeSeat,
         assignSeat,
         applyTimeSettings,
