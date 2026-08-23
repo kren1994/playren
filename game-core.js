@@ -450,6 +450,39 @@
         state.positionSetupEnabled = Boolean(enabled);
     }
 
+    function loadKifu(ctx, moves) {
+        const state = ctx.state;
+        if (!state || state.status === 'playing' || !Array.isArray(moves) || !moves.length) {
+            return ctx.i18n('errInvalidKifu');
+        }
+        const max = ctx.center * 2;
+        const occupied = new Set();
+        const normalized = [];
+        for (const move of moves) {
+            if (!Number.isInteger(move?.x) || !Number.isInteger(move?.y)
+                || move.x < 0 || move.x > max || move.y < 0 || move.y > max) {
+                return ctx.i18n('errInvalidKifu');
+            }
+            const key = `${move.x},${move.y}`;
+            if (occupied.has(key)) return ctx.i18n('errInvalidKifu');
+            occupied.add(key);
+            normalized.push({
+                x: move.x,
+                y: move.y,
+                color: normalized.length % 2 === 0 ? 'black' : 'white',
+                number: normalized.length + 1,
+            });
+        }
+        state.moves = normalized;
+        state.reviewMoves = normalized.map((move) => ({ ...move }));
+        state.reviewCursor = normalized.length;
+        state.reviewBranchBaseCursor = null;
+        state.winnerId = null;
+        state.resultText = '';
+        state.resultMessage = null;
+        return '';
+    }
+
     // ---- pure clock state ops (Step 2.1) -----------------------------------
     // These mutate state.clocks deterministically (time via the passed
     // timestamp / Date.now). The environment-specific side effects (browser
@@ -1462,6 +1495,7 @@
         normalizeCommentText,
         setPairRenjuEnabled,
         setPositionSetupEnabled,
+        loadKifu,
         canSelfChangeSeat,
         assignSeat,
         applyTimeSettings,

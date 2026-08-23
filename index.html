@@ -1124,6 +1124,26 @@
             color: var(--muted);
         }
 
+        .kifu-load-card {
+            width: min(100%, 360px);
+            left: 50vw;
+            top: 50vh;
+            transform: translate(-50%, -50%);
+            background: var(--panel-strong);
+        }
+
+        .kifu-load-input {
+            width: 100%;
+            box-sizing: border-box;
+            padding: 9px 10px;
+            border: 1px solid var(--hairline);
+            border-radius: 10px;
+            background: var(--overlay);
+            color: inherit;
+            font: inherit;
+            font-size: 13px;
+        }
+
         /* Opening swap / branch choice stays anchored where it is, but takes
            less vertical room so the player can keep more of the board visible. */
         #actionConfirm .confirm-card {
@@ -2605,6 +2625,7 @@
                                     <button id="menuPairRenjuBtn" class="control-menu-item" type="button">ペア連珠</button>
                                     <button id="menuPositionSetupBtn" class="control-menu-item" type="button">途中開始</button>
                                     <div id="actionMenuDivider" class="control-menu-divider" role="separator"></div>
+                                    <button id="menuKifuLoadBtn" class="control-menu-item" type="button">棋譜読込み</button>
                                     <button id="menuResetSeatsBtn" class="control-menu-item" type="button">対局席リセット</button>
                                     <button id="menuSwapSeatColorsBtn" class="control-menu-item" type="button">色を交換</button>
                                     <button id="menuTimeSettingsBtn" class="control-menu-item" type="button">時間設定</button>
@@ -2756,6 +2777,18 @@
             <div class="confirm-actions">
                 <button id="genericConfirmCancelBtn" class="button button-secondary" type="button">キャンセル</button>
                 <button id="genericConfirmOkBtn" class="button button-primary" type="button">OK</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="kifuLoadDialog" class="confirm-backdrop" hidden>
+        <div class="confirm-card kifu-load-card" role="dialog" aria-modal="true" aria-labelledby="kifuLoadTitle">
+            <p id="kifuLoadTitle" class="confirm-message">棋譜を読み込む</p>
+            <p id="kifuLoadHint" class="confirm-hint">RenjuPortal URL または mvs 座標列を入力</p>
+            <input id="kifuLoadInput" class="kifu-load-input" type="text" autocomplete="off" autocapitalize="off" spellcheck="false">
+            <div class="confirm-actions">
+                <button id="kifuLoadCancelBtn" class="button button-secondary" type="button">キャンセル</button>
+                <button id="kifuLoadSubmitBtn" class="button button-primary" type="button">読み込む</button>
             </div>
         </div>
     </div>
@@ -2948,6 +2981,7 @@
             menuMoveConfirmBtn: document.getElementById('menuMoveConfirmBtn'),
             menuPairRenjuBtn: document.getElementById('menuPairRenjuBtn'),
             menuPositionSetupBtn: document.getElementById('menuPositionSetupBtn'),
+            menuKifuLoadBtn: document.getElementById('menuKifuLoadBtn'),
             menuSwapSeatColorsBtn: document.getElementById('menuSwapSeatColorsBtn'),
             menuTimeSettingsBtn: document.getElementById('menuTimeSettingsBtn'),
             menuResetSeatsBtn: document.getElementById('menuResetSeatsBtn'),
@@ -2956,6 +2990,12 @@
             genericConfirmMessage: document.getElementById('genericConfirmMessage'),
             genericConfirmOkBtn: document.getElementById('genericConfirmOkBtn'),
             genericConfirmCancelBtn: document.getElementById('genericConfirmCancelBtn'),
+            kifuLoadDialog: document.getElementById('kifuLoadDialog'),
+            kifuLoadTitle: document.getElementById('kifuLoadTitle'),
+            kifuLoadHint: document.getElementById('kifuLoadHint'),
+            kifuLoadInput: document.getElementById('kifuLoadInput'),
+            kifuLoadCancelBtn: document.getElementById('kifuLoadCancelBtn'),
+            kifuLoadSubmitBtn: document.getElementById('kifuLoadSubmitBtn'),
             helpDialog: document.getElementById('helpDialog'),
             helpDialogList: document.getElementById('helpDialogList'),
             helpPrivacy: document.getElementById('helpPrivacy'),
@@ -3550,6 +3590,25 @@
         translations.en.timeDecrease = 'Decrease by 1';
         translations.en.timeIncrease = 'Increase by 1';
 
+        translations.ja.menuKifuLoad = '棋譜読込み';
+        translations.ja.kifuLoadTitle = '棋譜を読み込む';
+        translations.ja.kifuLoadHint = 'RenjuPortal URL または mvs 座標列を入力';
+        translations.ja.kifuLoadAction = '読み込む';
+        translations.ja.errInvalidKifu = '棋譜を読み込めません';
+        translations.ja.msgKifuLoadedBy = (name) => `${name} が棋譜を読み込み`;
+        translations.zh.menuKifuLoad = '读取棋谱';
+        translations.zh.kifuLoadTitle = '读取棋谱';
+        translations.zh.kifuLoadHint = '输入 RenjuPortal URL 或 mvs 坐标串';
+        translations.zh.kifuLoadAction = '读取';
+        translations.zh.errInvalidKifu = '无法读取棋谱';
+        translations.zh.msgKifuLoadedBy = (name) => `${name} 读取了棋谱`;
+        translations.en.menuKifuLoad = 'Load kifu';
+        translations.en.kifuLoadTitle = 'Load kifu';
+        translations.en.kifuLoadHint = 'Enter a RenjuPortal URL or mvs coordinate string';
+        translations.en.kifuLoadAction = 'Load';
+        translations.en.errInvalidKifu = 'Unable to load kifu';
+        translations.en.msgKifuLoadedBy = (name) => `${name} loaded kifu`;
+
         // The engine (and the DO) reject an intent with a precise code, which the
         // authority needs but the player does not: the UI already prevents these
         // — disabled buttons, phase-gated board taps — so they only ever surface
@@ -3681,6 +3740,7 @@
             elements.menuMoveConfirmBtn.textContent = i18n('menuMoveConfirm');
             elements.menuPairRenjuBtn.textContent = i18n('menuPairRenju');
             elements.menuPositionSetupBtn.textContent = i18n('menuPositionSetup');
+            elements.menuKifuLoadBtn.textContent = i18n('menuKifuLoad');
             elements.menuResetSeatsBtn.textContent = i18n('menuResetSeats');
             elements.menuSwapSeatColorsBtn.textContent = i18n('menuSwapSeatColors');
             elements.menuTimeSettingsBtn.textContent = i18n('menuTimeSettings');
@@ -3717,6 +3777,10 @@
             elements.resignConfirmBtn.textContent = i18n('resignConfirm');
             elements.genericConfirmCancelBtn.textContent = i18n('confirmCancel');
             elements.genericConfirmOkBtn.textContent = i18n('confirmOk');
+            elements.kifuLoadTitle.textContent = i18n('kifuLoadTitle');
+            elements.kifuLoadHint.textContent = i18n('kifuLoadHint');
+            elements.kifuLoadCancelBtn.textContent = i18n('confirmCancel');
+            elements.kifuLoadSubmitBtn.textContent = i18n('kifuLoadAction');
 
             refreshLocalizedResultText();
             render();
@@ -4021,6 +4085,33 @@
         function buildRenjuPortalKifuUrl(moves) {
             const mvs = (moves || []).map((move) => `${encodeRenjuPortalCoordinate(move.x)}${encodeRenjuPortalCoordinate(move.y)}`).join('');
             return `https://renjuportal.com/board?v=3&typ=g&mde=e&mvs=${mvs}`;
+        }
+
+        function parseRenjuPortalKifu(input) {
+            const text = String(input || '').trim();
+            if (!text) return null;
+            let mvs = text;
+            try {
+                const url = new URL(text);
+                if (url.hostname !== 'renjuportal.com' && url.hostname !== 'www.renjuportal.com') return null;
+                mvs = url.searchParams.get('mvs') || '';
+            } catch (_error) {
+                const match = text.match(/^mvs\s*=\s*(.+)$/i);
+                if (match) mvs = match[1];
+            }
+            mvs = mvs.replace(/\s+/g, '').toLowerCase();
+            if (!mvs || mvs.length % 2 || !/^[0-9a-f]+$/.test(mvs)) return null;
+            const occupied = new Set();
+            const moves = [];
+            for (let index = 0; index < mvs.length; index += 2) {
+                const x = Number.parseInt(mvs[index], 16);
+                const y = Number.parseInt(mvs[index + 1], 16);
+                const key = `${x},${y}`;
+                if (x > 14 || y > 14 || occupied.has(key)) return null;
+                occupied.add(key);
+                moves.push({ x, y, color: moves.length % 2 === 0 ? 'black' : 'white' });
+            }
+            return moves;
         }
 
         async function copyTextToClipboard(text) {
@@ -6186,6 +6277,7 @@
             elements.menuSwapSeatColorsBtn.hidden = isPlaying;
             elements.menuTimeSettingsBtn.hidden = isPlaying;
             elements.menuPairRenjuBtn.hidden = isPlaying;
+            elements.menuKifuLoadBtn.hidden = isPlaying;
             elements.menuResetSeatsBtn.hidden = isPlaying;
             elements.actionMenuDivider.hidden = isPlaying;
             elements.menuResignBtn.hidden = !isPlaying;
@@ -6497,6 +6589,30 @@
             genericConfirmOnOk = null;
         }
 
+        function openKifuLoadDialog() {
+            closeControlMenus();
+            if (!state || state.status === 'playing') return;
+            elements.kifuLoadInput.value = '';
+            elements.kifuLoadDialog.hidden = false;
+            requestAnimationFrame(() => elements.kifuLoadInput.focus());
+        }
+
+        function closeKifuLoadDialog() {
+            elements.kifuLoadDialog.hidden = true;
+        }
+
+        function submitKifuLoad() {
+            if (!state || state.status === 'playing') return;
+            const moves = parseRenjuPortalKifu(elements.kifuLoadInput.value);
+            if (!moves) {
+                showToast(i18n('errInvalidKifu'));
+                return;
+            }
+            closeKifuLoadDialog();
+            displayMoveCount = -1;
+            sendAction({ kind: 'load-kifu', moves });
+        }
+
         function togglePairRenjuFromMenu() {
             closeControlMenus();
             if (!state || state.status === 'playing') return;
@@ -6739,6 +6855,7 @@
         bindPointerPress(elements.menuSwapSeatColorsBtn, swapSeatColorsFromMenu);
         bindPointerPress(elements.menuPairRenjuBtn, togglePairRenjuFromMenu);
         bindPointerPress(elements.menuPositionSetupBtn, togglePositionSetupFromMenu);
+        bindPointerPress(elements.menuKifuLoadBtn, openKifuLoadDialog);
         bindPointerPress(elements.menuResetSeatsBtn, resetSeatsFromMenu);
         bindPointerPress(elements.menuTimeSettingsBtn, openTimeSettingsDialog);
         elements.lobbyHelpLink.addEventListener('click', () => openHelpDialog(elements.lobbyHelpLink));
@@ -6753,6 +6870,16 @@
             if (onOk) onOk();
         });
         bindPointerPress(elements.genericConfirmCancelBtn, closeGenericConfirm);
+        bindPointerPress(elements.kifuLoadCancelBtn, closeKifuLoadDialog);
+        bindPointerPress(elements.kifuLoadSubmitBtn, submitKifuLoad);
+        elements.kifuLoadDialog.addEventListener('click', (event) => {
+            if (event.target === elements.kifuLoadDialog) closeKifuLoadDialog();
+        });
+        elements.kifuLoadInput.addEventListener('keydown', (event) => {
+            if (event.key !== 'Enter' || event.isComposing) return;
+            event.preventDefault();
+            submitKifuLoad();
+        });
         bindPointerPress(document.getElementById('langBtn'), cycleLanguage);
         bindPointerPress(document.getElementById('soundBtn'), toggleSound);
         bindPointerPress(document.getElementById('coordsBtn'), toggleCoords);

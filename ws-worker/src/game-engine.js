@@ -173,6 +173,11 @@ function dispatch(ctx, peerId, action, now) {
         peerId,
       );
       return '';
+    case 'load-kifu': {
+      const result = GameCore.loadKifu(ctx, action.moves);
+      if (!result) ctx.notePresence('msgKifuLoadedBy', ctx.getPeerName(peerId), peerId);
+      return result;
+    }
     case 'reset-seats':
       if (state.status === 'playing') return ctx.i18n('errCannotSwap');
       GameCore.resetSeats(ctx);
