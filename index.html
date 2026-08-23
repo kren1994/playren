@@ -1671,6 +1671,7 @@
         .control-menu-chips {
             display: flex;
             flex-wrap: wrap;
+            justify-content: left;
             gap: 6px;
             padding: 4px 6px 6px;
         }
@@ -2626,9 +2627,10 @@
                                     <button id="menuPositionSetupBtn" class="control-menu-item" type="button">途中開始</button>
                                     <div id="actionMenuDivider" class="control-menu-divider" role="separator"></div>
                                     <button id="menuKifuLoadBtn" class="control-menu-item" type="button">棋譜読込み</button>
-                                    <button id="menuResetSeatsBtn" class="control-menu-item" type="button">対局席リセット</button>
-                                    <button id="menuSwapSeatColorsBtn" class="control-menu-item" type="button">色を交換</button>
+                                    <button id="menuSwapSeatColorsBtn" class="control-menu-item" type="button">先後交換</button>
                                     <button id="menuTimeSettingsBtn" class="control-menu-item" type="button">時間設定</button>
+                                    <div id="actionMenuResetDivider" class="control-menu-divider" role="separator"></div>
+                                    <button id="menuResetSeatsBtn" class="control-menu-item" type="button">対局席リセット</button>
                                     <button id="menuResignBtn" class="control-menu-item" type="button">終局</button>
                                     <button id="menuDrawBtn" class="control-menu-item" type="button">満局提案</button>
                                     <button id="menuTakebackBtn" class="control-menu-item" type="button">待った</button>
@@ -2986,6 +2988,7 @@
             menuTimeSettingsBtn: document.getElementById('menuTimeSettingsBtn'),
             menuResetSeatsBtn: document.getElementById('menuResetSeatsBtn'),
             actionMenuDivider: document.getElementById('actionMenuDivider'),
+            actionMenuResetDivider: document.getElementById('actionMenuResetDivider'),
             genericConfirm: document.getElementById('genericConfirm'),
             genericConfirmMessage: document.getElementById('genericConfirmMessage'),
             genericConfirmOkBtn: document.getElementById('genericConfirmOkBtn'),
@@ -3562,7 +3565,7 @@
             }
         };
 
-        translations.ja.menuSwapSeatColors = '色を交換';
+        translations.ja.menuSwapSeatColors = '先後交換';
         translations.ja.menuTimeSettings = '時間設定';
         translations.ja.timeHandicap = '時間ハンデ';
         translations.ja.timeLeft = '左';
@@ -6280,6 +6283,7 @@
             elements.menuKifuLoadBtn.hidden = isPlaying;
             elements.menuResetSeatsBtn.hidden = isPlaying;
             elements.actionMenuDivider.hidden = isPlaying;
+            elements.actionMenuResetDivider.hidden = isPlaying;
             elements.menuResignBtn.hidden = !isPlaying;
             elements.menuDrawBtn.hidden = !isPlaying;
             elements.menuTakebackBtn.hidden = !isPlaying;
